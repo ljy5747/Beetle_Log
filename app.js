@@ -152,7 +152,7 @@ function Modal({ title, onClose, onSave, children }) {
   );
 }
 
-/* ════════════════════ 종충 등록/수정 폼 ════════════════════ */
+/* ════════════════════ 성충 등록/수정 폼 ════════════════════ */
 function ParentForm({ initial, existingCodes, onSave, onClose }) {
   const [f, setF] = useState(initial || {
     code: "", sex: "수컷 ♂", species: "", line: "", origin: "",
@@ -166,7 +166,7 @@ function ParentForm({ initial, existingCodes, onSave, onClose }) {
     onSave({ ...f, code: f.code.trim() });
   };
   return (
-    <Modal title={isEdit ? "종충 정보 수정" : "종충 등록"} onClose={onClose} onSave={save}>
+    <Modal title={isEdit ? "성충 정보 수정" : "성충 등록"} onClose={onClose} onSave={save}>
       <div className="row">
         <F label="관리번호 *" half><input className="in mono" value={f.code} onChange={(e) => set("code", e.target.value)} placeholder="P-01" /></F>
         <F label="성별" half>
@@ -220,8 +220,8 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose }) {
   return (
     <Modal title={isEdit ? "라인 정보 수정" : "새 라인 만들기"} onClose={onClose} onSave={save}>
       <F label="라인명 *"><input className="in mono" value={f.code} onChange={(e) => set("code", e.target.value)} placeholder="26-A" /></F>
-      <div className="sect">종충 조합</div>
-      {parents.length === 0 && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>종충 탭에서 부모를 먼저 등록하면 여기서 선택할 수 있어요</div>}
+      <div className="sect">성충 조합</div>
+      {parents.length === 0 && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>성충 탭에서 부모를 먼저 등록하면 여기서 선택할 수 있어요</div>}
       <div className="row">
         <F label="부♂" half>
           <select className="in" value={f.fatherId || ""} onChange={(e) => pick("fatherId", e.target.value)}>
@@ -469,7 +469,7 @@ function exportXLSX(data) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet1), "개체정보");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet2), "병갈이기록");
-  if (sheetP.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetP), "종충");
+  if (sheetP.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetP), "성충");
   const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   const xmime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   return deliverFile(`사육기록_${today()}.xlsx`, new Blob([out], { type: xmime }), xmime);
@@ -699,7 +699,7 @@ function App() {
   const saveParent = (f) => {
     if (modal.editId) persist({ ...data, parents: data.parents.map((p) => (p.id === modal.editId ? { ...p, ...f } : p)) });
     else persist({ ...data, parents: [...data.parents, { ...f, id: uid() }] });
-    setModal(null); say("✓ 종충 저장됨");
+    setModal(null); say("✓ 성충 저장됨");
   };
   const saveLine = (f) => {
     if (modal.editId) persist({ ...data, lines: data.lines.map((l) => (l.id === modal.editId ? { ...l, ...f } : l)) });
@@ -789,14 +789,14 @@ function App() {
           <div className="topbar">
             <div>
               <div className="brand">Stag Beetle <span style={{ fontStyle: "italic" }}>log</span></div>
-              <div className="brand-sub">라인 {data.lines.length} · 유충 {data.individuals.length} · 종충 {data.parents.length}</div>
+              <div className="brand-sub">라인 {data.lines.length} · 유충 {data.individuals.length} · 성충 {data.parents.length}</div>
             </div>
             <button className="btn ghost sm" onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>⬇ 엑셀</button>
           </div>
 
           <div className="tabs">
             <button className={"tab-b" + (tab === "lines" ? " on" : "")} onClick={() => setTab("lines")}>라인 {data.lines.length}</button>
-            <button className={"tab-b" + (tab === "parents" ? " on" : "")} onClick={() => setTab("parents")}>종충 {data.parents.length}</button>
+            <button className={"tab-b" + (tab === "parents" ? " on" : "")} onClick={() => setTab("parents")}>성충 {data.parents.length}</button>
             <button className={"tab-b" + (tab === "calendar" ? " on" : "")} onClick={() => setTab("calendar")}>캘린더</button>
           </div>
 
@@ -830,7 +830,7 @@ function App() {
               <div className="empty">
                 <div className="empty-icon">🪲</div>
                 <div className="empty-t">첫 라인을 만들어보세요</div>
-                <div className="empty-d">라인 = 부♂ × 모♀ 조합 단위예요.<br />종충 탭에서 부모를 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
+                <div className="empty-d">라인 = 부♂ × 모♀ 조합 단위예요.<br />성충 탭에서 부모를 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
               </div>
             )}
             {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
@@ -865,28 +865,54 @@ function App() {
             {data.parents.length === 0 && (
               <div className="empty">
                 <div className="empty-icon">🪲</div>
-                <div className="empty-t">종충을 등록해보세요</div>
+                <div className="empty-t">성충을 등록해보세요</div>
                 <div className="empty-d">부모 개체를 먼저 등록해두면<br />라인 생성 시 혈통·산지가 자동으로 채워져요.</div>
               </div>
             )}
-            {[...data.parents].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((p) => {
-              const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id).length;
-              return (
-                <div key={p.id} className="card" onClick={() => setView({ name: "parentDetail", id: p.id })}>
-                  <div className="card-l">
-                    <div className="tagrow">
-                      <span className="tag mono">{p.code}</span>
-                      <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{p.sex}</span>
+            {(() => {
+              /* 종별 그룹핑: 종 미입력은 '종 미지정'으로 */
+              const groups = {};
+              data.parents.forEach((p) => {
+                const key = (p.species || "").trim() || "종 미지정";
+                (groups[key] = groups[key] || []).push(p);
+              });
+              const groupNames = Object.keys(groups).sort((a, b) => {
+                if (a === "종 미지정") return 1;
+                if (b === "종 미지정") return -1;
+                return a.localeCompare(b, "ko");
+              });
+              return groupNames.map((gname) => {
+                const list = groups[gname].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true }));
+                const males = list.filter((p) => p.sex.includes("수")).length;
+                const females = list.filter((p) => p.sex.includes("암")).length;
+                return (
+                  <div key={gname} style={{ marginBottom: 18 }}>
+                    <div className="grp-head">
+                      <span className="grp-name serif">{gname}</span>
+                      <span className="grp-cnt">{list.length}마리{males > 0 || females > 0 ? ` · ♂${males} ♀${females}` : ""}</span>
                     </div>
-                    <div className="card-sub">{[p.species, p.line, p.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
-                    <div className="card-val mono">
-                      {num(p.totalLength) ? <>{n1(num(p.totalLength))}<small>mm</small></> : <span className="dim">사이즈 미입력</span>}
-                      {myLines > 0 && <em> 라인 {myLines}</em>}
-                    </div>
+                    {list.map((p) => {
+                      const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id).length;
+                      return (
+                        <div key={p.id} className="card" onClick={() => setView({ name: "parentDetail", id: p.id })}>
+                          <div className="card-l">
+                            <div className="tagrow">
+                              <span className="tag mono">{p.code}</span>
+                              <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{p.sex}</span>
+                            </div>
+                            <div className="card-sub">{[p.line, p.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
+                            <div className="card-val mono">
+                              {num(p.totalLength) ? <>{n1(num(p.totalLength))}<small>mm</small></> : <span className="dim">사이즈 미입력</span>}
+                              {myLines > 0 && <em> 라인 {myLines}</em>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </>}
 
           <div className="footer">
@@ -1004,7 +1030,7 @@ function App() {
         );
       })()}
 
-      {/* ───── 종충 상세 (분양카드) ───── */}
+      {/* ───── 성충 상세 (분양카드) ───── */}
       {view.name === "parentDetail" && curP && (() => {
         const p = curP;
         const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id);
@@ -1033,9 +1059,9 @@ function App() {
               <div className="bc-qr">QR 인증카드는 웹사이트 오픈 시 제공 예정</div>
             </div>
 
-            <div className="p-t lt">이 종충의 라인 {myLines.length ? `· ${myLines.length}개` : ""}</div>
+            <div className="p-t lt">이 성충의 라인 {myLines.length ? `· ${myLines.length}개` : ""}</div>
             {myLines.length === 0 && (
-              <div className="empty sm"><div className="empty-d">이 종충으로 만든 라인이 아직 없어요.<br />라인 탭에서 + 버튼으로 조합을 만들어보세요.</div></div>
+              <div className="empty sm"><div className="empty-d">이 성충으로 만든 라인이 아직 없어요.<br />라인 탭에서 + 버튼으로 조합을 만들어보세요.</div></div>
             )}
             {myLines.map((L) => {
               const kids = larvaeOf(L.id);
@@ -1051,8 +1077,8 @@ function App() {
             })}
 
             <div style={{ marginTop: 18, textAlign: "center" }}>
-              <ConfirmBtn className="btn danger sm" label="이 종충 삭제"
-                onConfirm={() => { persist({ ...data, parents: data.parents.filter((x) => x.id !== p.id) }); setView({ name: "list" }); say("종충이 삭제됐어요"); }} />
+              <ConfirmBtn className="btn danger sm" label="이 성충 삭제"
+                onConfirm={() => { persist({ ...data, parents: data.parents.filter((x) => x.id !== p.id) }); setView({ name: "list" }); say("성충이 삭제됐어요"); }} />
             </div>
             <div style={{ height: 40 }} />
           </>
