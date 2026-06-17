@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="사육기록장" />
+<meta name="theme-color" content="#FAF9F7" />
+<title>사육기록장</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23FAF9F7'/%3E%3Ctext x='90' y='128' font-size='100' text-anchor='middle'%3E%F0%9F%AA%B2%3C/text%3E%3C/svg%3E" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#FAF9F7}
+#root{min-height:100vh}
+.boot{padding:80px 20px;text-align:center;color:#8A8378;font-family:-apple-system,sans-serif}
+</style>
+</head>
+<body>
+<div id="root"><div class="boot">불러오는 중…</div></div>
+
+<!-- 폰 저장소(IndexedDB) 헬퍼 -->
+<script>
+function idbOpen(){return new Promise(function(res,rej){var req=indexedDB.open("beetlelog-db",1);req.onupgradeneeded=function(){req.result.createObjectStore("kv");};req.onsuccess=function(){res(req.result);};req.onerror=function(){rej(req.error);};});}
+async function idbGet(key){var db=await idbOpen();return new Promise(function(res,rej){var tx=db.transaction("kv","readonly").objectStore("kv").get(key);tx.onsuccess=function(){res(tx.result||null);};tx.onerror=function(){rej(tx.error);};});}
+async function idbSet(key,val){var db=await idbOpen();return new Promise(function(res,rej){var tx=db.transaction("kv","readwrite").objectStore("kv").put(val,key);tx.onsuccess=function(){res(true);};tx.onerror=function(){rej(tx.error);};});}
+var XLSX = window.XLSX;
+</script>
+
+<!-- ① 설정값 (종 리스트·브랜드 등) — 자주 수정 -->
+<script src="data.js"></script>
+<!-- ② 디자인(CSS) — 가끔 수정 -->
+<script src="styles.js"></script>
+<!-- ③ 앱 본체 — 기능 추가 시 수정 (Babel이 JSX 변환) -->
+<script type="text/babel" data-presets="react" src="app.js"></script>
+</body>
+</html>
