@@ -179,4 +179,7 @@ border-radius:11px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;
 .cal-add{margin-top:12px;padding-top:12px;border-top:1px solid var(--line2)}
 .cal-add-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 .cal-add-btns .btn{flex:none;padding:8px 18px}
+.grp-head{display:flex;align-items:baseline;gap:8px;padding:2px 2px 10px;border-bottom:1px solid var(--line);margin-bottom:10px}
+.grp-name{font-size:18px;font-weight:700;letter-spacing:.01em}
+.grp-cnt{font-size:12px;color:var(--dim);font-weight:600;margin-left:auto}
 `;
