@@ -498,15 +498,21 @@ function collectEvents(data) {
       push(addDays(L.setDate, 60), { type: "harvestEnd", label: `${L.code} 해체 권장 마감`, sub: `셋팅 2달차 · ${L.species || ""}`.trim(), lineId: L.id });
     }
   });
+  /* 사용자가 직접 추가한 일정 */
+  (data.customEvents || []).forEach((c) => {
+    push(c.date, { type: "custom", label: c.title, sub: c.memo || "", customId: c.id });
+  });
   return ev;
 }
-const EV_COLOR = { bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A" };
+const EV_COLOR = { bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A", custom: "#5A7A9A" };
 
 /* ════════════════════ 월별 달력 ════════════════════ */
-function CalendarView({ data, onOpenLine, onOpenLarva }) {
+function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent }) {
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [sel, setSel] = useState(today());
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ title: "", memo: "" });
   const events = collectEvents(data);
 
   const first = new Date(ym.y, ym.m, 1);
@@ -551,7 +557,7 @@ function CalendarView({ data, onOpenLine, onOpenLarva }) {
           const isToday = k === today();
           const isSel = k === sel;
           return (
-            <button key={i} className={"cal-cell" + (isSel ? " sel" : "") + (isToday ? " today" : "")} onClick={() => setSel(k)}>
+            <button key={i} className={"cal-cell" + (isSel ? " sel" : "") + (isToday ? " today" : "")} onClick={() => { setSel(k); setAdding(false); }}>
               <span className={"cal-num" + (i % 7 === 0 ? " sun" : i % 7 === 6 ? " sat" : "")}>{d}</span>
               {evs.length > 0 && (
                 <span className="cal-dots">
@@ -567,16 +573,36 @@ function CalendarView({ data, onOpenLine, onOpenLarva }) {
         <div className="cal-sel-date">{shortDate(sel)} {["일", "월", "화", "수", "목", "금", "토"][new Date(sel + "T00:00:00").getDay()]}요일
           {sel === today() && <span className="cal-badge">오늘</span>}
         </div>
-        {selEvents.length === 0 && <div className="cal-empty">예정된 일정이 없어요</div>}
+        {selEvents.length === 0 && !adding && <div className="cal-empty">예정된 일정이 없어요</div>}
         {selEvents.map((e, i) => (
-          <div key={i} className="cal-item" onClick={() => e.indId ? onOpenLarva(e.indId) : onOpenLine(e.lineId)}>
+          <div key={i} className="cal-item">
             <i className="cal-item-dot" style={{ background: EV_COLOR[e.type] }} />
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }} onClick={() => e.customId ? null : e.indId ? onOpenLarva(e.indId) : onOpenLine(e.lineId)}>
               <div className="cal-item-l">{e.label}</div>
               {e.sub && <div className="cal-item-s">{e.sub}</div>}
             </div>
+            {e.customId && <button className="cal-del" onClick={() => onDeleteEvent(e.customId)}>삭제</button>}
           </div>
         ))}
+
+        {adding ? (
+          <div className="cal-add">
+            <input className="in" placeholder="일정 제목 (예: 온도 점검)" value={draft.title}
+              onChange={(e) => setDraft({ ...draft, title: e.target.value })} autoFocus />
+            <input className="in" style={{ marginTop: 8 }} placeholder="메모 (선택)" value={draft.memo}
+              onChange={(e) => setDraft({ ...draft, memo: e.target.value })} />
+            <div className="cal-add-btns">
+              <button className="btn ghost sm" onClick={() => { setAdding(false); setDraft({ title: "", memo: "" }); }}>취소</button>
+              <button className="btn primary sm" onClick={() => {
+                if (!draft.title.trim()) return;
+                onAddEvent({ date: sel, title: draft.title.trim(), memo: draft.memo.trim() });
+                setDraft({ title: "", memo: "" }); setAdding(false);
+              }}>추가</button>
+            </div>
+          </div>
+        ) : (
+          <button className="cal-add-btn" onClick={() => setAdding(true)}>＋ 이 날짜에 일정 추가</button>
+        )}
       </div>
 
       {upcoming.length > 0 && (
@@ -625,6 +651,7 @@ function App() {
       const base = d && Array.isArray(d.individuals) ? d : { individuals: [], feedBrands: [] };
       if (!Array.isArray(base.parents)) base.parents = [];
       if (!Array.isArray(base.lines)) base.lines = [];
+      if (!Array.isArray(base.customEvents)) base.customEvents = [];
       /* 기존 데이터 마이그레이션: 라인 없는 유충은 '미분류' 라인으로 */
       const legacy = base.individuals.filter((i) => !i.lineId);
       if (legacy.length) {
@@ -731,7 +758,7 @@ function App() {
       try {
         const d = JSON.parse(reader.result);
         if (!Array.isArray(d.individuals)) throw new Error();
-        persist({ individuals: d.individuals, lines: Array.isArray(d.lines) ? d.lines : [], parents: Array.isArray(d.parents) ? d.parents : [], feedBrands: d.feedBrands || [] });
+        persist({ individuals: d.individuals, lines: Array.isArray(d.lines) ? d.lines : [], parents: Array.isArray(d.parents) ? d.parents : [], customEvents: Array.isArray(d.customEvents) ? d.customEvents : [], feedBrands: d.feedBrands || [] });
         say(`✓ ${d.individuals.length}개체 복원 완료`);
       } catch { say("⚠️ 올바른 백업 파일이 아니에요"); }
     };
@@ -776,7 +803,9 @@ function App() {
           {tab === "calendar" && (
             <CalendarView data={data}
               onOpenLine={(id) => setView({ name: "lineDetail", id })}
-              onOpenLarva={(id) => setView({ name: "detail", id })} />
+              onOpenLarva={(id) => setView({ name: "detail", id })}
+              onAddEvent={(ev) => { persist({ ...data, customEvents: [...(data.customEvents || []), { ...ev, id: uid() }] }); say("✓ 일정 추가됨"); }}
+              onDeleteEvent={(id) => { persist({ ...data, customEvents: (data.customEvents || []).filter((c) => c.id !== id) }); say("일정 삭제됨"); }} />
           )}
 
           {tab === "lines" && <>
