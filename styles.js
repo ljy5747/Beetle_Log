@@ -173,5 +173,10 @@ align-items:center;justify-content:flex-start;padding-top:5px;border-radius:10px
 .up-item i{width:6px;height:6px;border-radius:50%;flex:none}
 .harvest-tip{margin-top:10px;padding:9px 12px;background:#FBF1EE;border:1px solid #EBD3CC;border-radius:10px;font-size:13px}
 .harvest-tip b{color:#9A4A3A}
+.cal-del{margin-left:auto;background:none;border:none;color:var(--red);font-size:12px;font-weight:700;cursor:pointer;padding:4px 6px;flex:none}
+.cal-add-btn{width:100%;margin-top:10px;background:var(--surf2);border:1px dashed var(--line);color:var(--gold-d);
+border-radius:11px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.cal-add{margin-top:12px;padding-top:12px;border-top:1px solid var(--line2)}
+.cal-add-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+.cal-add-btns .btn{flex:none;padding:8px 18px}
 `;
-
