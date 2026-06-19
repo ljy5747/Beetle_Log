@@ -182,4 +182,8 @@ border-radius:11px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;
 .grp-head{display:flex;align-items:baseline;gap:8px;padding:2px 2px 10px;border-bottom:1px solid var(--line);margin-bottom:10px}
 .grp-name{font-size:18px;font-weight:700;letter-spacing:.01em}
 .grp-cnt{font-size:12px;color:var(--dim);font-weight:600;margin-left:auto}
+.pick-grid{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:4px}
+.pick-chip{background:var(--surf2);border:1px solid var(--line);color:var(--dim);border-radius:9px;
+padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:ui-monospace,"SF Mono",Menlo,monospace}
+.pick-chip.on{background:#FCFAF5;border-color:var(--gold);color:var(--gold-d)}
 `;
