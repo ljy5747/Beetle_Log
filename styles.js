@@ -186,4 +186,10 @@ border-radius:11px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;
 .pick-chip{background:var(--surf2);border:1px solid var(--line);color:var(--dim);border-radius:9px;
 padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:ui-monospace,"SF Mono",Menlo,monospace}
 .pick-chip.on{background:#FCFAF5;border-color:var(--gold);color:var(--gold-d)}
+.cc-wrap{position:relative}
+.cc-wrap .in{padding-right:38px}
+.cc-suffix{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:14px;font-weight:700;pointer-events:none}
+.card.dead{opacity:.5;background:var(--surf2)}
+.card.dead .card-val,.card.dead .card-sub{color:var(--dim)}
+.tag.strike{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--dim)}
 `;
