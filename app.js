@@ -17,6 +17,8 @@ const num = (v) => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : 
 const n1 = (v) => (v == null ? "—" : (Math.round(v * 10) / 10).toLocaleString());
 const n2 = (v) => (v == null ? "—" : (Math.round(v * 100) / 100).toLocaleString());
 const shortDate = (iso) => (iso ? iso.slice(2).replace(/-/g, ".") : "");
+/* 병 용량: 저장은 숫자만, 표시할 때 cc 붙임. 기존에 'cc'가 들어간 값도 안전 처리 */
+const ccLabel = (v) => { const s = String(v || "").trim(); return s ? (/cc$/i.test(s) ? s : s + "cc") : ""; };
 
 async function deliverFile(filename, content, mime) {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
@@ -367,7 +369,16 @@ function BottleForm({ initial, brands, onSave, onClose }) {
             {FEED_TYPES.map((t) => <option key={t}>{t}</option>)}
           </select>
         </F>
-        <F label="병 용량" half><input className="in" list="dl-bottles" value={f.bottleSize} onChange={(e) => set("bottleSize", e.target.value)} placeholder="1400cc" /></F>
+        <F label="병 용량" half>
+          <div className="cc-wrap">
+            <input className="in mono" inputMode="numeric" value={f.bottleSize}
+              onChange={(e) => set("bottleSize", e.target.value.replace(/[^0-9]/g, ""))} placeholder="1400" />
+            <span className="cc-suffix">cc</span>
+          </div>
+          <div className="chiprow">
+            {BOTTLES.map((b) => <button key={b} className="chipbtn" onClick={() => set("bottleSize", b)}>{b}</button>)}
+          </div>
+        </F>
       </div>
       <F label="브랜드 · 제품명"><input className="in" list="dl-brands" value={f.feedBrand} onChange={(e) => set("feedBrand", e.target.value)} placeholder="자주 쓰는 제품은 자동 저장돼요" /></F>
       <F label="다음 병갈이 예정일">
@@ -381,7 +392,6 @@ function BottleForm({ initial, brands, onSave, onClose }) {
       </F>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="식흔 상태, 거식 여부 등" /></F>
       <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
-      <datalist id="dl-bottles">{BOTTLES.map((b) => <option key={b} value={b} />)}</datalist>
     </Modal>
   );
 }
@@ -423,7 +433,16 @@ function BulkBottleForm({ larvae, brands, onSave, onClose }) {
                 {FEED_TYPES.map((t) => <option key={t}>{t}</option>)}
               </select>
             </F>
-            <F label="병 용량" half><input className="in" list="dl-bottles" value={f.bottleSize} onChange={(e) => set("bottleSize", e.target.value)} placeholder="1400cc" /></F>
+            <F label="병 용량" half>
+          <div className="cc-wrap">
+            <input className="in mono" inputMode="numeric" value={f.bottleSize}
+              onChange={(e) => set("bottleSize", e.target.value.replace(/[^0-9]/g, ""))} placeholder="1400" />
+            <span className="cc-suffix">cc</span>
+          </div>
+          <div className="chiprow">
+            {BOTTLES.map((b) => <button key={b} className="chipbtn" onClick={() => set("bottleSize", b)}>{b}</button>)}
+          </div>
+        </F>
           </div>
           <F label="브랜드 · 제품명"><input className="in" list="dl-brands" value={f.feedBrand} onChange={(e) => set("feedBrand", e.target.value)} /></F>
           <F label="다음 병갈이 예정일">
@@ -528,7 +547,7 @@ function exportXLSX(data) {
     sortedRecs(ind).forEach((r) => sheet2.push({
       "라인": L.code || "", "관리번호": ind.code, "종": L.species || "", "날짜": r.date, "령": r.instar,
       "유충무게(g)": r.weight, "두폭(mm)": r.headWidth, "먹이종류": r.feedType, "브랜드": r.feedBrand,
-      "병용량": r.bottleSize, "다음 예정일": r.nextDate, "메모": r.memo,
+      "병용량": ccLabel(r.bottleSize), "다음 예정일": r.nextDate, "메모": r.memo,
     }));
   });
   const sheetP = data.parents.map((p) => ({
@@ -1005,7 +1024,11 @@ function App() {
       {/* ───── 라인 상세 ───── */}
       {view.name === "lineDetail" && curL && (() => {
         const L = curL;
-        const kids = larvaeOf(L.id).sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true }));
+        const kids = larvaeOf(L.id).sort((a, b) => {
+          const ad = a.status === "사망" ? 1 : 0, bd = b.status === "사망" ? 1 : 0;
+          if (ad !== bd) return ad - bd;
+          return a.code.localeCompare(b.code, "ko", { numeric: true });
+        });
         const shown = kids.filter((i) => filter === "전체" || i.status === filter);
         const counts = STATUSES.reduce((a, s) => ({ ...a, [s]: kids.filter((i) => i.status === s).length }), {});
         return (
@@ -1064,11 +1087,12 @@ function App() {
               const lr = latestRec(ind), mw = maxWeight(ind), dl = lastDelta(ind);
               const dd = ind.status === "유충" && lr?.nextDate ? dday(lr.nextDate) : null;
               const red = reduction(ind);
+              const dead = ind.status === "사망";
               return (
-                <div key={ind.id} className="card" onClick={() => setView({ name: "detail", id: ind.id })}>
+                <div key={ind.id} className={"card" + (dead ? " dead" : "")} onClick={() => setView({ name: "detail", id: ind.id })}>
                   <div className="card-l">
                     <div className="tagrow">
-                      <span className="tag mono">{ind.code}</span>
+                      <span className={"tag mono" + (dead ? " strike" : "")}>{ind.code}</span>
                       <span className="chip" style={{ color: STATUS_COLOR[ind.status], borderColor: STATUS_COLOR[ind.status] + "55" }}>{ind.status}</span>
                       {dd != null && <span className={"chip dd" + (dd <= 0 ? " over" : dd <= 3 ? " soon" : "")}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
                     </div>
@@ -1196,6 +1220,18 @@ function App() {
               <button className="btn" onClick={() => setModal({ type: "eclosion", indId: cur.id })}>{cur.eclosion ? "우화 수정" : "우화 기록"}</button>
             </div>
 
+            {cur.status === "사망" ? (
+              <button className="btn ghost sm" style={{ width: "100%", marginBottom: 16 }}
+                onClick={() => { updateInd(cur.id, { status: "유충" }); say("사망 처리를 해제했어요"); }}>
+                ↩ 사망 처리 해제 (유충으로 되돌리기)
+              </button>
+            ) : (
+              <div style={{ marginBottom: 16 }}>
+                <ConfirmBtn className="btn danger sm" label="✕ 사망 처리"
+                  onConfirm={() => { updateInd(cur.id, { status: "사망" }); say("사망 처리됐어요"); }} />
+              </div>
+            )}
+
             {cur.eclosion && (
               <div className="panel">
                 <div className="p-t">우화 · {cur.eclosion.date}{cur.eclosion.defect && <span className="warn"> 우화부전</span>}</div>
@@ -1230,7 +1266,7 @@ function App() {
                     {r.instar && <span className="r-ins">{r.instar}</span>}
                     {num(r.weight) && <span className="mono r-w">{n1(num(r.weight))}g{d != null && <em className={d >= 0 ? "up" : "down"}> {d >= 0 ? "▲" : "▼"}{n1(Math.abs(d))}</em>}</span>}
                   </div>
-                  <div className="r-mid">{[r.feedType, r.feedBrand, r.bottleSize, num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
+                  <div className="r-mid">{[r.feedType, r.feedBrand, ccLabel(r.bottleSize), num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
                   {r.nextDate && (
                     <div className="r-next">
                       다음 예정 <b className="mono">{r.nextDate}</b>{idx === 0 && cur.status === "유충" && <span className="dim"> ({dday(r.nextDate) <= 0 ? `${-dday(r.nextDate)}일 지남` : `D-${dday(r.nextDate)}`})</span>}
