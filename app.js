@@ -729,6 +729,7 @@ function App() {
   const [toast, setToast] = useState(null);
   const [filter, setFilter] = useState("전체");
   const [tab, setTab] = useState("lines");
+  const [speciesFolder, setSpeciesFolder] = useState(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const fileRef = useRef(null);
   const toastT = useRef(null);
@@ -879,7 +880,7 @@ function App() {
         <>
           <div className="topbar">
             <div>
-              <div className="brand">Stag Beetle <span style={{ fontStyle: "italic" }}>log</span></div>
+              <div className="brand">Beetle<span style={{ fontStyle: "italic" }}>Log</span></div>
               <div className="brand-sub">라인 {data.lines.length} · 유충 {data.individuals.length} · 성충 {data.parents.length}</div>
             </div>
             <button className="btn ghost sm" onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>⬇ 엑셀</button>
@@ -887,7 +888,7 @@ function App() {
 
           <div className="tabs">
             <button className={"tab-b" + (tab === "lines" ? " on" : "")} onClick={() => setTab("lines")}>라인 {data.lines.length}</button>
-            <button className={"tab-b" + (tab === "parents" ? " on" : "")} onClick={() => setTab("parents")}>성충 {data.parents.length}</button>
+            <button className={"tab-b" + (tab === "parents" ? " on" : "")} onClick={() => { setTab("parents"); setSpeciesFolder(null); }}>성충 {data.parents.length}</button>
             <button className={"tab-b" + (tab === "calendar" ? " on" : "")} onClick={() => setTab("calendar")}>캘린더</button>
           </div>
 
@@ -915,6 +916,24 @@ function App() {
                   <span className="alert-go">캘린더 ›</span>
                 </div>
               );
+            })()}
+
+            {/* 직접 추가한 일정 중 오늘~3일 내 임박 알림 */}
+            {(() => {
+              const items = (data.customEvents || [])
+                .filter((c) => { const dd = dday(c.date); return dd >= 0 && dd <= 3; })
+                .sort((a, b) => (a.date < b.date ? -1 : 1));
+              if (items.length === 0) return null;
+              return items.map((c) => {
+                const dd = dday(c.date);
+                return (
+                  <div key={c.id} className="alert custom" onClick={() => setTab("calendar")}>
+                    <span className="alert-dot" style={{ background: "#5A7A9A" }} />
+                    <b>{c.title}</b>
+                    <span className="alert-go">{dd === 0 ? "오늘" : `D-${dd}`} ›</span>
+                  </div>
+                );
+              });
             })()}
 
             {data.lines.length === 0 && (
@@ -960,7 +979,7 @@ function App() {
                 <div className="empty-d">부모 개체를 먼저 등록해두면<br />라인 생성 시 혈통·산지가 자동으로 채워져요.</div>
               </div>
             )}
-            {(() => {
+            {data.parents.length > 0 && (() => {
               /* 종별 그룹핑: 종 미입력은 '종 미지정'으로 */
               const groups = {};
               data.parents.forEach((p) => {
@@ -972,37 +991,65 @@ function App() {
                 if (b === "종 미지정") return -1;
                 return a.localeCompare(b, "ko");
               });
-              return groupNames.map((gname) => {
-                const list = groups[gname].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true }));
-                const males = list.filter((p) => p.sex.includes("수")).length;
-                const females = list.filter((p) => p.sex.includes("암")).length;
+
+              /* 종을 선택하지 않았으면 → 종 폴더 목록 */
+              if (!speciesFolder || !groups[speciesFolder]) {
                 return (
-                  <div key={gname} style={{ marginBottom: 18 }}>
-                    <div className="grp-head">
-                      <span className="grp-name serif">{gname}</span>
-                      <span className="grp-cnt">{list.length}마리{males > 0 || females > 0 ? ` · ♂${males} ♀${females}` : ""}</span>
-                    </div>
-                    {list.map((p) => {
-                      const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id).length;
+                  <div className="sp-grid">
+                    {groupNames.map((gname) => {
+                      const list = groups[gname];
+                      const males = list.filter((p) => p.sex.includes("수")).length;
+                      const females = list.filter((p) => p.sex.includes("암")).length;
+                      const alive = list.filter((p) => p.status !== "사망").length;
                       return (
-                        <div key={p.id} className="card" onClick={() => setView({ name: "parentDetail", id: p.id })}>
-                          <div className="card-l">
-                            <div className="tagrow">
-                              <span className="tag mono">{p.code}</span>
-                              <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{p.sex}</span>
-                            </div>
-                            <div className="card-sub">{[p.line, p.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
-                            <div className="card-val mono">
-                              {num(p.totalLength) ? <>{n1(num(p.totalLength))}<small>mm</small></> : <span className="dim">사이즈 미입력</span>}
-                              {myLines > 0 && <em> 라인 {myLines}</em>}
-                            </div>
-                          </div>
+                        <div key={gname} className="sp-card" onClick={() => setSpeciesFolder(gname)}>
+                          <div className="sp-name serif">{gname}</div>
+                          <div className="sp-meta">{list.length}마리 · ♂{males} ♀{females}</div>
+                          <div className="sp-go">보기 ›</div>
                         </div>
                       );
                     })}
                   </div>
                 );
+              }
+
+              /* 종을 선택했으면 → 그 종의 성충 리스트 */
+              const list = groups[speciesFolder].sort((a, b) => {
+                const ad = a.status === "사망" ? 1 : 0, bd = b.status === "사망" ? 1 : 0;
+                if (ad !== bd) return ad - bd;
+                return a.code.localeCompare(b.code, "ko", { numeric: true });
               });
+              const males = list.filter((p) => p.sex.includes("수")).length;
+              const females = list.filter((p) => p.sex.includes("암")).length;
+              return (
+                <>
+                  <div className="sp-back" onClick={() => setSpeciesFolder(null)}>‹ 종 목록</div>
+                  <div className="grp-head">
+                    <span className="grp-name serif">{speciesFolder}</span>
+                    <span className="grp-cnt">{list.length}마리 · ♂{males} ♀{females}</span>
+                  </div>
+                  {list.map((p) => {
+                    const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id).length;
+                    const dead = p.status === "사망";
+                    return (
+                      <div key={p.id} className={"card" + (dead ? " dead" : "")} onClick={() => setView({ name: "parentDetail", id: p.id })}>
+                        <div className="card-l">
+                          <div className="tagrow">
+                            <span className={"tag mono" + (dead ? " strike" : "")}>{p.code}</span>
+                            <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{p.sex}</span>
+                            {dead && <span className="chip" style={{ color: "#9A9088", borderColor: "#9A908855" }}>사망</span>}
+                          </div>
+                          <div className="card-sub">{[p.line, p.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
+                          <div className="card-val mono">
+                            {num(p.totalLength) ? <>{n1(num(p.totalLength))}<small>mm</small></> : <span className="dim">사이즈 미입력</span>}
+                            {myLines > 0 && <em> 라인 {myLines}</em>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              );
             })()}
           </>}
 
@@ -1145,6 +1192,7 @@ function App() {
               <div className="bc-head serif">BREEDING CARD</div>
               <div className="bc-species serif">{p.species || "종 미입력"}</div>
               <div className="bc-sub">{[p.line, p.origin, p.sex].filter(Boolean).join(" · ")}</div>
+              {p.status === "사망" && <div className="bc-dead">사망 · 계보 보존</div>}
               <div className="bc-line" />
               <div className="bc-grid">
                 <div><div className="s-l">총장</div><div className="s-v mono">{num(p.totalLength) ? n1(num(p.totalLength)) + "mm" : "—"}</div></div>
@@ -1175,9 +1223,22 @@ function App() {
               );
             })}
 
-            <div style={{ marginTop: 18, textAlign: "center" }}>
-              <ConfirmBtn className="btn danger sm" label="이 성충 삭제"
-                onConfirm={() => { persist({ ...data, parents: data.parents.filter((x) => x.id !== p.id) }); setView({ name: "list" }); say("성충이 삭제됐어요"); }} />
+            <div style={{ marginTop: 18 }}>
+              {p.status === "사망" ? (
+                <button className="btn ghost sm" style={{ width: "100%", marginBottom: 10 }}
+                  onClick={() => { persist({ ...data, parents: data.parents.map((x) => x.id === p.id ? { ...x, status: "생존" } : x) }); say("사망 처리를 해제했어요"); }}>
+                  ↩ 사망 처리 해제
+                </button>
+              ) : (
+                <div style={{ marginBottom: 10 }}>
+                  <ConfirmBtn className="btn sm" label="✕ 사망 처리 (정보는 계보에 보존)"
+                    onConfirm={() => { persist({ ...data, parents: data.parents.map((x) => x.id === p.id ? { ...x, status: "사망" } : x) }); say("사망 처리됐어요 — 계보 정보는 유지돼요"); }} />
+                </div>
+              )}
+              <div style={{ textAlign: "center" }}>
+                <ConfirmBtn className="btn danger sm" label="이 성충 완전 삭제"
+                  onConfirm={() => { persist({ ...data, parents: data.parents.filter((x) => x.id !== p.id) }); setView({ name: "list" }); say("성충이 삭제됐어요"); }} />
+              </div>
             </div>
             <div style={{ height: 40 }} />
           </>
