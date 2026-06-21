@@ -830,6 +830,7 @@ function App() {
   const [filter, setFilter] = useState("전체");
   const [tab, setTab] = useState("lines");
   const [speciesFolder, setSpeciesFolder] = useState(null);
+  const [lineView, setLineView] = useState("card");
   const [infoOpen, setInfoOpen] = useState(false);
   const fileRef = useRef(null);
   const toastT = useRef(null);
@@ -1047,7 +1048,14 @@ function App() {
                 <div className="empty-d">라인 = 부♂ × 모♀ 조합 단위예요.<br />성충 탭에서 부모를 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
               </div>
             )}
-            {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
+            {data.lines.length > 0 && (
+              <div className="view-toggle">
+                <button className={"vt-btn" + (lineView === "card" ? " on" : "")} onClick={() => setLineView("card")}>카드</button>
+                <button className={"vt-btn" + (lineView === "table" ? " on" : "")} onClick={() => setLineView("table")}>라인표</button>
+              </div>
+            )}
+
+            {lineView === "card" && [...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
               const kids = larvaeOf(L.id);
               const cnt = STATUSES.map((s) => [s, kids.filter((i) => i.status === s).length]).filter(([, n]) => n > 0);
               const dd = lineDday(L.id);
@@ -1073,6 +1081,47 @@ function App() {
                 </div>
               );
             })}
+
+            {lineView === "table" && (
+              <div className="ltable">
+                {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
+                  const fa = parentById[L.fatherId], mo = parentById[L.motherId];
+                  const kids = larvaeOf(L.id);
+                  return (
+                    <div key={L.id} className="lt-row" onClick={() => setView({ name: "lineDetail", id: L.id })}>
+                      <div className="lt-head">
+                        <span className="tag mono">{L.code}</span>
+                        <span className="lt-sp">{L.species || ""}</span>
+                        <span className="lt-cnt">{kids.length}마리</span>
+                      </div>
+                      <div className="lt-pair">
+                        <div className="lt-parent male">
+                          <div className="lt-pl">♂ 부</div>
+                          {fa ? (
+                            <>
+                              {fa.photo && <img src={fa.photo} alt="" className="lt-photo" />}
+                              <div className="lt-pcode mono">{fa.code}</div>
+                              <div className="lt-pspec">{[num(fa.totalLength) ? n1(num(fa.totalLength)) + "mm" : null, fa.line].filter(Boolean).join(" · ")}</div>
+                            </>
+                          ) : <div className="lt-none">미지정</div>}
+                        </div>
+                        <div className="lt-x">×</div>
+                        <div className="lt-parent female">
+                          <div className="lt-pl">♀ 모</div>
+                          {mo ? (
+                            <>
+                              {mo.photo && <img src={mo.photo} alt="" className="lt-photo" />}
+                              <div className="lt-pcode mono">{mo.code}</div>
+                              <div className="lt-pspec">{[num(mo.totalLength) ? n1(num(mo.totalLength)) + "mm" : null, mo.line].filter(Boolean).join(" · ")}</div>
+                            </>
+                          ) : <div className="lt-none">미지정</div>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>}
 
           {tab === "parents" && <>
@@ -1354,7 +1403,7 @@ function App() {
       {/* ───── 유충 상세 ───── */}
       {view.name === "detail" && cur && (() => {
         const L = lineById[cur.lineId] || {};
-        const recs = sortedRecs(cur).reverse();
+        const recs = sortedRecs(cur);
         const mw = maxWeight(cur), red = reduction(cur), loss = lossRate(cur), ld = larvaDays(cur, L);
         return (
           <>
@@ -1424,8 +1473,9 @@ function App() {
             <div className="p-t lt">병갈이 기록 {recs.length ? `· ${recs.length}회` : ""}</div>
             {recs.length === 0 && <div className="empty sm"><div className="empty-d">아직 기록이 없어요. + 병갈이로 첫 기록을 남겨보세요.</div></div>}
             {recs.map((r, idx) => {
-              const prev = recs[idx + 1];
+              const prev = recs[idx - 1];
               const d = num(r.weight) && num(prev?.weight) ? num(r.weight) - num(prev.weight) : null;
+              const isLast = idx === recs.length - 1;
               return (
                 <div key={r.id} className="rec" onClick={() => setModal({ type: "bottle", indId: cur.id, editId: r.id, initial: r })}>
                   <div className="r-top">
@@ -1436,7 +1486,7 @@ function App() {
                   <div className="r-mid">{[r.feedType, r.feedBrand, ccLabel(r.bottleSize), num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
                   {r.nextDate && (
                     <div className="r-next">
-                      다음 예정 <b className="mono">{r.nextDate}</b>{idx === 0 && cur.status === "유충" && <span className="dim"> ({dday(r.nextDate) <= 0 ? `${-dday(r.nextDate)}일 지남` : `D-${dday(r.nextDate)}`})</span>}
+                      다음 예정 <b className="mono">{r.nextDate}</b>{isLast && cur.status === "유충" && <span className="dim"> ({dday(r.nextDate) <= 0 ? `${-dday(r.nextDate)}일 지남` : `D-${dday(r.nextDate)}`})</span>}
                     </div>
                   )}
                   {r.memo && <div className="r-memo">{r.memo}</div>}
