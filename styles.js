@@ -207,4 +207,9 @@ border-radius:999px;padding:3px 12px;letter-spacing:.04em}
 border:1px dashed var(--line);border-radius:12px;color:var(--dim);font-size:14px;font-weight:600}
 .bc-photo{width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin-bottom:16px;border:1px solid var(--line)}
 .card-thumb{width:60px;height:60px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex:none;align-self:center}
+.remind-box{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+.remind-toggle{width:100%;background:var(--surf2);border:1px solid var(--line);color:var(--gold-d);
+border-radius:11px;padding:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.remind-toggle.on{background:#FBF1EE;border-color:#EBD3CC;color:#9A4A3A}
 `;
+
