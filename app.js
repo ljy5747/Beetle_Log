@@ -601,7 +601,7 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [sel, setSel] = useState(today());
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ title: "", memo: "" });
+  const [draft, setDraft] = useState({ title: "", memo: "", date: today() });
   const events = collectEvents(data);
 
   const first = new Date(ym.y, ym.m, 1);
@@ -678,19 +678,35 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
           <div className="cal-add">
             <input className="in" placeholder="일정 제목 (예: 온도 점검)" value={draft.title}
               onChange={(e) => setDraft({ ...draft, title: e.target.value })} autoFocus />
-            <input className="in" style={{ marginTop: 8 }} placeholder="메모 (선택)" value={draft.memo}
+            <div className="label" style={{ marginTop: 10, marginBottom: 6 }}>날짜</div>
+            <input type="date" className="in" value={draft.date}
+              onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
+            <div className="chiprow">
+              <button className="chipbtn" onClick={() => setDraft({ ...draft, date: today() })}>오늘</button>
+              {[7, 14, 30].map((d) => (
+                <button key={d} className="chipbtn" onClick={() => setDraft({ ...draft, date: addDays(today(), d) })}>+{d}일</button>
+              ))}
+            </div>
+            {draft.date && (
+              <div className="hint">
+                {dday(draft.date) === 0 ? "오늘" : dday(draft.date) > 0 ? `D-${dday(draft.date)} (${shortDate(draft.date)})` : `${-dday(draft.date)}일 지남`}
+                · 다가오면 라인 화면 상단에 알림으로 떠요
+              </div>
+            )}
+            <input className="in" style={{ marginTop: 10 }} placeholder="메모 (선택)" value={draft.memo}
               onChange={(e) => setDraft({ ...draft, memo: e.target.value })} />
             <div className="cal-add-btns">
-              <button className="btn ghost sm" onClick={() => { setAdding(false); setDraft({ title: "", memo: "" }); }}>취소</button>
+              <button className="btn ghost sm" onClick={() => { setAdding(false); setDraft({ title: "", memo: "", date: today() }); }}>취소</button>
               <button className="btn primary sm" onClick={() => {
                 if (!draft.title.trim()) return;
-                onAddEvent({ date: sel, title: draft.title.trim(), memo: draft.memo.trim() });
-                setDraft({ title: "", memo: "" }); setAdding(false);
+                if (!draft.date) return;
+                onAddEvent({ date: draft.date, title: draft.title.trim(), memo: draft.memo.trim() });
+                setDraft({ title: "", memo: "", date: today() }); setAdding(false);
               }}>추가</button>
             </div>
           </div>
         ) : (
-          <button className="cal-add-btn" onClick={() => setAdding(true)}>＋ 이 날짜에 일정 추가</button>
+          <button className="cal-add-btn" onClick={() => { setDraft({ title: "", memo: "", date: sel }); setAdding(true); }}>＋ 일정 추가</button>
         )}
       </div>
 
