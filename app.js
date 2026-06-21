@@ -684,7 +684,7 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
             <div className="chiprow">
               <button className="chipbtn" onClick={() => setDraft({ ...draft, date: today() })}>오늘</button>
               {[7, 14, 30].map((d) => (
-                <button key={d} className="chipbtn" onClick={() => setDraft({ ...draft, date: addDays(today(), d) })}>+{d}일</button>
+                <button key={d} className="chipbtn" onClick={() => setDraft({ ...draft, date: addDays(draft.date || today(), d) })}>+{d}일</button>
               ))}
             </div>
             {draft.date && (
