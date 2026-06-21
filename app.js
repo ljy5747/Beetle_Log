@@ -634,10 +634,14 @@ function collectEvents(data) {
   /* 사용자가 직접 추가한 일정 */
   (data.customEvents || []).forEach((c) => {
     push(c.date, { type: "custom", label: c.title, sub: c.memo || "", customId: c.id });
+    /* 알림일이 따로 있으면 그 날짜에도 표시 */
+    if (c.remindDate && c.remindDate !== c.date) {
+      push(c.remindDate, { type: "remind", label: c.remindTitle || `${c.title} 알림`, sub: c.remindMemo || "", customId: c.id });
+    }
   });
   return ev;
 }
-const EV_COLOR = { bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A", custom: "#5A7A9A" };
+const EV_COLOR = { bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A", custom: "#5A7A9A", remind: "#C2705F" };
 
 /* ════════════════════ 월별 달력 ════════════════════ */
 function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent }) {
@@ -645,7 +649,7 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [sel, setSel] = useState(today());
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ title: "", memo: "", date: today() });
+  const [draft, setDraft] = useState({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" });
   const events = collectEvents(data);
 
   const first = new Date(ym.y, ym.m, 1);
@@ -739,18 +743,54 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
             )}
             <input className="in" style={{ marginTop: 10 }} placeholder="메모 (선택)" value={draft.memo}
               onChange={(e) => setDraft({ ...draft, memo: e.target.value })} />
+
+            <div className="remind-box">
+              <button className={"remind-toggle" + (draft.useRemind ? " on" : "")}
+                onClick={() => setDraft({ ...draft, useRemind: !draft.useRemind, remindDate: draft.remindDate || addDays(draft.date || today(), 21) })}>
+                {draft.useRemind ? "✓ " : "＋ "}D-day 알림 추가
+              </button>
+              {draft.useRemind && (
+                <div style={{ marginTop: 10 }}>
+                  <div className="label" style={{ marginBottom: 6 }}>알림 날짜</div>
+                  <input type="date" className="in" value={draft.remindDate}
+                    onChange={(e) => setDraft({ ...draft, remindDate: e.target.value })} />
+                  <div className="chiprow">
+                    {[7, 21, 30, 60].map((d) => (
+                      <button key={d} className="chipbtn" onClick={() => setDraft({ ...draft, remindDate: addDays(draft.date || today(), d) })}>+{d}일</button>
+                    ))}
+                  </div>
+                  {draft.remindDate && (
+                    <div className="hint">
+                      {dday(draft.remindDate) === 0 ? "오늘" : dday(draft.remindDate) > 0 ? `D-${dday(draft.remindDate)} (${shortDate(draft.remindDate)})` : `${-dday(draft.remindDate)}일 지남`}
+                      {draft.date && draft.remindDate >= draft.date && ` · 기록일로부터 ${daysBetween(draft.date, draft.remindDate)}일 뒤`}
+                    </div>
+                  )}
+                  <input className="in" style={{ marginTop: 10 }} placeholder="알림 제목 (예: 해체할 것!)" value={draft.remindTitle}
+                    onChange={(e) => setDraft({ ...draft, remindTitle: e.target.value })} />
+                  <input className="in" style={{ marginTop: 8 }} placeholder="알림 메모 (선택)" value={draft.remindMemo}
+                    onChange={(e) => setDraft({ ...draft, remindMemo: e.target.value })} />
+                </div>
+              )}
+            </div>
+
             <div className="cal-add-btns">
-              <button className="btn ghost sm" onClick={() => { setAdding(false); setDraft({ title: "", memo: "", date: today() }); }}>취소</button>
+              <button className="btn ghost sm" onClick={() => { setAdding(false); setDraft({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); }}>취소</button>
               <button className="btn primary sm" onClick={() => {
                 if (!draft.title.trim()) return;
                 if (!draft.date) return;
-                onAddEvent({ date: draft.date, title: draft.title.trim(), memo: draft.memo.trim() });
-                setDraft({ title: "", memo: "", date: today() }); setAdding(false);
+                const ev = { date: draft.date, title: draft.title.trim(), memo: draft.memo.trim() };
+                if (draft.useRemind && draft.remindDate) {
+                  ev.remindDate = draft.remindDate;
+                  ev.remindTitle = draft.remindTitle.trim();
+                  ev.remindMemo = draft.remindMemo.trim();
+                }
+                onAddEvent(ev);
+                setDraft({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); setAdding(false);
               }}>추가</button>
             </div>
           </div>
         ) : (
-          <button className="cal-add-btn" onClick={() => { setDraft({ title: "", memo: "", date: sel }); setAdding(true); }}>＋ 일정 추가</button>
+          <button className="cal-add-btn" onClick={() => { setDraft({ title: "", memo: "", date: sel, useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); setAdding(true); }}>＋ 일정 추가</button>
         )}
       </div>
 
@@ -978,22 +1018,26 @@ function App() {
               );
             })()}
 
-            {/* 직접 추가한 일정 중 오늘~3일 내 임박 알림 */}
+            {/* 직접 추가한 일정 중 오늘~3일 내 임박 알림 (기록일 + 알림일 모두) */}
             {(() => {
-              const items = (data.customEvents || [])
-                .filter((c) => { const dd = dday(c.date); return dd >= 0 && dd <= 3; })
-                .sort((a, b) => (a.date < b.date ? -1 : 1));
-              if (items.length === 0) return null;
-              return items.map((c) => {
+              const items = [];
+              (data.customEvents || []).forEach((c) => {
                 const dd = dday(c.date);
-                return (
-                  <div key={c.id} className="alert custom" onClick={() => setTab("calendar")}>
-                    <span className="alert-dot" style={{ background: "#5A7A9A" }} />
-                    <b>{c.title}</b>
-                    <span className="alert-go">{dd === 0 ? "오늘" : `D-${dd}`} ›</span>
-                  </div>
-                );
+                if (dd >= 0 && dd <= 3) items.push({ id: c.id + "_d", title: c.title, dd });
+                if (c.remindDate) {
+                  const rd = dday(c.remindDate);
+                  if (rd >= 0 && rd <= 3) items.push({ id: c.id + "_r", title: c.remindTitle || `${c.title} 알림`, dd: rd });
+                }
               });
+              items.sort((a, b) => a.dd - b.dd);
+              if (items.length === 0) return null;
+              return items.map((it) => (
+                <div key={it.id} className="alert custom" onClick={() => setTab("calendar")}>
+                  <span className="alert-dot" style={{ background: "#C2705F" }} />
+                  <b>{it.title}</b>
+                  <span className="alert-go">{it.dd === 0 ? "오늘" : `D-${it.dd}`} ›</span>
+                </div>
+              ));
             })()}
 
             {data.lines.length === 0 && (
