@@ -192,4 +192,13 @@ padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:ui-mo
 .card.dead{opacity:.5;background:var(--surf2)}
 .card.dead .card-val,.card.dead .card-sub{color:var(--dim)}
 .tag.strike{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--dim)}
+.sp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sp-card{background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:16px 15px;cursor:pointer;
+box-shadow:0 1px 2px rgba(28,26,23,.03)}
+.sp-name{font-size:17px;font-weight:700;letter-spacing:.01em}
+.sp-meta{font-size:12px;color:var(--dim);margin-top:6px}
+.sp-go{font-size:12px;color:var(--gold-d);font-weight:700;margin-top:12px}
+.sp-back{color:var(--gold-d);font-size:14px;font-weight:600;cursor:pointer;padding:4px 0 12px}
+.bc-dead{display:inline-block;margin-top:10px;background:#F1EEEA;color:#7E705F;font-size:11px;font-weight:700;
+border-radius:999px;padding:3px 12px;letter-spacing:.04em}
 `;
