@@ -20,6 +20,28 @@ const shortDate = (iso) => (iso ? iso.slice(2).replace(/-/g, ".") : "");
 /* 병 용량: 저장은 숫자만, 표시할 때 cc 붙임. 기존에 'cc'가 들어간 값도 안전 처리 */
 const ccLabel = (v) => { const s = String(v || "").trim(); return s ? (/cc$/i.test(s) ? s : s + "cc") : ""; };
 
+/* 사진을 가로 최대 800px로 줄이고 JPEG로 압축해 base64로 반환 (용량 절약) */
+function resizeImage(file, maxW = 800, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxW / img.width);
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 async function deliverFile(filename, content, mime) {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
   /* 방법1. iOS 공유 시트 — 앱 내 미리보기에서 가장 잘 동작 */
@@ -158,9 +180,18 @@ function Modal({ title, onClose, onSave, children }) {
 function ParentForm({ initial, existingCodes, onSave, onClose }) {
   const [f, setF] = useState(initial || {
     code: "", sex: "수컷 ♂", species: "", line: "", origin: "",
-    totalLength: "", jawLength: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "",
+    totalLength: "", jawLength: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const pickPhoto = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setPhotoBusy(true);
+    try { const dataUrl = await resizeImage(file); set("photo", dataUrl); }
+    catch { alert("사진을 불러오지 못했어요"); }
+    setPhotoBusy(false);
+    e.target.value = "";
+  };
   const isEdit = !!initial;
   const save = () => {
     if (!f.code.trim()) return alert("관리번호는 필수입니다");
@@ -169,6 +200,19 @@ function ParentForm({ initial, existingCodes, onSave, onClose }) {
   };
   return (
     <Modal title={isEdit ? "성충 정보 수정" : "성충 등록"} onClose={onClose} onSave={save}>
+      <F label="사진">
+        <label className="photo-pick">
+          {f.photo ? (
+            <img src={f.photo} alt="" className="photo-prev" />
+          ) : (
+            <div className="photo-empty">{photoBusy ? "처리 중…" : "📷 사진 추가 (탭하여 선택)"}</div>
+          )}
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={pickPhoto} />
+        </label>
+        {f.photo && (
+          <button className="btn ghost sm" style={{ marginTop: 8 }} onClick={() => set("photo", "")}>사진 제거</button>
+        )}
+      </F>
       <div className="row">
         <F label="관리번호 *" half><input className="in mono" value={f.code} onChange={(e) => set("code", e.target.value)} placeholder="P-01" /></F>
         <F label="성별" half>
@@ -1061,6 +1105,7 @@ function App() {
                             {myLines > 0 && <em> 라인 {myLines}</em>}
                           </div>
                         </div>
+                        {p.photo && <img src={p.photo} alt="" className="card-thumb" />}
                       </div>
                     );
                   })}
@@ -1205,6 +1250,7 @@ function App() {
             </div>
 
             <div className="bcard">
+              {p.photo && <img src={p.photo} alt="" className="bc-photo" />}
               <div className="bc-head serif">BREEDING CARD</div>
               <div className="bc-species serif">{p.species || "종 미입력"}</div>
               <div className="bc-sub">{[p.line, p.origin, p.sex].filter(Boolean).join(" · ")}</div>
