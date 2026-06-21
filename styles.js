@@ -201,4 +201,10 @@ box-shadow:0 1px 2px rgba(28,26,23,.03)}
 .sp-back{color:var(--gold-d);font-size:14px;font-weight:600;cursor:pointer;padding:4px 0 12px}
 .bc-dead{display:inline-block;margin-top:10px;background:#F1EEEA;color:#7E705F;font-size:11px;font-weight:700;
 border-radius:999px;padding:3px 12px;letter-spacing:.04em}
+.photo-pick{display:block;cursor:pointer}
+.photo-prev{width:100%;max-height:240px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+.photo-empty{display:flex;align-items:center;justify-content:center;height:120px;background:var(--surf2);
+border:1px dashed var(--line);border-radius:12px;color:var(--dim);font-size:14px;font-weight:600}
+.bc-photo{width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin-bottom:16px;border:1px solid var(--line)}
+.card-thumb{width:60px;height:60px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex:none;align-self:center}
 `;
