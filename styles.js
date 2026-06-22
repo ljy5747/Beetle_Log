@@ -201,6 +201,8 @@ box-shadow:0 1px 2px rgba(28,26,23,.03)}
 .sp-back{color:var(--gold-d);font-size:14px;font-weight:600;cursor:pointer;padding:4px 0 12px}
 .bc-dead{display:inline-block;margin-top:10px;background:#F1EEEA;color:#7E705F;font-size:11px;font-weight:700;
 border-radius:999px;padding:3px 12px;letter-spacing:.04em}
+.bc-lineage{margin-top:10px;font-size:12px;color:var(--gold-d);font-weight:600}
+.bc-lineage b{font-weight:800}
 .photo-pick{display:block;cursor:pointer}
 .photo-prev{width:100%;max-height:240px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
 .photo-empty{display:flex;align-items:center;justify-content:center;height:120px;background:var(--surf2);
@@ -240,5 +242,12 @@ font-size:11px;font-weight:700;color:var(--dim)}
 .dt-ins{font-style:normal;font-size:10.5px;color:var(--green);font-weight:700;margin-left:5px}
 .dt-feed{flex:1;min-width:0;font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}
 .dt-w{flex:none;font-size:14px;font-weight:700;text-align:right}
+.flagrow{display:flex;flex-wrap:wrap;gap:7px}
+.flag-chip{background:var(--surf2);border:1px solid var(--line);color:var(--dim);border-radius:9px;
+padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.flag-chip.on{background:#FBF1EE;border-color:#D98C6A;color:#9A4A3A}
+.flag-show{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.flag-tag{background:#FBF1EE;color:#9A4A3A;border:1px solid #EBD3CC;border-radius:7px;
+padding:2px 9px;font-size:11px;font-weight:700}
 `;
 
