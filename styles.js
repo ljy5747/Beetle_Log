@@ -254,5 +254,7 @@ padding:2px 9px;font-size:11px;font-weight:700}
 .avg-f{color:#A8884F}
 .avg-u{color:var(--dim)}
 .r-gap{font-size:11.5px;color:var(--dim);font-weight:600;background:var(--surf2);border-radius:6px;padding:1px 7px;margin-left:2px}
+.icon-btn{background:none;border:none;font-size:22px;cursor:pointer;padding:6px;line-height:1}
+.set-desc{font-size:12.5px;color:var(--dim);line-height:1.6;margin-top:2px}
 `;
 
