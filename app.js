@@ -242,6 +242,47 @@ function ParentForm({ initial, existingCodes, onSave, onClose }) {
   );
 }
 
+/* ════════════════════ 성충 사육이력 행 입력 폼 ════════════════════ */
+function GrowthRowForm({ initial, brands, onSave, onClose }) {
+  const [f, setF] = useState(initial || {
+    date: today(), instar: "", feedType: "균사", feedBrand: "", bottleSize: "", weight: "", memo: "",
+  });
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const save = () => { if (!f.date) return alert("날짜는 필수입니다"); onSave(f); };
+  return (
+    <Modal title={initial ? "사육 이력 수정" : "사육 이력 추가"} onClose={onClose} onSave={save}>
+      <div className="row">
+        <F label="날짜 *" half><input type="date" className="in" value={f.date} onChange={(e) => set("date", e.target.value)} /></F>
+        <F label="령" half>
+          <select className="in" value={f.instar} onChange={(e) => set("instar", e.target.value)}>
+            <option value="">선택</option>{INSTARS.map((i) => <option key={i}>{i}</option>)}
+          </select>
+        </F>
+      </div>
+      <div className="row">
+        <F label="무게 g" half><input className="in mono" inputMode="decimal" value={f.weight} onChange={(e) => set("weight", e.target.value)} placeholder="16.0" /></F>
+        <F label="병 용량" half>
+          <div className="cc-wrap">
+            <input className="in mono" inputMode="numeric" value={f.bottleSize}
+              onChange={(e) => set("bottleSize", e.target.value.replace(/[^0-9]/g, ""))} placeholder="800" />
+            <span className="cc-suffix">cc</span>
+          </div>
+        </F>
+      </div>
+      <div className="row">
+        <F label="먹이 종류" half>
+          <select className="in" value={f.feedType} onChange={(e) => set("feedType", e.target.value)}>
+            {FEED_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </F>
+        <F label="브랜드" half><input className="in" list="dl-brands" value={f.feedBrand} onChange={(e) => set("feedBrand", e.target.value)} /></F>
+      </div>
+      <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
+      <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
+    </Modal>
+  );
+}
+
 /* ════════════════════ 라인 등록/수정 폼 ════════════════════ */
 function LineForm({ initial, parents, existingCodes, onSave, onClose }) {
   const [f, setF] = useState(initial || {
@@ -892,6 +933,23 @@ function App() {
     else persist({ ...data, parents: [...data.parents, { ...f, id: uid() }] });
     setModal(null); say("✓ 성충 저장됨");
   };
+  const saveGrowthRow = (f) => {
+    let d = rememberBrand(data, f.feedBrand);
+    d = {
+      ...d, parents: d.parents.map((p) => {
+        if (p.id !== modal.parentId) return p;
+        const rows = modal.editId
+          ? (p.growthRecords || []).map((r) => (r.id === modal.editId ? { ...r, ...f } : r))
+          : [...(p.growthRecords || []), { ...f, id: uid() }];
+        return { ...p, growthRecords: rows };
+      }),
+    };
+    persist(d); setModal(null); say("✓ 사육 이력 저장됨");
+  };
+  const deleteGrowthRow = () => {
+    persist({ ...data, parents: data.parents.map((p) => p.id !== modal.parentId ? p : { ...p, growthRecords: (p.growthRecords || []).filter((r) => r.id !== modal.editId) }) });
+    setModal(null); say("이력이 삭제됐어요");
+  };
   const saveLine = (f) => {
     if (modal.editId) persist({ ...data, lines: data.lines.map((l) => (l.id === modal.editId ? { ...l, ...f } : l)) });
     else {
@@ -1361,6 +1419,30 @@ function App() {
               <div className="bc-qr">QR 인증카드는 웹사이트 오픈 시 제공 예정</div>
             </div>
 
+            {/* 사육 이력 표 (라벨지 스타일) */}
+            <div className="p-t lt" style={{ display: "flex", alignItems: "center" }}>
+              사육 이력 {(p.growthRecords || []).length ? `· ${p.growthRecords.length}건` : ""}
+              <button className="btn tiny" style={{ marginLeft: "auto" }} onClick={() => setModal({ type: "growthRow", parentId: p.id })}>+ 추가</button>
+            </div>
+            {(p.growthRecords || []).length === 0 ? (
+              <div className="empty sm"><div className="empty-d">사육 이력이 없어요.<br />+ 추가로 병갈이/측정 기록을 직접 넣거나,<br />나중에 유충이 우화하면 자동으로 채워져요.</div></div>
+            ) : (
+              <div className="dtable">
+                <div className="dt-head">
+                  <span className="dt-date">날짜</span>
+                  <span className="dt-feed">먹이/병</span>
+                  <span className="dt-w">무게</span>
+                </div>
+                {[...p.growthRecords].sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => (
+                  <div key={r.id} className="dt-row" onClick={() => setModal({ type: "growthRow", parentId: p.id, editId: r.id, initial: r })}>
+                    <span className="dt-date mono">{shortDate(r.date)}{r.instar && <em className="dt-ins">{r.instar}</em>}</span>
+                    <span className="dt-feed">{[r.feedBrand || r.feedType, ccLabel(r.bottleSize)].filter(Boolean).join(" · ")}</span>
+                    <span className="dt-w mono">{num(r.weight) ? n1(num(r.weight)) + "g" : "—"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="p-t lt">이 성충의 라인 {myLines.length ? `· ${myLines.length}개` : ""}</div>
             {myLines.length === 0 && (
               <div className="empty sm"><div className="empty-d">이 성충으로 만든 라인이 아직 없어요.<br />라인 탭에서 + 버튼으로 조합을 만들어보세요.</div></div>
@@ -1520,6 +1602,16 @@ function App() {
           initial={modal.editId ? data.parents.find((p) => p.id === modal.editId) : null}
           existingCodes={data.parents.map((p) => p.code)}
           onSave={saveParent} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === "growthRow" && (
+        <div>
+          <GrowthRowForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveGrowthRow} onClose={() => setModal(null)} />
+          {modal.editId && (
+            <div className="del-float">
+              <ConfirmBtn className="btn danger sm" label="이 이력 삭제" onConfirm={deleteGrowthRow} />
+            </div>
+          )}
+        </div>
       )}
       {modal?.type === "line" && (
         <LineForm
