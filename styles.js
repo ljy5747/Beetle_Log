@@ -249,5 +249,10 @@ padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inher
 .flag-show{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 .flag-tag{background:#FBF1EE;color:#9A4A3A;border:1px solid #EBD3CC;border-radius:7px;
 padding:2px 9px;font-size:11px;font-weight:700}
+.avg-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:13px;font-weight:700}
+.avg-m{color:#5A7A9A}
+.avg-f{color:#A8884F}
+.avg-u{color:var(--dim)}
+.r-gap{font-size:11.5px;color:var(--dim);font-weight:600;background:var(--surf2);border-radius:6px;padding:1px 7px;margin-left:2px}
 `;
 
