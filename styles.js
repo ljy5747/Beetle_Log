@@ -270,5 +270,7 @@ padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inher
 .picker-manual{width:100%;background:var(--surf2);border:none;border-top:1px solid var(--line);
 padding:11px;font-size:13px;font-weight:700;color:var(--gold-d);cursor:pointer;font-family:inherit}
 .picker-empty{padding:12px;font-size:13px;color:var(--dim);text-align:center}
+.card.crown{border-color:#D9B45A;box-shadow:0 0 0 1px #D9B45A55,0 1px 3px rgba(168,136,79,.12)}
+.crown-ic{font-size:15px;line-height:1}
 `;
 
