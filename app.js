@@ -662,6 +662,141 @@ function exportXLSX(data) {
   return deliverFile(`사육기록_${today()}.xlsx`, new Blob([out], { type: xmime }), xmime);
 }
 
+/* ════════════════════ 엑셀 가져오기 양식 다운로드 ════════════════════ */
+function downloadTemplate() {
+  const wb = XLSX.utils.book_new();
+  /* 성충 시트 */
+  const parentRows = [
+    { "관리번호": "P-01", "성별(수컷/암컷)": "수컷", "종": "왕사슴벌레", "혈통": "", "산지": "", "총장(mm)": 85.5, "턱길이(mm)": "", "흉폭(mm)": "", "우화일(YYYY-MM-DD)": "", "입수처": "샵명", "메모": "" },
+    { "관리번호": "P-02", "성별(수컷/암컷)": "암컷", "종": "왕사슴벌레", "혈통": "", "산지": "", "총장(mm)": 52.0, "턱길이(mm)": "", "흉폭(mm)": "", "우화일(YYYY-MM-DD)": "", "입수처": "", "메모": "" },
+  ];
+  /* 라인 시트 */
+  const lineRows = [
+    { "라인명": "26-A", "부 관리번호": "P-01", "모 관리번호": "P-02", "종": "왕사슴벌레", "산지": "", "산란셋팅일(YYYY-MM-DD)": "", "산란해체일(YYYY-MM-DD)": "", "부화일(YYYY-MM-DD)": "", "온도": "23~25", "장소": "", "메모": "" },
+  ];
+  /* 유충 시트 */
+  const larvaRows = [
+    { "관리번호": "A-01", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "메모": "" },
+    { "관리번호": "A-02", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "메모": "" },
+  ];
+  const guide = [
+    { "안내": "이 파일의 각 시트(성충/라인/유충)를 채운 뒤, 앱 ⚙️설정 → '엑셀 불러오기'로 올리세요." },
+    { "안내": "예시로 적힌 줄은 지우고 본인 데이터를 넣으세요. 빈 줄은 무시됩니다." },
+    { "안내": "라인의 '부/모 관리번호'는 성충 시트의 관리번호와 같아야 연결됩니다." },
+    { "안내": "유충의 '소속 라인명'은 라인 시트의 라인명과 같아야 연결됩니다." },
+    { "안내": "같은 항목(성충=종+관리번호, 라인=라인명+종, 유충=관리번호+소속라인)은 최신 정보로 갱신됩니다." },
+    { "안내": "날짜는 2026-03-15 형식으로 적어주세요." },
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(guide), "사용법");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(parentRows), "성충");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lineRows), "라인");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(larvaRows), "유충");
+  const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+  const xmime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  return deliverFile(`사육기록_양식.xlsx`, new Blob([out], { type: xmime }), xmime);
+}
+
+/* 엑셀 파일 → 데이터 객체로 파싱 (성충/라인/유충 추가) */
+function parseImportXLSX(arrayBuffer, data) {
+  const wb = XLSX.read(arrayBuffer, { type: "array" });
+  const sheet = (name) => { const ws = wb.Sheets[name]; return ws ? XLSX.utils.sheet_to_json(ws, { defval: "" }) : []; };
+  const str = (v) => String(v == null ? "" : v).trim();
+  const sexNorm = (v) => { const s = str(v); if (s.includes("수")) return "수컷 ♂"; if (s.includes("암")) return "암컷 ♀"; return "미구분"; };
+  /* 엑셀 칸이 비어있으면 기존 값 유지, 값이 있으면 새 값으로 (빈칸이 기존 데이터를 지우지 않게) */
+  const keep = (newV, oldV) => { const s = str(newV); return s !== "" ? s : (oldV || ""); };
+
+  let parents = [...data.parents];
+  let lines = [...data.lines];
+  let individuals = [...data.individuals];
+  const report = { parentsNew: 0, parentsUpd: 0, linesNew: 0, linesUpd: 0, larvaeNew: 0, larvaeUpd: 0, skipped: 0 };
+
+  /* 1) 성충 — 종+관리번호가 같으면 덮어쓰기, 없으면 추가 */
+  const findParent = (code, species) => parents.find((p) => p.code === code && (p.species || "") === species);
+  sheet("성충").forEach((row) => {
+    const code = str(row["관리번호"]);
+    if (!code) return;
+    const species = str(row["종"]);
+    const existing = findParent(code, species);
+    if (existing) {
+      Object.assign(existing, {
+        sex: keep(row["성별(수컷/암컷)"], existing.sex) || sexNorm(row["성별(수컷/암컷)"]),
+        line: keep(row["혈통"], existing.line), origin: keep(row["산지"], existing.origin),
+        totalLength: keep(row["총장(mm)"], existing.totalLength), jawLength: keep(row["턱길이(mm)"], existing.jawLength),
+        thoraxWidth: keep(row["흉폭(mm)"], existing.thoraxWidth), eclosionDate: keep(row["우화일(YYYY-MM-DD)"], existing.eclosionDate),
+        source: keep(row["입수처"], existing.source), memo: keep(row["메모"], existing.memo),
+      });
+      if (str(row["성별(수컷/암컷)"])) existing.sex = sexNorm(row["성별(수컷/암컷)"]);
+      report.parentsUpd++;
+    } else {
+      parents.push({
+        id: uid(), code, sex: sexNorm(row["성별(수컷/암컷)"]), species,
+        line: str(row["혈통"]), origin: str(row["산지"]),
+        totalLength: str(row["총장(mm)"]), jawLength: str(row["턱길이(mm)"]), thoraxWidth: str(row["흉폭(mm)"]),
+        eclosionDate: str(row["우화일(YYYY-MM-DD)"]), source: str(row["입수처"]), memo: str(row["메모"]),
+        status: "생존", photo: "", growthRecords: [],
+      });
+      report.parentsNew++;
+    }
+  });
+  /* 부/모 연결용: 관리번호 → id (덮어쓰기 후 최신 상태로) */
+  const codeToParentId = {};
+  parents.forEach((p) => { codeToParentId[p.code] = p.id; });
+
+  /* 2) 라인 — 라인명+종이 같으면 덮어쓰기, 없으면 추가 */
+  const findLine = (code, species) => lines.find((l) => l.code === code && (l.species || "") === species);
+  sheet("라인").forEach((row) => {
+    const code = str(row["라인명"]);
+    if (!code) return;
+    const species = str(row["종"]);
+    const fid = codeToParentId[str(row["부 관리번호"])] || "";
+    const mid = codeToParentId[str(row["모 관리번호"])] || "";
+    const existing = findLine(code, species);
+    if (existing) {
+      Object.assign(existing, {
+        fatherId: fid || existing.fatherId, motherId: mid || existing.motherId,
+        origin: keep(row["산지"], existing.origin),
+        setDate: keep(row["산란셋팅일(YYYY-MM-DD)"], existing.setDate), breakdownDate: keep(row["산란해체일(YYYY-MM-DD)"], existing.breakdownDate),
+        hatchDate: keep(row["부화일(YYYY-MM-DD)"], existing.hatchDate), temp: keep(row["온도"], existing.temp),
+        place: keep(row["장소"], existing.place), memo: keep(row["메모"], existing.memo),
+      });
+      report.linesUpd++;
+    } else {
+      lines.push({
+        id: uid(), code, fatherId: fid, motherId: mid, species, origin: str(row["산지"]),
+        setDate: str(row["산란셋팅일(YYYY-MM-DD)"]), breakdownDate: str(row["산란해체일(YYYY-MM-DD)"]),
+        hatchDate: str(row["부화일(YYYY-MM-DD)"]), temp: str(row["온도"]), place: str(row["장소"]), memo: str(row["메모"]),
+      });
+      report.linesNew++;
+    }
+  });
+  const codeToLineId = {};
+  lines.forEach((l) => { codeToLineId[l.code] = l.id; });
+
+  /* 3) 유충 — 관리번호+소속라인이 같으면 덮어쓰기(병갈이 기록은 보존), 없으면 추가 */
+  sheet("유충").forEach((row) => {
+    const code = str(row["관리번호"]);
+    const lineCode = str(row["소속 라인명"]);
+    if (!code) return;
+    const lineId = codeToLineId[lineCode];
+    if (!lineId) { report.skipped++; return; } /* 라인 못 찾으면 건너뜀 */
+    const existing = individuals.find((i) => i.lineId === lineId && i.code === code);
+    if (existing) {
+      if (str(row["성별(수컷/암컷/미구분)"])) existing.sex = sexNorm(row["성별(수컷/암컷/미구분)"]);
+      existing.memo = keep(row["메모"], existing.memo);
+      /* bottleRecords / pupation / eclosion 은 건드리지 않음 */
+      report.larvaeUpd++;
+    } else {
+      individuals.push({
+        id: uid(), code, lineId, sex: sexNorm(row["성별(수컷/암컷/미구분)"]),
+        status: "유충", memo: str(row["메모"]), bottleRecords: [], pupation: null, eclosion: null,
+      });
+      report.larvaeNew++;
+    }
+  });
+
+  return { next: { ...data, parents, lines, individuals }, report };
+}
+
 /* ════════════════════ 일정 수집 ════════════════════ */
 function collectEvents(data) {
   const ev = {}; /* iso -> [{type, label, sub, lineId, indId}] */
@@ -886,7 +1021,9 @@ function App() {
   const [speciesFolder, setSpeciesFolder] = useState(null);
   const [lineView, setLineView] = useState("card");
   const [infoOpen, setInfoOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const fileRef = useRef(null);
+  const xlsxRef = useRef(null);
   const toastT = useRef(null);
 
   useEffect(() => {
@@ -1060,6 +1197,28 @@ function App() {
     };
     reader.readAsText(file); e.target.value = "";
   };
+  const importXLSX = (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const { next, report } = parseImportXLSX(reader.result, data);
+        const totalNew = report.parentsNew + report.linesNew + report.larvaeNew;
+        const totalUpd = report.parentsUpd + report.linesUpd + report.larvaeUpd;
+        if (totalNew + totalUpd === 0) {
+          say(report.skipped > 0 ? "라인을 못 찾아 건너뛴 유충만 있어요" : "⚠️ 양식에서 데이터를 찾지 못했어요");
+          return;
+        }
+        persist(next);
+        const parts = [];
+        if (totalNew) parts.push(`신규 ${totalNew}`);
+        if (totalUpd) parts.push(`갱신 ${totalUpd}`);
+        say(`✓ ${parts.join(" · ")}${report.skipped ? ` · ${report.skipped} 건너뜀` : ""}`);
+        setSettingsOpen(false);
+      } catch (err) { say("⚠️ 엑셀을 읽지 못했어요 — 양식 파일이 맞는지 확인해주세요"); }
+    };
+    reader.readAsArrayBuffer(file); e.target.value = "";
+  };
 
   /* ── 라인 통계 ── */
   const larvaeOf = (lineId) => data.individuals.filter((i) => i.lineId === lineId);
@@ -1087,7 +1246,7 @@ function App() {
               <div className="brand">Beetle<span style={{ fontStyle: "italic" }}>Log</span></div>
               <div className="brand-sub">라인 {data.lines.length} · 유충 {data.individuals.length} · 성충 {data.parents.length}</div>
             </div>
-            <button className="btn ghost sm" onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>⬇ 엑셀</button>
+            <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="설정">⚙️</button>
           </div>
 
           <div className="tabs">
@@ -1743,6 +1902,31 @@ function App() {
       )}
       {modal?.type === "eclosion" && (
         <EclosionForm initial={data.individuals.find((i) => i.id === modal.indId)?.eclosion} onSave={saveEclosion} onClose={() => setModal(null)} />
+      )}
+
+      {settingsOpen && (
+        <div className="overlay" onClick={() => setSettingsOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="mhead">
+              <button className="hbtn" onClick={() => setSettingsOpen(false)}>닫기</button>
+              <div className="mtitle">설정</div>
+              <span style={{ width: 40 }} />
+            </div>
+            <div className="mbody">
+              <div className="sect">엑셀로 한 번에 등록</div>
+              <div className="set-desc">양식을 받아 성충·라인·유충을 정리한 뒤 불러오면 한 번에 등록돼요. 같은 항목(종+관리번호, 라인명+종)은 최신 정보로 갱신하고, 새 항목은 추가해요. 유충의 병갈이 기록은 보존돼요.</div>
+              <button className="btn mt" style={{ width: "100%" }} onClick={() => { downloadTemplate(); }}>① 엑셀 양식 다운로드</button>
+              <button className="btn primary mt" style={{ width: "100%" }} onClick={() => xlsxRef.current?.click()}>② 엑셀 불러오기</button>
+              <input ref={xlsxRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={importXLSX} />
+
+              <div className="sect" style={{ marginTop: 24 }}>내보내기 / 백업</div>
+              <button className="btn mt" style={{ width: "100%" }} onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>전체 기록 엑셀로 내보내기</button>
+              <button className="btn mt" style={{ width: "100%" }} onClick={async () => { const how = await deliverFile(`사육기록_백업_${today()}.json`, JSON.stringify(data, null, 1), "application/json"); say(how === "fail" ? "⚠️ Safari에서 시도해주세요" : "백업 파일 저장됨"); }}>JSON 백업 (사진 포함)</button>
+              <button className="btn mt" style={{ width: "100%" }} onClick={() => fileRef.current?.click()}>JSON 백업 복원</button>
+              <div className="set-desc" style={{ marginTop: 12 }}>데이터는 이 기기에만 저장돼요. 가끔 백업해두면 안전해요.</div>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && <div className="toast">{toast}</div>}
