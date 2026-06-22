@@ -1,7 +1,7 @@
 /* ════════ 앱 본체 — 기능 추가/수정은 여기서 ════════ */
 const { useState, useEffect, useRef } = React;
 /* 설정값과 CSS는 data.js / styles.js 에서 불러옵니다 */
-const { KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, FLAGS, FEED_PRODUCTS, STATUS_COLOR, STATUSES } = window.APP_DATA;
+const { KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, STATUS_COLOR, STATUSES } = window.APP_DATA;
 const CSS = window.APP_CSS;
 
 
@@ -17,30 +17,6 @@ const num = (v) => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : 
 const n1 = (v) => (v == null ? "—" : (Math.round(v * 10) / 10).toLocaleString());
 const n2 = (v) => (v == null ? "—" : (Math.round(v * 100) / 100).toLocaleString());
 const shortDate = (iso) => (iso ? iso.slice(2).replace(/-/g, ".") : "");
-/* 병 용량: 저장은 숫자만, 표시할 때 cc 붙임. 기존에 'cc'가 들어간 값도 안전 처리 */
-const ccLabel = (v) => { const s = String(v || "").trim(); return s ? (/cc$/i.test(s) ? s : s + "cc") : ""; };
-
-/* 사진을 가로 최대 800px로 줄이고 JPEG로 압축해 base64로 반환 (용량 절약) */
-function resizeImage(file, maxW = 800, quality = 0.72) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxW / img.width);
-        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = reject;
-      img.src = reader.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 async function deliverFile(filename, content, mime) {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
@@ -151,52 +127,6 @@ const F = ({ label, children, half }) => (
   </div>
 );
 
-/* 균사/톱밥 브랜드 선택: 탭하면 샵별 제품 목록이 펼쳐지고, 맨 아래 직접 입력 */
-function FeedPicker({ feedType, value, brands, onChange, placeholder }) {
-  const [open, setOpen] = useState(false);
-  const [manual, setManual] = useState(false);
-  const groups = (FEED_PRODUCTS && FEED_PRODUCTS[feedType]) || [];
-  const pick = (shop, item) => { onChange(`${shop} ${item}`); setOpen(false); setManual(false); };
-  /* 직접 입력 모드거나, 목록에 없는 값이 이미 들어있으면 입력창 표시 */
-  if (manual) {
-    return (
-      <div>
-        <input className="in" list="dl-brands" value={value} autoFocus
-          onChange={(e) => onChange(e.target.value)} placeholder={placeholder || "직접 입력"} />
-        <button className="btn tiny mt" onClick={() => { setManual(false); setOpen(true); }}>← 목록에서 선택</button>
-        <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
-      </div>
-    );
-  }
-  return (
-    <div>
-      <button className="picker-btn" onClick={() => setOpen(!open)}>
-        <span className={value ? "" : "dim"}>{value || placeholder || "탭하여 선택"}</span>
-        <span className="picker-arrow">{open ? "▴" : "▾"}</span>
-      </button>
-      {open && (
-        <div className="picker-panel">
-          {groups.length === 0 && <div className="picker-empty">등록된 제품이 없어요. 직접 입력해주세요.</div>}
-          {groups.map((g) => (
-            <div key={g.shop} className="picker-group">
-              <div className="picker-shop">{g.shop}</div>
-              <div className="picker-items">
-                {g.items.map((item) => {
-                  const full = `${g.shop} ${item}`;
-                  return (
-                    <button key={item} className={"picker-item" + (value === full ? " on" : "")} onClick={() => pick(g.shop, item)}>{item}</button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          <button className="picker-manual" onClick={() => { setManual(true); setOpen(false); }}>✏️ 직접 입력</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ConfirmBtn({ label, onConfirm, className }) {
   const [armed, setArmed] = useState(false);
   useEffect(() => { if (armed) { const t = setTimeout(() => setArmed(false), 2600); return () => clearTimeout(t); } }, [armed]);
@@ -222,78 +152,21 @@ function Modal({ title, onClose, onSave, children }) {
   );
 }
 
-/* 단순 목록 펼침 선택 (종 등): 탭하면 목록 펼침, 맨 아래 직접 입력 */
-function SimplePicker({ options, value, onChange, placeholder }) {
-  const [open, setOpen] = useState(false);
-  const [manual, setManual] = useState(false);
-  if (manual) {
-    return (
-      <div>
-        <input className="in" value={value} autoFocus onChange={(e) => onChange(e.target.value)} placeholder={placeholder || "직접 입력"} />
-        <button className="btn tiny mt" onClick={() => { setManual(false); setOpen(true); }}>← 목록에서 선택</button>
-      </div>
-    );
-  }
-  return (
-    <div>
-      <button className="picker-btn" onClick={() => setOpen(!open)}>
-        <span className={value ? "" : "dim"}>{value || placeholder || "탭하여 선택"}</span>
-        <span className="picker-arrow">{open ? "▴" : "▾"}</span>
-      </button>
-      {open && (
-        <div className="picker-panel">
-          <div className="picker-items" style={{ padding: "11px 12px" }}>
-            {options.map((opt) => (
-              <button key={opt} className={"picker-item" + (value === opt ? " on" : "")} onClick={() => { onChange(opt); setOpen(false); }}>{opt}</button>
-            ))}
-          </div>
-          <button className="picker-manual" onClick={() => { setManual(true); setOpen(false); }}>✏️ 직접 입력</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ════════════════════ 성충 등록/수정 폼 ════════════════════ */
+/* ════════════════════ 종충 등록/수정 폼 ════════════════════ */
 function ParentForm({ initial, existingCodes, onSave, onClose }) {
   const [f, setF] = useState(initial || {
     code: "", sex: "수컷 ♂", species: "", line: "", origin: "",
-    totalLength: "", jawLength: "", jawWidth: "", jawThick: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
+    totalLength: "", jawLength: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "",
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const pickPhoto = async (e) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    setPhotoBusy(true);
-    try { const dataUrl = await resizeImage(file); set("photo", dataUrl); }
-    catch { alert("사진을 불러오지 못했어요"); }
-    setPhotoBusy(false);
-    e.target.value = "";
-  };
   const isEdit = !!initial;
-  const isGeuktae = (f.species || "").includes("극태");
-  const isDanchi = (f.species || "").includes("단치");
-  const [showJaw, setShowJaw] = useState(!!(initial && (initial.jawWidth || initial.jawThick)));
   const save = () => {
     if (!f.code.trim()) return alert("관리번호는 필수입니다");
     if (!isEdit && existingCodes.includes(f.code.trim())) return alert("이미 사용 중인 관리번호입니다");
     onSave({ ...f, code: f.code.trim() });
   };
   return (
-    <Modal title={isEdit ? "성충 정보 수정" : "성충 등록"} onClose={onClose} onSave={save}>
-      <F label="사진">
-        <label className="photo-pick">
-          {f.photo ? (
-            <img src={f.photo} alt="" className="photo-prev" />
-          ) : (
-            <div className="photo-empty">{photoBusy ? "처리 중…" : "📷 사진 추가 (탭하여 선택)"}</div>
-          )}
-          <input type="file" accept="image/*" style={{ display: "none" }} onChange={pickPhoto} />
-        </label>
-        {f.photo && (
-          <button className="btn ghost sm" style={{ marginTop: 8 }} onClick={() => set("photo", "")}>사진 제거</button>
-        )}
-      </F>
+    <Modal title={isEdit ? "종충 정보 수정" : "종충 등록"} onClose={onClose} onSave={save}>
       <div className="row">
         <F label="관리번호 *" half><input className="in mono" value={f.code} onChange={(e) => set("code", e.target.value)} placeholder="P-01" /></F>
         <F label="성별" half>
@@ -302,32 +175,16 @@ function ParentForm({ initial, existingCodes, onSave, onClose }) {
           </select>
         </F>
       </div>
-      <F label="종"><SimplePicker options={SPECIES} value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
+      <F label="종"><input className="in" list="dl-species" value={f.species} onChange={(e) => set("species", e.target.value)} placeholder="왕사슴벌레" /></F>
       <div className="row">
         <F label="혈통 / 계보" half><input className="in" value={f.line} onChange={(e) => set("line", e.target.value)} /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
       <div className="sect">측정값</div>
       <div className="row">
-        <F label="총장(체장) mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
+        <F label="총장 mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
         <F label="턱 길이 mm" half><input className="in mono" inputMode="decimal" value={f.jawLength} onChange={(e) => set("jawLength", e.target.value)} /></F>
       </div>
-      {num(f.totalLength) && num(f.jawLength) && (
-        <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>
-          턱 비율 <b>{n1(num(f.jawLength) / num(f.totalLength) * 100)}%</b> (턱÷체장){isDanchi ? " · 단치 평가" : ""}
-        </div>
-      )}
-      {(isGeuktae || showJaw) ? (
-        <>
-          {isGeuktae && <div className="hint" style={{ marginTop: -4, marginBottom: 8, color: "#937640" }}>극태 종 — 악폭·악후를 기록하세요</div>}
-          <div className="row">
-            <F label="악폭 mm" half><input className="in mono" inputMode="decimal" value={f.jawWidth} onChange={(e) => set("jawWidth", e.target.value)} /></F>
-            <F label="악후 mm" half><input className="in mono" inputMode="decimal" value={f.jawThick} onChange={(e) => set("jawThick", e.target.value)} /></F>
-          </div>
-        </>
-      ) : (
-        <button className="btn tiny" style={{ marginBottom: 13 }} onClick={() => setShowJaw(true)}>+ 악폭·악후 입력</button>
-      )}
       <F label="흉폭 mm"><input className="in mono" inputMode="decimal" value={f.thoraxWidth} onChange={(e) => set("thoraxWidth", e.target.value)} /></F>
       <div className="sect">기타</div>
       <div className="row">
@@ -335,47 +192,6 @@ function ParentForm({ initial, existingCodes, onSave, onClose }) {
         <F label="입수처" half><input className="in" value={f.source} onChange={(e) => set("source", e.target.value)} placeholder="자가 / 샵명" /></F>
       </div>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
-    </Modal>
-  );
-}
-
-/* ════════════════════ 성충 사육이력 행 입력 폼 ════════════════════ */
-function GrowthRowForm({ initial, brands, onSave, onClose }) {
-  const [f, setF] = useState(initial || {
-    date: today(), instar: "", feedType: "균사", feedBrand: "", bottleSize: "", weight: "", memo: "",
-  });
-  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const save = () => { if (!f.date) return alert("날짜는 필수입니다"); onSave(f); };
-  return (
-    <Modal title={initial ? "사육 이력 수정" : "사육 이력 추가"} onClose={onClose} onSave={save}>
-      <div className="row">
-        <F label="날짜 *" half><input type="date" className="in" value={f.date} onChange={(e) => set("date", e.target.value)} /></F>
-        <F label="령" half>
-          <select className="in" value={f.instar} onChange={(e) => set("instar", e.target.value)}>
-            <option value="">선택</option>{INSTARS.map((i) => <option key={i}>{i}</option>)}
-          </select>
-        </F>
-      </div>
-      <div className="row">
-        <F label="무게 g" half><input className="in mono" inputMode="decimal" value={f.weight} onChange={(e) => set("weight", e.target.value)} placeholder="16.0" /></F>
-        <F label="병 용량" half>
-          <div className="cc-wrap">
-            <input className="in mono" inputMode="numeric" value={f.bottleSize}
-              onChange={(e) => set("bottleSize", e.target.value.replace(/[^0-9]/g, ""))} placeholder="800" />
-            <span className="cc-suffix">cc</span>
-          </div>
-        </F>
-      </div>
-      <div className="row">
-        <F label="먹이 종류" half>
-          <select className="in" value={f.feedType} onChange={(e) => set("feedType", e.target.value)}>
-            {FEED_TYPES.map((t) => <option key={t}>{t}</option>)}
-          </select>
-        </F>
-        <F label="브랜드" half><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
-      </div>
-      <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
-      <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
     </Modal>
   );
 }
@@ -404,8 +220,8 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose }) {
   return (
     <Modal title={isEdit ? "라인 정보 수정" : "새 라인 만들기"} onClose={onClose} onSave={save}>
       <F label="라인명 *"><input className="in mono" value={f.code} onChange={(e) => set("code", e.target.value)} placeholder="26-A" /></F>
-      <div className="sect">성충 조합</div>
-      {parents.length === 0 && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>성충 탭에서 부모를 먼저 등록하면 여기서 선택할 수 있어요</div>}
+      <div className="sect">종충 조합</div>
+      {parents.length === 0 && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>종충 탭에서 부모를 먼저 등록하면 여기서 선택할 수 있어요</div>}
       <div className="row">
         <F label="부♂" half>
           <select className="in" value={f.fatherId || ""} onChange={(e) => pick("fatherId", e.target.value)}>
@@ -421,7 +237,7 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose }) {
         </F>
       </div>
       <div className="row">
-        <F label="종" half><SimplePicker options={SPECIES} value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
+        <F label="종" half><input className="in" list="dl-species" value={f.species} onChange={(e) => set("species", e.target.value)} /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
       <div className="sect">날짜</div>
@@ -527,13 +343,9 @@ function LarvaEditForm({ initial, lines, onSave, onClose }) {
 function BottleForm({ initial, brands, onSave, onClose }) {
   const [f, setF] = useState(initial || {
     date: today(), instar: "", weight: "", headWidth: "",
-    feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "", flags: [],
+    feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "",
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const toggleFlag = (flag) => setF((p) => {
-    const cur = p.flags || [];
-    return { ...p, flags: cur.includes(flag) ? cur.filter((x) => x !== flag) : [...cur, flag] };
-  });
   const save = () => { if (!f.date) return alert("날짜는 필수입니다"); onSave(f); };
   return (
     <Modal title={initial ? "병갈이 기록 수정" : "병갈이 기록"} onClose={onClose} onSave={save}>
@@ -555,117 +367,21 @@ function BottleForm({ initial, brands, onSave, onClose }) {
             {FEED_TYPES.map((t) => <option key={t}>{t}</option>)}
           </select>
         </F>
-        <F label="병 용량" half>
-          <div className="cc-wrap">
-            <input className="in mono" inputMode="numeric" value={f.bottleSize}
-              onChange={(e) => set("bottleSize", e.target.value.replace(/[^0-9]/g, ""))} placeholder="1400" />
-            <span className="cc-suffix">cc</span>
-          </div>
-          <div className="chiprow">
-            {BOTTLES.map((b) => <button key={b} className="chipbtn" onClick={() => set("bottleSize", b)}>{b}</button>)}
-          </div>
-        </F>
+        <F label="병 용량" half><input className="in" list="dl-bottles" value={f.bottleSize} onChange={(e) => set("bottleSize", e.target.value)} placeholder="1400cc" /></F>
       </div>
-      <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
+      <F label="브랜드 · 제품명"><input className="in" list="dl-brands" value={f.feedBrand} onChange={(e) => set("feedBrand", e.target.value)} placeholder="자주 쓰는 제품은 자동 저장돼요" /></F>
       <F label="다음 병갈이 예정일">
         <input type="date" className="in" value={f.nextDate} onChange={(e) => set("nextDate", e.target.value)} />
         <div className="chiprow">
-          {[40, 90, 100, 120].map((d) => (
+          {[30, 45, 60, 90].map((d) => (
             <button key={d} className="chipbtn" onClick={() => set("nextDate", addDays(f.date || today(), d))}>+{d}일</button>
           ))}
         </div>
-        <div className="hint">예정일을 정하면 캘린더 탭에 자동으로 표시돼요</div>
+        <div className="hint">저장 후 📅 버튼으로 아이폰 캘린더에 알림 등록</div>
       </F>
-      <F label="특이 케이스 (해당 시 선택)">
-        <div className="flagrow">
-          {FLAGS.map((flag) => (
-            <button key={flag} className={"flag-chip" + ((f.flags || []).includes(flag) ? " on" : "")} onClick={() => toggleFlag(flag)}>
-              {(f.flags || []).includes(flag) ? "✓ " : ""}{flag}
-            </button>
-          ))}
-        </div>
-      </F>
-      <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="식흔 상태 등" /></F>
+      <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="식흔 상태, 거식 여부 등" /></F>
       <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
-    </Modal>
-  );
-}
-
-/* ════════════════════ 일괄 병갈이 폼 ════════════════════ */
-function BulkBottleForm({ larvae, brands, onSave, onClose }) {
-  /* 유충 상태인 개체만 대상, 기본은 전체 선택 */
-  const targets = larvae.filter((i) => i.status === "유충");
-  const [picked, setPicked] = useState(() => new Set(targets.map((i) => i.id)));
-  const [f, setF] = useState({
-    date: today(), instar: "", feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "",
-  });
-  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const toggle = (id) => setPicked((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const allOn = picked.size === targets.length;
-  const save = () => {
-    if (!f.date) return alert("날짜는 필수입니다");
-    if (picked.size === 0) return alert("적용할 유충을 1마리 이상 선택해주세요");
-    onSave([...picked], f);
-  };
-  return (
-    <Modal title="일괄 병갈이" onClose={onClose} onSave={save}>
-      {targets.length === 0 ? (
-        <div className="hint">병갈이할 수 있는 유충(상태=유충)이 없어요.</div>
-      ) : (
-        <>
-          <div className="sect">공통 입력값 (선택한 유충에 동일 적용)</div>
-          <div className="row">
-            <F label="병갈이 날짜 *" half><input type="date" className="in" value={f.date} onChange={(e) => set("date", e.target.value)} /></F>
-            <F label="령" half>
-              <select className="in" value={f.instar} onChange={(e) => set("instar", e.target.value)}>
-                <option value="">선택</option>{INSTARS.map((i) => <option key={i}>{i}</option>)}
-              </select>
-            </F>
-          </div>
-          <div className="row">
-            <F label="먹이 종류" half>
-              <select className="in" value={f.feedType} onChange={(e) => set("feedType", e.target.value)}>
-                {FEED_TYPES.map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </F>
-            <F label="병 용량" half>
-          <div className="cc-wrap">
-            <input className="in mono" inputMode="numeric" value={f.bottleSize}
-              onChange={(e) => set("bottleSize", e.target.value.replace(/[^0-9]/g, ""))} placeholder="1400" />
-            <span className="cc-suffix">cc</span>
-          </div>
-          <div className="chiprow">
-            {BOTTLES.map((b) => <button key={b} className="chipbtn" onClick={() => set("bottleSize", b)}>{b}</button>)}
-          </div>
-        </F>
-          </div>
-          <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
-          <F label="다음 병갈이 예정일">
-            <input type="date" className="in" value={f.nextDate} onChange={(e) => set("nextDate", e.target.value)} />
-            <div className="chiprow">
-              {[40, 90, 100, 120].map((d) => (
-                <button key={d} className="chipbtn" onClick={() => set("nextDate", addDays(f.date || today(), d))}>+{d}일</button>
-              ))}
-            </div>
-          </F>
-          <F label="공통 메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="유충별 무게는 저장 후 각각 입력하세요" /></F>
-
-          <div className="sect" style={{ display: "flex", alignItems: "center" }}>
-            적용 대상 {picked.size}/{targets.length}
-            <button className="btn tiny" style={{ marginLeft: "auto" }} onClick={() => setPicked(allOn ? new Set() : new Set(targets.map((i) => i.id)))}>
-              {allOn ? "전체 해제" : "전체 선택"}
-            </button>
-          </div>
-          <div className="pick-grid">
-            {targets.map((i) => (
-              <button key={i.id} className={"pick-chip" + (picked.has(i.id) ? " on" : "")} onClick={() => toggle(i.id)}>
-                {picked.has(i.id) ? "✓ " : ""}{i.code}
-              </button>
-            ))}
-          </div>
-          <div className="hint">무게·두폭은 개체마다 다르니, 일괄 저장 후 각 유충에서 따로 입력하면 돼요.</div>
-        </>
-      )}
+      <datalist id="dl-bottles">{BOTTLES.map((b) => <option key={b} value={b} />)}</datalist>
     </Modal>
   );
 }
@@ -687,37 +403,16 @@ function PupationForm({ initial, onSave, onClose }) {
 }
 
 /* ════════════════════ 우화 폼 ════════════════════ */
-function EclosionForm({ initial, species, onSave, onClose }) {
-  const [f, setF] = useState(initial || { date: today(), totalLength: "", jawLength: "", jawWidth: "", jawThick: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "" });
+function EclosionForm({ initial, onSave, onClose }) {
+  const [f, setF] = useState(initial || { date: today(), totalLength: "", jawLength: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "" });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const sp = species || "";
-  const isGeuktae = sp.includes("극태");
-  const isDanchi = sp.includes("단치");
-  /* 극태면 악폭·악후 자동 표시. 아니어도 사용자가 펼칠 수 있게 */
-  const [showJaw, setShowJaw] = useState(isGeuktae || !!(initial && (initial.jawWidth || initial.jawThick)));
   return (
     <Modal title="우화 기록" onClose={onClose} onSave={() => onSave(f)}>
       <F label="우화일"><input type="date" className="in" value={f.date} onChange={(e) => set("date", e.target.value)} /></F>
       <div className="row">
-        <F label="총장(체장) mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
+        <F label="총장 mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
         <F label="턱 길이 mm" half><input className="in mono" inputMode="decimal" value={f.jawLength} onChange={(e) => set("jawLength", e.target.value)} /></F>
       </div>
-      {num(f.totalLength) && num(f.jawLength) && (
-        <div className="hint" style={{ marginTop: -4 }}>
-          턱 비율 <b>{n1(num(f.jawLength) / num(f.totalLength) * 100)}%</b> (턱÷체장){isDanchi ? " · 단치 평가" : ""}
-        </div>
-      )}
-      {showJaw ? (
-        <>
-          {isGeuktae && <div className="hint" style={{ marginTop: 2, marginBottom: 8, color: "#937640" }}>극태 종 — 악폭·악후를 기록하세요</div>}
-          <div className="row">
-            <F label="악폭 mm" half><input className="in mono" inputMode="decimal" value={f.jawWidth} onChange={(e) => set("jawWidth", e.target.value)} /></F>
-            <F label="악후 mm" half><input className="in mono" inputMode="decimal" value={f.jawThick} onChange={(e) => set("jawThick", e.target.value)} /></F>
-          </div>
-        </>
-      ) : (
-        <button className="btn tiny" style={{ marginBottom: 13 }} onClick={() => setShowJaw(true)}>+ 악폭·악후 입력</button>
-      )}
       <div className="row">
         <F label="두폭 mm" half><input className="in mono" inputMode="decimal" value={f.headWidth} onChange={(e) => set("headWidth", e.target.value)} /></F>
         <F label="흉폭 mm" half><input className="in mono" inputMode="decimal" value={f.thoraxWidth} onChange={(e) => set("thoraxWidth", e.target.value)} /></F>
@@ -750,7 +445,6 @@ function exportXLSX(data) {
       "최대 유충무게(g)": maxWeight(ind) ?? "", "병갈이 횟수": (ind.bottleRecords || []).length,
       "전용일": ind.pupation?.prepupaDate || "", "용화일": ind.pupation?.pupaDate || "", "번데기 무게(g)": ind.pupation?.pupaWeight || "",
       "우화일": ind.eclosion?.date || "", "총장(mm)": ind.eclosion?.totalLength || "", "턱 길이(mm)": ind.eclosion?.jawLength || "",
-      "악폭(mm)": ind.eclosion?.jawWidth || "", "악후(mm)": ind.eclosion?.jawThick || "",
       "두폭(mm)": ind.eclosion?.headWidth || "", "흉폭(mm)": ind.eclosion?.thoraxWidth || "", "배 길이(mm)": ind.eclosion?.abdomenLength || "",
       "우화부전": ind.eclosion ? (ind.eclosion.defect ? "O" : "X") : "",
       "환원율(mm/g)": reduction(ind) != null ? Math.round(reduction(ind) * 100) / 100 : "",
@@ -764,156 +458,21 @@ function exportXLSX(data) {
     sortedRecs(ind).forEach((r) => sheet2.push({
       "라인": L.code || "", "관리번호": ind.code, "종": L.species || "", "날짜": r.date, "령": r.instar,
       "유충무게(g)": r.weight, "두폭(mm)": r.headWidth, "먹이종류": r.feedType, "브랜드": r.feedBrand,
-      "병용량": ccLabel(r.bottleSize), "다음 예정일": r.nextDate, "메모": r.memo,
+      "병용량": r.bottleSize, "다음 예정일": r.nextDate, "메모": r.memo,
     }));
   });
   const sheetP = data.parents.map((p) => ({
     "관리번호": p.code, "성별": p.sex, "종": p.species, "혈통": p.line, "산지": p.origin,
-    "총장(mm)": p.totalLength, "턱 길이(mm)": p.jawLength, "악폭(mm)": p.jawWidth || "", "악후(mm)": p.jawThick || "", "흉폭(mm)": p.thoraxWidth,
+    "총장(mm)": p.totalLength, "턱 길이(mm)": p.jawLength, "흉폭(mm)": p.thoraxWidth,
     "우화일": p.eclosionDate, "입수처": p.source, "메모": p.memo,
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet1), "개체정보");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet2), "병갈이기록");
-  if (sheetP.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetP), "성충");
+  if (sheetP.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetP), "종충");
   const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   const xmime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   return deliverFile(`사육기록_${today()}.xlsx`, new Blob([out], { type: xmime }), xmime);
-}
-
-/* ════════════════════ 엑셀 가져오기 양식 다운로드 ════════════════════ */
-function downloadTemplate() {
-  const wb = XLSX.utils.book_new();
-  /* 성충 시트 */
-  const parentRows = [
-    { "관리번호": "P-01", "성별(수컷/암컷)": "수컷", "종": "왕사슴벌레", "혈통": "", "산지": "", "총장(mm)": 85.5, "턱길이(mm)": "", "흉폭(mm)": "", "우화일(YYYY-MM-DD)": "", "입수처": "샵명", "메모": "" },
-    { "관리번호": "P-02", "성별(수컷/암컷)": "암컷", "종": "왕사슴벌레", "혈통": "", "산지": "", "총장(mm)": 52.0, "턱길이(mm)": "", "흉폭(mm)": "", "우화일(YYYY-MM-DD)": "", "입수처": "", "메모": "" },
-  ];
-  /* 라인 시트 */
-  const lineRows = [
-    { "라인명": "26-A", "부 관리번호": "P-01", "모 관리번호": "P-02", "종": "왕사슴벌레", "산지": "", "산란셋팅일(YYYY-MM-DD)": "", "산란해체일(YYYY-MM-DD)": "", "부화일(YYYY-MM-DD)": "", "온도": "23~25", "장소": "", "메모": "" },
-  ];
-  /* 유충 시트 */
-  const larvaRows = [
-    { "관리번호": "A-01", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "메모": "" },
-    { "관리번호": "A-02", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "메모": "" },
-  ];
-  const guide = [
-    { "안내": "이 파일의 각 시트(성충/라인/유충)를 채운 뒤, 앱 ⚙️설정 → '엑셀 불러오기'로 올리세요." },
-    { "안내": "예시로 적힌 줄은 지우고 본인 데이터를 넣으세요. 빈 줄은 무시됩니다." },
-    { "안내": "라인의 '부/모 관리번호'는 성충 시트의 관리번호와 같아야 연결됩니다." },
-    { "안내": "유충의 '소속 라인명'은 라인 시트의 라인명과 같아야 연결됩니다." },
-    { "안내": "같은 항목(성충=종+관리번호, 라인=라인명+종, 유충=관리번호+소속라인)은 최신 정보로 갱신됩니다." },
-    { "안내": "날짜는 2026-03-15 형식으로 적어주세요." },
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(guide), "사용법");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(parentRows), "성충");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lineRows), "라인");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(larvaRows), "유충");
-  const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-  const xmime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  return deliverFile(`사육기록_양식.xlsx`, new Blob([out], { type: xmime }), xmime);
-}
-
-/* 엑셀 파일 → 데이터 객체로 파싱 (성충/라인/유충 추가) */
-function parseImportXLSX(arrayBuffer, data) {
-  const wb = XLSX.read(arrayBuffer, { type: "array" });
-  const sheet = (name) => { const ws = wb.Sheets[name]; return ws ? XLSX.utils.sheet_to_json(ws, { defval: "" }) : []; };
-  const str = (v) => String(v == null ? "" : v).trim();
-  const sexNorm = (v) => { const s = str(v); if (s.includes("수")) return "수컷 ♂"; if (s.includes("암")) return "암컷 ♀"; return "미구분"; };
-  /* 엑셀 칸이 비어있으면 기존 값 유지, 값이 있으면 새 값으로 (빈칸이 기존 데이터를 지우지 않게) */
-  const keep = (newV, oldV) => { const s = str(newV); return s !== "" ? s : (oldV || ""); };
-
-  let parents = [...data.parents];
-  let lines = [...data.lines];
-  let individuals = [...data.individuals];
-  const report = { parentsNew: 0, parentsUpd: 0, linesNew: 0, linesUpd: 0, larvaeNew: 0, larvaeUpd: 0, skipped: 0 };
-
-  /* 1) 성충 — 종+관리번호가 같으면 덮어쓰기, 없으면 추가 */
-  const findParent = (code, species) => parents.find((p) => p.code === code && (p.species || "") === species);
-  sheet("성충").forEach((row) => {
-    const code = str(row["관리번호"]);
-    if (!code) return;
-    const species = str(row["종"]);
-    const existing = findParent(code, species);
-    if (existing) {
-      Object.assign(existing, {
-        sex: keep(row["성별(수컷/암컷)"], existing.sex) || sexNorm(row["성별(수컷/암컷)"]),
-        line: keep(row["혈통"], existing.line), origin: keep(row["산지"], existing.origin),
-        totalLength: keep(row["총장(mm)"], existing.totalLength), jawLength: keep(row["턱길이(mm)"], existing.jawLength),
-        thoraxWidth: keep(row["흉폭(mm)"], existing.thoraxWidth), eclosionDate: keep(row["우화일(YYYY-MM-DD)"], existing.eclosionDate),
-        source: keep(row["입수처"], existing.source), memo: keep(row["메모"], existing.memo),
-      });
-      if (str(row["성별(수컷/암컷)"])) existing.sex = sexNorm(row["성별(수컷/암컷)"]);
-      report.parentsUpd++;
-    } else {
-      parents.push({
-        id: uid(), code, sex: sexNorm(row["성별(수컷/암컷)"]), species,
-        line: str(row["혈통"]), origin: str(row["산지"]),
-        totalLength: str(row["총장(mm)"]), jawLength: str(row["턱길이(mm)"]), thoraxWidth: str(row["흉폭(mm)"]),
-        eclosionDate: str(row["우화일(YYYY-MM-DD)"]), source: str(row["입수처"]), memo: str(row["메모"]),
-        status: "생존", photo: "", growthRecords: [],
-      });
-      report.parentsNew++;
-    }
-  });
-  /* 부/모 연결용: 관리번호 → id (덮어쓰기 후 최신 상태로) */
-  const codeToParentId = {};
-  parents.forEach((p) => { codeToParentId[p.code] = p.id; });
-
-  /* 2) 라인 — 라인명+종이 같으면 덮어쓰기, 없으면 추가 */
-  const findLine = (code, species) => lines.find((l) => l.code === code && (l.species || "") === species);
-  sheet("라인").forEach((row) => {
-    const code = str(row["라인명"]);
-    if (!code) return;
-    const species = str(row["종"]);
-    const fid = codeToParentId[str(row["부 관리번호"])] || "";
-    const mid = codeToParentId[str(row["모 관리번호"])] || "";
-    const existing = findLine(code, species);
-    if (existing) {
-      Object.assign(existing, {
-        fatherId: fid || existing.fatherId, motherId: mid || existing.motherId,
-        origin: keep(row["산지"], existing.origin),
-        setDate: keep(row["산란셋팅일(YYYY-MM-DD)"], existing.setDate), breakdownDate: keep(row["산란해체일(YYYY-MM-DD)"], existing.breakdownDate),
-        hatchDate: keep(row["부화일(YYYY-MM-DD)"], existing.hatchDate), temp: keep(row["온도"], existing.temp),
-        place: keep(row["장소"], existing.place), memo: keep(row["메모"], existing.memo),
-      });
-      report.linesUpd++;
-    } else {
-      lines.push({
-        id: uid(), code, fatherId: fid, motherId: mid, species, origin: str(row["산지"]),
-        setDate: str(row["산란셋팅일(YYYY-MM-DD)"]), breakdownDate: str(row["산란해체일(YYYY-MM-DD)"]),
-        hatchDate: str(row["부화일(YYYY-MM-DD)"]), temp: str(row["온도"]), place: str(row["장소"]), memo: str(row["메모"]),
-      });
-      report.linesNew++;
-    }
-  });
-  const codeToLineId = {};
-  lines.forEach((l) => { codeToLineId[l.code] = l.id; });
-
-  /* 3) 유충 — 관리번호+소속라인이 같으면 덮어쓰기(병갈이 기록은 보존), 없으면 추가 */
-  sheet("유충").forEach((row) => {
-    const code = str(row["관리번호"]);
-    const lineCode = str(row["소속 라인명"]);
-    if (!code) return;
-    const lineId = codeToLineId[lineCode];
-    if (!lineId) { report.skipped++; return; } /* 라인 못 찾으면 건너뜀 */
-    const existing = individuals.find((i) => i.lineId === lineId && i.code === code);
-    if (existing) {
-      if (str(row["성별(수컷/암컷/미구분)"])) existing.sex = sexNorm(row["성별(수컷/암컷/미구분)"]);
-      existing.memo = keep(row["메모"], existing.memo);
-      /* bottleRecords / pupation / eclosion 은 건드리지 않음 */
-      report.larvaeUpd++;
-    } else {
-      individuals.push({
-        id: uid(), code, lineId, sex: sexNorm(row["성별(수컷/암컷/미구분)"]),
-        status: "유충", memo: str(row["메모"]), bottleRecords: [], pupation: null, eclosion: null,
-      });
-      report.larvaeNew++;
-    }
-  });
-
-  return { next: { ...data, parents, lines, individuals }, report };
 }
 
 /* ════════════════════ 일정 수집 ════════════════════ */
@@ -939,25 +498,15 @@ function collectEvents(data) {
       push(addDays(L.setDate, 60), { type: "harvestEnd", label: `${L.code} 해체 권장 마감`, sub: `셋팅 2달차 · ${L.species || ""}`.trim(), lineId: L.id });
     }
   });
-  /* 사용자가 직접 추가한 일정 */
-  (data.customEvents || []).forEach((c) => {
-    push(c.date, { type: "custom", label: c.title, sub: c.memo || "", customId: c.id });
-    /* 알림일이 따로 있으면 그 날짜에도 표시 */
-    if (c.remindDate && c.remindDate !== c.date) {
-      push(c.remindDate, { type: "remind", label: c.remindTitle || `${c.title} 알림`, sub: c.remindMemo || "", customId: c.id });
-    }
-  });
   return ev;
 }
-const EV_COLOR = { bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A", custom: "#5A7A9A", remind: "#C2705F" };
+const EV_COLOR = { bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A" };
 
 /* ════════════════════ 월별 달력 ════════════════════ */
-function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent }) {
+function CalendarView({ data, onOpenLine, onOpenLarva }) {
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [sel, setSel] = useState(today());
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" });
   const events = collectEvents(data);
 
   const first = new Date(ym.y, ym.m, 1);
@@ -1002,7 +551,7 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
           const isToday = k === today();
           const isSel = k === sel;
           return (
-            <button key={i} className={"cal-cell" + (isSel ? " sel" : "") + (isToday ? " today" : "")} onClick={() => { setSel(k); setAdding(false); }}>
+            <button key={i} className={"cal-cell" + (isSel ? " sel" : "") + (isToday ? " today" : "")} onClick={() => setSel(k)}>
               <span className={"cal-num" + (i % 7 === 0 ? " sun" : i % 7 === 6 ? " sat" : "")}>{d}</span>
               {evs.length > 0 && (
                 <span className="cal-dots">
@@ -1018,88 +567,16 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
         <div className="cal-sel-date">{shortDate(sel)} {["일", "월", "화", "수", "목", "금", "토"][new Date(sel + "T00:00:00").getDay()]}요일
           {sel === today() && <span className="cal-badge">오늘</span>}
         </div>
-        {selEvents.length === 0 && !adding && <div className="cal-empty">예정된 일정이 없어요</div>}
+        {selEvents.length === 0 && <div className="cal-empty">예정된 일정이 없어요</div>}
         {selEvents.map((e, i) => (
-          <div key={i} className="cal-item">
+          <div key={i} className="cal-item" onClick={() => e.indId ? onOpenLarva(e.indId) : onOpenLine(e.lineId)}>
             <i className="cal-item-dot" style={{ background: EV_COLOR[e.type] }} />
-            <div style={{ flex: 1, minWidth: 0 }} onClick={() => e.customId ? null : e.indId ? onOpenLarva(e.indId) : onOpenLine(e.lineId)}>
+            <div>
               <div className="cal-item-l">{e.label}</div>
               {e.sub && <div className="cal-item-s">{e.sub}</div>}
             </div>
-            {e.customId && <button className="cal-del" onClick={() => onDeleteEvent(e.customId)}>삭제</button>}
           </div>
         ))}
-
-        {adding ? (
-          <div className="cal-add">
-            <input className="in" placeholder="일정 제목 (예: 온도 점검)" value={draft.title}
-              onChange={(e) => setDraft({ ...draft, title: e.target.value })} autoFocus />
-            <div className="label" style={{ marginTop: 10, marginBottom: 6 }}>날짜</div>
-            <input type="date" className="in" value={draft.date}
-              onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
-            <div className="chiprow">
-              <button className="chipbtn" onClick={() => setDraft({ ...draft, date: today() })}>오늘</button>
-              {[7, 14, 30].map((d) => (
-                <button key={d} className="chipbtn" onClick={() => setDraft({ ...draft, date: addDays(draft.date || today(), d) })}>+{d}일</button>
-              ))}
-            </div>
-            {draft.date && (
-              <div className="hint">
-                {dday(draft.date) === 0 ? "오늘" : dday(draft.date) > 0 ? `D-${dday(draft.date)} (${shortDate(draft.date)})` : `${-dday(draft.date)}일 지남`}
-                · 다가오면 라인 화면 상단에 알림으로 떠요
-              </div>
-            )}
-            <input className="in" style={{ marginTop: 10 }} placeholder="메모 (선택)" value={draft.memo}
-              onChange={(e) => setDraft({ ...draft, memo: e.target.value })} />
-
-            <div className="remind-box">
-              <button className={"remind-toggle" + (draft.useRemind ? " on" : "")}
-                onClick={() => setDraft({ ...draft, useRemind: !draft.useRemind, remindDate: draft.remindDate || addDays(draft.date || today(), 21) })}>
-                {draft.useRemind ? "✓ " : "＋ "}D-day 알림 추가
-              </button>
-              {draft.useRemind && (
-                <div style={{ marginTop: 10 }}>
-                  <div className="label" style={{ marginBottom: 6 }}>알림 날짜</div>
-                  <input type="date" className="in" value={draft.remindDate}
-                    onChange={(e) => setDraft({ ...draft, remindDate: e.target.value })} />
-                  <div className="chiprow">
-                    {[7, 21, 30, 60].map((d) => (
-                      <button key={d} className="chipbtn" onClick={() => setDraft({ ...draft, remindDate: addDays(draft.date || today(), d) })}>+{d}일</button>
-                    ))}
-                  </div>
-                  {draft.remindDate && (
-                    <div className="hint">
-                      {dday(draft.remindDate) === 0 ? "오늘" : dday(draft.remindDate) > 0 ? `D-${dday(draft.remindDate)} (${shortDate(draft.remindDate)})` : `${-dday(draft.remindDate)}일 지남`}
-                      {draft.date && draft.remindDate >= draft.date && ` · 기록일로부터 ${daysBetween(draft.date, draft.remindDate)}일 뒤`}
-                    </div>
-                  )}
-                  <input className="in" style={{ marginTop: 10 }} placeholder="알림 제목 (예: 해체할 것!)" value={draft.remindTitle}
-                    onChange={(e) => setDraft({ ...draft, remindTitle: e.target.value })} />
-                  <input className="in" style={{ marginTop: 8 }} placeholder="알림 메모 (선택)" value={draft.remindMemo}
-                    onChange={(e) => setDraft({ ...draft, remindMemo: e.target.value })} />
-                </div>
-              )}
-            </div>
-
-            <div className="cal-add-btns">
-              <button className="btn ghost sm" onClick={() => { setAdding(false); setDraft({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); }}>취소</button>
-              <button className="btn primary sm" onClick={() => {
-                if (!draft.title.trim()) return;
-                if (!draft.date) return;
-                const ev = { date: draft.date, title: draft.title.trim(), memo: draft.memo.trim() };
-                if (draft.useRemind && draft.remindDate) {
-                  ev.remindDate = draft.remindDate;
-                  ev.remindTitle = draft.remindTitle.trim();
-                  ev.remindMemo = draft.remindMemo.trim();
-                }
-                onAddEvent(ev);
-                setDraft({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); setAdding(false);
-              }}>추가</button>
-            </div>
-          </div>
-        ) : (
-          <button className="cal-add-btn" onClick={() => { setDraft({ title: "", memo: "", date: sel, useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); setAdding(true); }}>＋ 일정 추가</button>
-        )}
       </div>
 
       {upcoming.length > 0 && (
@@ -1137,12 +614,8 @@ function App() {
   const [toast, setToast] = useState(null);
   const [filter, setFilter] = useState("전체");
   const [tab, setTab] = useState("lines");
-  const [speciesFolder, setSpeciesFolder] = useState(null);
-  const [lineView, setLineView] = useState("card");
   const [infoOpen, setInfoOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const fileRef = useRef(null);
-  const xlsxRef = useRef(null);
   const toastT = useRef(null);
 
   useEffect(() => {
@@ -1152,7 +625,6 @@ function App() {
       const base = d && Array.isArray(d.individuals) ? d : { individuals: [], feedBrands: [] };
       if (!Array.isArray(base.parents)) base.parents = [];
       if (!Array.isArray(base.lines)) base.lines = [];
-      if (!Array.isArray(base.customEvents)) base.customEvents = [];
       /* 기존 데이터 마이그레이션: 라인 없는 유충은 '미분류' 라인으로 */
       const legacy = base.individuals.filter((i) => !i.lineId);
       if (legacy.length) {
@@ -1200,24 +672,7 @@ function App() {
   const saveParent = (f) => {
     if (modal.editId) persist({ ...data, parents: data.parents.map((p) => (p.id === modal.editId ? { ...p, ...f } : p)) });
     else persist({ ...data, parents: [...data.parents, { ...f, id: uid() }] });
-    setModal(null); say("✓ 성충 저장됨");
-  };
-  const saveGrowthRow = (f) => {
-    let d = rememberBrand(data, f.feedBrand);
-    d = {
-      ...d, parents: d.parents.map((p) => {
-        if (p.id !== modal.parentId) return p;
-        const rows = modal.editId
-          ? (p.growthRecords || []).map((r) => (r.id === modal.editId ? { ...r, ...f } : r))
-          : [...(p.growthRecords || []), { ...f, id: uid() }];
-        return { ...p, growthRecords: rows };
-      }),
-    };
-    persist(d); setModal(null); say("✓ 사육 이력 저장됨");
-  };
-  const deleteGrowthRow = () => {
-    persist({ ...data, parents: data.parents.map((p) => p.id !== modal.parentId ? p : { ...p, growthRecords: (p.growthRecords || []).filter((r) => r.id !== modal.editId) }) });
-    setModal(null); say("이력이 삭제됐어요");
+    setModal(null); say("✓ 종충 저장됨");
   };
   const saveLine = (f) => {
     if (modal.editId) persist({ ...data, lines: data.lines.map((l) => (l.id === modal.editId ? { ...l, ...f } : l)) });
@@ -1247,19 +702,7 @@ function App() {
       }),
     };
     persist(d); setModal(null);
-    say(f.nextDate ? "✓ 저장됨 — 캘린더 탭에서 확인" : "✓ 저장됨");
-  };
-  const saveBulkBottle = (ids, f) => {
-    let d = rememberBrand(data, f.feedBrand);
-    const idset = new Set(ids);
-    d = {
-      ...d, individuals: d.individuals.map((i) => {
-        if (!idset.has(i.id)) return i;
-        return { ...i, bottleRecords: [...(i.bottleRecords || []), { ...f, weight: "", headWidth: "", id: uid() }] };
-      }),
-    };
-    persist(d); setModal(null);
-    say(`✓ ${ids.length}마리 일괄 병갈이 기록됨`);
+    say(f.nextDate ? "✓ 저장됨 — 📅 버튼으로 캘린더 등록" : "✓ 저장됨");
   };
   const savePupation = (f) => {
     const ind = data.individuals.find((i) => i.id === modal.indId);
@@ -1271,37 +714,15 @@ function App() {
     updateInd(modal.indId, { eclosion: f, status: ["유충", "용화"].includes(ind.status) ? "우화" : ind.status });
     setModal(null); say("✓ 우화 기록 저장됨");
   };
-  const promoteToParent = (ind) => {
+  const calendarICS = async (ind, rec) => {
     const L = lineById[ind.lineId] || {};
-    const ec = ind.eclosion || {};
-    /* 병갈이 기록 → 성충 사육 이력으로 복사 */
-    const growthRecords = sortedRecs(ind).map((r) => ({
-      id: uid(), date: r.date, instar: r.instar || "", feedType: r.feedType || "",
-      feedBrand: r.feedBrand || "", bottleSize: r.bottleSize || "", weight: r.weight || "", memo: r.memo || "",
-    }));
-    /* 우화일 행도 이력에 추가 */
-    if (ec.date) growthRecords.push({ id: uid(), date: ec.date, instar: "우화", feedType: "", feedBrand: "", bottleSize: "", weight: "", memo: num(ec.totalLength) ? `우화 ${ec.totalLength}mm` : "우화" });
-    /* 성충 관리번호: 라인코드+유충번호 조합으로 자동 생성, 중복 시 뒤에 숫자 */
-    let baseCode = `${L.code ? L.code + "-" : ""}${ind.code}`;
-    let code = baseCode, n = 2;
-    const exist = new Set(data.parents.map((p) => p.code));
-    while (exist.has(code)) { code = `${baseCode}-${n++}`; }
-    const newParent = {
-      id: uid(), code,
-      sex: ind.sex && ind.sex !== "미구분" ? ind.sex : "수컷 ♂",
-      species: L.species || "", line: L.code || "", origin: L.origin || "",
-      totalLength: ec.totalLength || "", jawLength: ec.jawLength || "", jawWidth: ec.jawWidth || "", jawThick: ec.jawThick || "", thoraxWidth: ec.thoraxWidth || "",
-      eclosionDate: ec.date || "", source: "자가", memo: ind.memo || "",
-      status: "생존", photo: "", growthRecords,
-      bornLineId: ind.lineId || "", bornLarvaId: ind.id,
-    };
-    persist({
-      ...data,
-      parents: [...data.parents, newParent],
-      individuals: data.individuals.map((i) => i.id === ind.id ? { ...i, promotedToParentId: newParent.id } : i),
-    });
-    say("✓ 성충으로 등록됐어요 — 사육 이력도 옮겨졌어요");
-    setView({ name: "parentDetail", id: newParent.id });
+    const ics = makeICS(`🪲 ${L.code ? L.code + " " : ""}${ind.code} 병갈이`, rec.nextDate,
+      `${L.species || "사슴벌레"} / 최근 무게 ${rec.weight || "?"}g / ${rec.feedType || ""} ${rec.feedBrand || ""}`.trim());
+    const how = await openCalendar(`병갈이_${ind.code}_${rec.nextDate}.ics`, ics);
+    if (how === "share") say("'캘린더'를 선택하거나, 저장한 파일을 탭하면 등록돼요");
+    else if (how === "open") say("뜬 화면에서 '추가'를 누르면 캘린더 등록 완료");
+    else if (how === "download") say("받은 .ics 파일을 탭하면 캘린더에 등록돼요");
+    else say("⚠️ 등록 화면을 열지 못했어요 — 다시 시도해주세요");
   };
   const importJSON = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -1310,33 +731,11 @@ function App() {
       try {
         const d = JSON.parse(reader.result);
         if (!Array.isArray(d.individuals)) throw new Error();
-        persist({ individuals: d.individuals, lines: Array.isArray(d.lines) ? d.lines : [], parents: Array.isArray(d.parents) ? d.parents : [], customEvents: Array.isArray(d.customEvents) ? d.customEvents : [], feedBrands: d.feedBrands || [] });
+        persist({ individuals: d.individuals, lines: Array.isArray(d.lines) ? d.lines : [], parents: Array.isArray(d.parents) ? d.parents : [], feedBrands: d.feedBrands || [] });
         say(`✓ ${d.individuals.length}개체 복원 완료`);
       } catch { say("⚠️ 올바른 백업 파일이 아니에요"); }
     };
     reader.readAsText(file); e.target.value = "";
-  };
-  const importXLSX = (e) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const { next, report } = parseImportXLSX(reader.result, data);
-        const totalNew = report.parentsNew + report.linesNew + report.larvaeNew;
-        const totalUpd = report.parentsUpd + report.linesUpd + report.larvaeUpd;
-        if (totalNew + totalUpd === 0) {
-          say(report.skipped > 0 ? "라인을 못 찾아 건너뛴 유충만 있어요" : "⚠️ 양식에서 데이터를 찾지 못했어요");
-          return;
-        }
-        persist(next);
-        const parts = [];
-        if (totalNew) parts.push(`신규 ${totalNew}`);
-        if (totalUpd) parts.push(`갱신 ${totalUpd}`);
-        say(`✓ ${parts.join(" · ")}${report.skipped ? ` · ${report.skipped} 건너뜀` : ""}`);
-        setSettingsOpen(false);
-      } catch (err) { say("⚠️ 엑셀을 읽지 못했어요 — 양식 파일이 맞는지 확인해주세요"); }
-    };
-    reader.readAsArrayBuffer(file); e.target.value = "";
   };
 
   /* ── 라인 통계 ── */
@@ -1362,24 +761,22 @@ function App() {
         <>
           <div className="topbar">
             <div>
-              <div className="brand">Beetle<span style={{ fontStyle: "italic" }}>Log</span></div>
-              <div className="brand-sub">라인 {data.lines.length} · 유충 {data.individuals.length} · 성충 {data.parents.length}</div>
+              <div className="brand">Stag Beetle <span style={{ fontStyle: "italic" }}>log</span></div>
+              <div className="brand-sub">라인 {data.lines.length} · 유충 {data.individuals.length} · 종충 {data.parents.length}</div>
             </div>
-            <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="설정">⚙️</button>
+            <button className="btn ghost sm" onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>⬇ 엑셀</button>
           </div>
 
           <div className="tabs">
-            <button className={"tab-b" + (tab === "lines" ? " on" : "")} onClick={() => setTab("lines")}>라인 {data.lines.length}</button>
-            <button className={"tab-b" + (tab === "parents" ? " on" : "")} onClick={() => { setTab("parents"); setSpeciesFolder(null); }}>성충 {data.parents.length}</button>
-            <button className={"tab-b" + (tab === "calendar" ? " on" : "")} onClick={() => setTab("calendar")}>캘린더</button>
+            <button className={"tab-b" + (tab === "lines" ? " on" : "")} onClick={() => setTab("lines")}><span className="tab-en">LINE</span><span className="tab-ko">라인 {data.lines.length}</span></button>
+            <button className={"tab-b" + (tab === "parents" ? " on" : "")} onClick={() => setTab("parents")}><span className="tab-en">PARENT</span><span className="tab-ko">종충 {data.parents.length}</span></button>
+            <button className={"tab-b" + (tab === "calendar" ? " on" : "")} onClick={() => setTab("calendar")}><span className="tab-en">CALENDAR</span><span className="tab-ko">캘린더</span></button>
           </div>
 
           {tab === "calendar" && (
             <CalendarView data={data}
               onOpenLine={(id) => setView({ name: "lineDetail", id })}
-              onOpenLarva={(id) => setView({ name: "detail", id })}
-              onAddEvent={(ev) => { persist({ ...data, customEvents: [...(data.customEvents || []), { ...ev, id: uid() }] }); say("✓ 일정 추가됨"); }}
-              onDeleteEvent={(id) => { persist({ ...data, customEvents: (data.customEvents || []).filter((c) => c.id !== id) }); say("일정 삭제됨"); }} />
+              onOpenLarva={(id) => setView({ name: "detail", id })} />
           )}
 
           {tab === "lines" && <>
@@ -1400,52 +797,19 @@ function App() {
               );
             })()}
 
-            {/* 직접 추가한 일정 중 오늘~3일 내 임박 알림 (기록일 + 알림일 모두) */}
-            {(() => {
-              const items = [];
-              (data.customEvents || []).forEach((c) => {
-                const dd = dday(c.date);
-                if (dd >= 0 && dd <= 3) items.push({ id: c.id + "_d", title: c.title, dd });
-                if (c.remindDate) {
-                  const rd = dday(c.remindDate);
-                  if (rd >= 0 && rd <= 3) items.push({ id: c.id + "_r", title: c.remindTitle || `${c.title} 알림`, dd: rd });
-                }
-              });
-              items.sort((a, b) => a.dd - b.dd);
-              if (items.length === 0) return null;
-              return items.map((it) => (
-                <div key={it.id} className="alert custom" onClick={() => setTab("calendar")}>
-                  <span className="alert-dot" style={{ background: "#C2705F" }} />
-                  <b>{it.title}</b>
-                  <span className="alert-go">{it.dd === 0 ? "오늘" : `D-${it.dd}`} ›</span>
-                </div>
-              ));
-            })()}
-
             {data.lines.length === 0 && (
               <div className="empty">
                 <div className="empty-icon">🪲</div>
                 <div className="empty-t">첫 라인을 만들어보세요</div>
-                <div className="empty-d">라인 = 부♂ × 모♀ 조합 단위예요.<br />성충 탭에서 부모를 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
+                <div className="empty-d">라인 = 부♂ × 모♀ 조합 단위예요.<br />종충 탭에서 부모를 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
               </div>
             )}
-            {data.lines.length > 0 && (
-              <div className="view-toggle">
-                <button className={"vt-btn" + (lineView === "card" ? " on" : "")} onClick={() => setLineView("card")}>카드</button>
-                <button className={"vt-btn" + (lineView === "table" ? " on" : "")} onClick={() => setLineView("table")}>라인표</button>
-              </div>
-            )}
-
-            {lineView === "card" && [...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
+            {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
               const kids = larvaeOf(L.id);
               const cnt = STATUSES.map((s) => [s, kids.filter((i) => i.status === s).length]).filter(([, n]) => n > 0);
               const dd = lineDday(L.id);
-              const avgOf = (sexKey) => {
-                const ws = kids.filter((i) => sexKey === "수" ? i.sex?.includes("수") : sexKey === "암" ? i.sex?.includes("암") : !i.sex?.includes("수") && !i.sex?.includes("암"))
-                  .map((i) => num(latestRec(i)?.weight)).filter(Boolean);
-                return ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null;
-              };
-              const avgM = avgOf("수"), avgF = avgOf("암"), avgU = avgOf("미");
+              const ws = kids.map((i) => num(latestRec(i)?.weight)).filter(Boolean);
+              const avg = ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null;
               return (
                 <div key={L.id} className="card" onClick={() => setView({ name: "lineDetail", id: L.id })}>
                   <div className="card-l">
@@ -1455,15 +819,8 @@ function App() {
                     </div>
                     <div className="card-sub">{[L.species, pairLabel(L), L.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
                     <div className="card-val mono" style={{ fontSize: 17 }}>
-                      {kids.length ? <>{kids.length}<small>마리</small></> : <span className="dim">유충 없음</span>}
+                      {kids.length ? <>{kids.length}<small>마리</small>{avg && <em> 평균 {n1(avg)}g</em>}</> : <span className="dim">유충 없음</span>}
                     </div>
-                    {(avgM || avgF || avgU) && (
-                      <div className="avg-row">
-                        {avgM && <span className="avg-m">♂ 평균 {n1(avgM)}g</span>}
-                        {avgF && <span className="avg-f">♀ 평균 {n1(avgF)}g</span>}
-                        {avgU && <span className="avg-u">미구분 {n1(avgU)}g</span>}
-                      </div>
-                    )}
                     {cnt.length > 0 && (
                       <div className="lstat">
                         {cnt.map(([s, n]) => <span key={s} style={{ color: STATUS_COLOR[s] }}>{s} {n}</span>)}
@@ -1473,130 +830,34 @@ function App() {
                 </div>
               );
             })}
-
-            {lineView === "table" && (
-              <div className="ltable">
-                {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
-                  const fa = parentById[L.fatherId], mo = parentById[L.motherId];
-                  const kids = larvaeOf(L.id);
-                  return (
-                    <div key={L.id} className="lt-row" onClick={() => setView({ name: "lineDetail", id: L.id })}>
-                      <div className="lt-head">
-                        <span className="tag mono">{L.code}</span>
-                        <span className="lt-sp">{L.species || ""}</span>
-                        <span className="lt-cnt">{kids.length}마리</span>
-                      </div>
-                      <div className="lt-pair">
-                        <div className="lt-parent male">
-                          <div className="lt-pl">♂ 부</div>
-                          {fa ? (
-                            <>
-                              {fa.photo && <img src={fa.photo} alt="" className="lt-photo" />}
-                              <div className="lt-pcode mono">{fa.code}</div>
-                              <div className="lt-pspec">{[num(fa.totalLength) ? n1(num(fa.totalLength)) + "mm" : null, fa.line].filter(Boolean).join(" · ")}</div>
-                            </>
-                          ) : <div className="lt-none">미지정</div>}
-                        </div>
-                        <div className="lt-x">×</div>
-                        <div className="lt-parent female">
-                          <div className="lt-pl">♀ 모</div>
-                          {mo ? (
-                            <>
-                              {mo.photo && <img src={mo.photo} alt="" className="lt-photo" />}
-                              <div className="lt-pcode mono">{mo.code}</div>
-                              <div className="lt-pspec">{[num(mo.totalLength) ? n1(num(mo.totalLength)) + "mm" : null, mo.line].filter(Boolean).join(" · ")}</div>
-                            </>
-                          ) : <div className="lt-none">미지정</div>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </>}
 
           {tab === "parents" && <>
             {data.parents.length === 0 && (
               <div className="empty">
                 <div className="empty-icon">🪲</div>
-                <div className="empty-t">성충을 등록해보세요</div>
+                <div className="empty-t">종충을 등록해보세요</div>
                 <div className="empty-d">부모 개체를 먼저 등록해두면<br />라인 생성 시 혈통·산지가 자동으로 채워져요.</div>
               </div>
             )}
-            {data.parents.length > 0 && (() => {
-              /* 종별 그룹핑: 종 미입력은 '종 미지정'으로 */
-              const groups = {};
-              data.parents.forEach((p) => {
-                const key = (p.species || "").trim() || "종 미지정";
-                (groups[key] = groups[key] || []).push(p);
-              });
-              const groupNames = Object.keys(groups).sort((a, b) => {
-                if (a === "종 미지정") return 1;
-                if (b === "종 미지정") return -1;
-                return a.localeCompare(b, "ko");
-              });
-
-              /* 종을 선택하지 않았으면 → 종 폴더 목록 */
-              if (!speciesFolder || !groups[speciesFolder]) {
-                return (
-                  <div className="sp-grid">
-                    {groupNames.map((gname) => {
-                      const list = groups[gname];
-                      const males = list.filter((p) => p.sex.includes("수")).length;
-                      const females = list.filter((p) => p.sex.includes("암")).length;
-                      const alive = list.filter((p) => p.status !== "사망").length;
-                      return (
-                        <div key={gname} className="sp-card" onClick={() => setSpeciesFolder(gname)}>
-                          <div className="sp-name serif">{gname}</div>
-                          <div className="sp-meta">{list.length}마리 · ♂{males} ♀{females}</div>
-                          <div className="sp-go">보기 ›</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              }
-
-              /* 종을 선택했으면 → 그 종의 성충 리스트 */
-              const list = groups[speciesFolder].sort((a, b) => {
-                const ad = a.status === "사망" ? 1 : 0, bd = b.status === "사망" ? 1 : 0;
-                if (ad !== bd) return ad - bd;
-                return a.code.localeCompare(b.code, "ko", { numeric: true });
-              });
-              const males = list.filter((p) => p.sex.includes("수")).length;
-              const females = list.filter((p) => p.sex.includes("암")).length;
+            {[...data.parents].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((p) => {
+              const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id).length;
               return (
-                <>
-                  <div className="sp-back" onClick={() => setSpeciesFolder(null)}>‹ 종 목록</div>
-                  <div className="grp-head">
-                    <span className="grp-name serif">{speciesFolder}</span>
-                    <span className="grp-cnt">{list.length}마리 · ♂{males} ♀{females}</span>
+                <div key={p.id} className="card" onClick={() => setView({ name: "parentDetail", id: p.id })}>
+                  <div className="card-l">
+                    <div className="tagrow">
+                      <span className="tag mono">{p.code}</span>
+                      <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{p.sex}</span>
+                    </div>
+                    <div className="card-sub">{[p.species, p.line, p.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
+                    <div className="card-val mono">
+                      {num(p.totalLength) ? <>{n1(num(p.totalLength))}<small>mm</small></> : <span className="dim">사이즈 미입력</span>}
+                      {myLines > 0 && <em> 라인 {myLines}</em>}
+                    </div>
                   </div>
-                  {list.map((p) => {
-                    const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id).length;
-                    const dead = p.status === "사망";
-                    return (
-                      <div key={p.id} className={"card" + (dead ? " dead" : "")} onClick={() => setView({ name: "parentDetail", id: p.id })}>
-                        <div className="card-l">
-                          <div className="tagrow">
-                            <span className={"tag mono" + (dead ? " strike" : "")}>{p.code}</span>
-                            <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{p.sex}</span>
-                            {dead && <span className="chip" style={{ color: "#9A9088", borderColor: "#9A908855" }}>사망</span>}
-                          </div>
-                          <div className="card-sub">{[p.line, p.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
-                          <div className="card-val mono">
-                            {num(p.totalLength) ? <>{n1(num(p.totalLength))}<small>mm</small></> : <span className="dim">사이즈 미입력</span>}
-                            {myLines > 0 && <em> 라인 {myLines}</em>}
-                          </div>
-                        </div>
-                        {p.photo && <img src={p.photo} alt="" className="card-thumb" />}
-                      </div>
-                    );
-                  })}
-                </>
+                </div>
               );
-            })()}
+            })}
           </>}
 
           <div className="footer">
@@ -1617,28 +878,9 @@ function App() {
       {/* ───── 라인 상세 ───── */}
       {view.name === "lineDetail" && curL && (() => {
         const L = curL;
-        const kids = larvaeOf(L.id).sort((a, b) => {
-          const ad = a.status === "사망" ? 1 : 0, bd = b.status === "사망" ? 1 : 0;
-          if (ad !== bd) return ad - bd;
-          return a.code.localeCompare(b.code, "ko", { numeric: true });
-        });
+        const kids = larvaeOf(L.id).sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true }));
         const shown = kids.filter((i) => filter === "전체" || i.status === filter);
         const counts = STATUSES.reduce((a, s) => ({ ...a, [s]: kids.filter((i) => i.status === s).length }), {});
-        /* 성별별 기대주(👑): 살아있는 개체 중 우화한 게 있으면 총장 최대, 없으면 유충무게 최대 */
-        const topOf = (sexKey) => {
-          const pool = kids.filter((i) => i.status !== "사망" && i.sex && i.sex.includes(sexKey));
-          if (pool.length === 0) return null;
-          const eclosed = pool.filter((i) => num(i.eclosion?.totalLength));
-          if (eclosed.length) {
-            return eclosed.reduce((best, i) => (num(i.eclosion.totalLength) > num(best.eclosion.totalLength) ? i : best)).id;
-          }
-          const weighed = pool.filter((i) => maxWeight(i));
-          if (weighed.length) {
-            return weighed.reduce((best, i) => (maxWeight(i) > maxWeight(best) ? i : best)).id;
-          }
-          return null;
-        };
-        const crownM = topOf("수"), crownF = topOf("암");
         return (
           <>
             <div className="topbar">
@@ -1671,9 +913,6 @@ function App() {
 
             <div className="acts">
               <button className="btn primary" onClick={() => setModal({ type: "larvaAdd", lineId: L.id })}>+ 유충 추가</button>
-              {kids.some((i) => i.status === "유충") && (
-                <button className="btn" onClick={() => setModal({ type: "bulkBottle", lineId: L.id })}>+ 일괄 병갈이</button>
-              )}
             </div>
 
             {kids.length > 0 && (
@@ -1695,14 +934,11 @@ function App() {
               const lr = latestRec(ind), mw = maxWeight(ind), dl = lastDelta(ind);
               const dd = ind.status === "유충" && lr?.nextDate ? dday(lr.nextDate) : null;
               const red = reduction(ind);
-              const dead = ind.status === "사망";
-              const isCrown = ind.id === crownM || ind.id === crownF;
               return (
-                <div key={ind.id} className={"card" + (dead ? " dead" : "") + (isCrown ? " crown" : "")} onClick={() => setView({ name: "detail", id: ind.id })}>
+                <div key={ind.id} className="card" onClick={() => setView({ name: "detail", id: ind.id })}>
                   <div className="card-l">
                     <div className="tagrow">
-                      {isCrown && <span className="crown-ic" title="기대주">👑</span>}
-                      <span className={"tag mono" + (dead ? " strike" : "")}>{ind.code}</span>
+                      <span className="tag mono">{ind.code}</span>
                       <span className="chip" style={{ color: STATUS_COLOR[ind.status], borderColor: STATUS_COLOR[ind.status] + "55" }}>{ind.status}</span>
                       {dd != null && <span className={"chip dd" + (dd <= 0 ? " over" : dd <= 3 ? " soon" : "")}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
                     </div>
@@ -1739,7 +975,7 @@ function App() {
         );
       })()}
 
-      {/* ───── 성충 상세 (분양카드) ───── */}
+      {/* ───── 종충 상세 (분양카드) ───── */}
       {view.name === "parentDetail" && curP && (() => {
         const p = curP;
         const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id);
@@ -1752,21 +988,9 @@ function App() {
             </div>
 
             <div className="bcard">
-              {p.photo && <img src={p.photo} alt="" className="bc-photo" />}
               <div className="bc-head serif">BREEDING CARD</div>
               <div className="bc-species serif">{p.species || "종 미입력"}</div>
               <div className="bc-sub">{[p.line, p.origin, p.sex].filter(Boolean).join(" · ")}</div>
-              {p.status === "사망" && <div className="bc-dead">사망 · 계보 보존</div>}
-              {p.bornLineId && lineById[p.bornLineId] && (() => {
-                const bl = lineById[p.bornLineId];
-                const gf = parentById[bl.fatherId], gm = parentById[bl.motherId];
-                return (
-                  <div className="bc-lineage">
-                    출신 <b>{bl.code}</b>
-                    {(gf || gm) && <> · {gf ? gf.code : "?"}♂ × {gm ? gm.code : "?"}♀</>}
-                  </div>
-                );
-              })()}
               <div className="bc-line" />
               <div className="bc-grid">
                 <div><div className="s-l">총장</div><div className="s-v mono">{num(p.totalLength) ? n1(num(p.totalLength)) + "mm" : "—"}</div></div>
@@ -1774,47 +998,15 @@ function App() {
                 <div><div className="s-l">흉폭</div><div className="s-v mono">{num(p.thoraxWidth) ? n1(num(p.thoraxWidth)) + "mm" : "—"}</div></div>
                 <div><div className="s-l">우화일</div><div className="s-v mono">{p.eclosionDate ? shortDate(p.eclosionDate) : "—"}</div></div>
               </div>
-              {(num(p.jawWidth) || num(p.jawThick)) && (
-                <div className="bc-grid" style={{ marginTop: 8 }}>
-                  <div><div className="s-l">악폭</div><div className="s-v mono">{num(p.jawWidth) ? n1(num(p.jawWidth)) + "mm" : "—"}</div></div>
-                  <div><div className="s-l">악후</div><div className="s-v mono">{num(p.jawThick) ? n1(num(p.jawThick)) + "mm" : "—"}</div></div>
-                  <div><div className="s-l">턱 비율</div><div className="s-v mono">{num(p.totalLength) && num(p.jawLength) ? n1(num(p.jawLength) / num(p.totalLength) * 100) + "%" : "—"}</div></div>
-                  <div />
-                </div>
-              )}
               {(p.source || p.memo) && <div className="bc-line" />}
               {p.source && <div className="bc-foot">입수처 · {p.source}</div>}
               {p.memo && <div className="bc-foot">{p.memo}</div>}
               <div className="bc-qr">QR 인증카드는 웹사이트 오픈 시 제공 예정</div>
             </div>
 
-            {/* 사육 이력 표 (라벨지 스타일) */}
-            <div className="p-t lt" style={{ display: "flex", alignItems: "center" }}>
-              사육 이력 {(p.growthRecords || []).length ? `· ${p.growthRecords.length}건` : ""}
-              <button className="btn tiny" style={{ marginLeft: "auto" }} onClick={() => setModal({ type: "growthRow", parentId: p.id })}>+ 추가</button>
-            </div>
-            {(p.growthRecords || []).length === 0 ? (
-              <div className="empty sm"><div className="empty-d">사육 이력이 없어요.<br />+ 추가로 병갈이/측정 기록을 직접 넣거나,<br />나중에 유충이 우화하면 자동으로 채워져요.</div></div>
-            ) : (
-              <div className="dtable">
-                <div className="dt-head">
-                  <span className="dt-date">날짜</span>
-                  <span className="dt-feed">먹이/병</span>
-                  <span className="dt-w">무게</span>
-                </div>
-                {[...p.growthRecords].sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => (
-                  <div key={r.id} className="dt-row" onClick={() => setModal({ type: "growthRow", parentId: p.id, editId: r.id, initial: r })}>
-                    <span className="dt-date mono">{shortDate(r.date)}{r.instar && <em className="dt-ins">{r.instar}</em>}</span>
-                    <span className="dt-feed">{[r.feedBrand || r.feedType, ccLabel(r.bottleSize)].filter(Boolean).join(" · ")}</span>
-                    <span className="dt-w mono">{num(r.weight) ? n1(num(r.weight)) + "g" : "—"}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="p-t lt">이 성충의 라인 {myLines.length ? `· ${myLines.length}개` : ""}</div>
+            <div className="p-t lt">이 종충의 라인 {myLines.length ? `· ${myLines.length}개` : ""}</div>
             {myLines.length === 0 && (
-              <div className="empty sm"><div className="empty-d">이 성충으로 만든 라인이 아직 없어요.<br />라인 탭에서 + 버튼으로 조합을 만들어보세요.</div></div>
+              <div className="empty sm"><div className="empty-d">이 종충으로 만든 라인이 아직 없어요.<br />라인 탭에서 + 버튼으로 조합을 만들어보세요.</div></div>
             )}
             {myLines.map((L) => {
               const kids = larvaeOf(L.id);
@@ -1829,22 +1021,9 @@ function App() {
               );
             })}
 
-            <div style={{ marginTop: 18 }}>
-              {p.status === "사망" ? (
-                <button className="btn ghost sm" style={{ width: "100%", marginBottom: 10 }}
-                  onClick={() => { persist({ ...data, parents: data.parents.map((x) => x.id === p.id ? { ...x, status: "생존" } : x) }); say("사망 처리를 해제했어요"); }}>
-                  ↩ 사망 처리 해제
-                </button>
-              ) : (
-                <div style={{ marginBottom: 10 }}>
-                  <ConfirmBtn className="btn sm" label="✕ 사망 처리 (정보는 계보에 보존)"
-                    onConfirm={() => { persist({ ...data, parents: data.parents.map((x) => x.id === p.id ? { ...x, status: "사망" } : x) }); say("사망 처리됐어요 — 계보 정보는 유지돼요"); }} />
-                </div>
-              )}
-              <div style={{ textAlign: "center" }}>
-                <ConfirmBtn className="btn danger sm" label="이 성충 완전 삭제"
-                  onConfirm={() => { persist({ ...data, parents: data.parents.filter((x) => x.id !== p.id) }); setView({ name: "list" }); say("성충이 삭제됐어요"); }} />
-              </div>
+            <div style={{ marginTop: 18, textAlign: "center" }}>
+              <ConfirmBtn className="btn danger sm" label="이 종충 삭제"
+                onConfirm={() => { persist({ ...data, parents: data.parents.filter((x) => x.id !== p.id) }); setView({ name: "list" }); say("종충이 삭제됐어요"); }} />
             </div>
             <div style={{ height: 40 }} />
           </>
@@ -1854,7 +1033,7 @@ function App() {
       {/* ───── 유충 상세 ───── */}
       {view.name === "detail" && cur && (() => {
         const L = lineById[cur.lineId] || {};
-        const recs = sortedRecs(cur);
+        const recs = sortedRecs(cur).reverse();
         const mw = maxWeight(cur), red = reduction(cur), loss = lossRate(cur), ld = larvaDays(cur, L);
         return (
           <>
@@ -1888,36 +1067,10 @@ function App() {
             </div>
 
             {cur.eclosion && (
-              cur.promotedToParentId && data.parents.find((p) => p.id === cur.promotedToParentId) ? (
-                <button className="btn sm" style={{ width: "100%", marginBottom: 16, borderColor: "#A8884F66", color: "#937640" }}
-                  onClick={() => setView({ name: "parentDetail", id: cur.promotedToParentId })}>
-                  🪲 등록된 성충 보기 ›
-                </button>
-              ) : (
-                <button className="btn primary sm" style={{ width: "100%", marginBottom: 16 }}
-                  onClick={() => promoteToParent(cur)}>
-                  ⬆ 성충으로 등록 (사육 이력 자동 이관)
-                </button>
-              )
-            )}
-
-            {cur.status === "사망" ? (
-              <button className="btn ghost sm" style={{ width: "100%", marginBottom: 16 }}
-                onClick={() => { updateInd(cur.id, { status: "유충" }); say("사망 처리를 해제했어요"); }}>
-                ↩ 사망 처리 해제 (유충으로 되돌리기)
-              </button>
-            ) : (
-              <div style={{ marginBottom: 16 }}>
-                <ConfirmBtn className="btn danger sm" label="✕ 사망 처리"
-                  onConfirm={() => { updateInd(cur.id, { status: "사망" }); say("사망 처리됐어요"); }} />
-              </div>
-            )}
-
-            {cur.eclosion && (
               <div className="panel">
                 <div className="p-t">우화 · {cur.eclosion.date}{cur.eclosion.defect && <span className="warn"> 우화부전</span>}</div>
                 <div className="meas mono">
-                  {[["총장", cur.eclosion.totalLength], ["턱", cur.eclosion.jawLength], ["악폭", cur.eclosion.jawWidth], ["악후", cur.eclosion.jawThick], ["두폭", cur.eclosion.headWidth], ["흉폭", cur.eclosion.thoraxWidth], ["배", cur.eclosion.abdomenLength]]
+                  {[["총장", cur.eclosion.totalLength], ["턱", cur.eclosion.jawLength], ["두폭", cur.eclosion.headWidth], ["흉폭", cur.eclosion.thoraxWidth], ["배", cur.eclosion.abdomenLength]]
                     .filter(([, v]) => num(v)).map(([k, v]) => <span key={k}>{k} <b>{v}</b>mm</span>)}
                 </div>
                 {cur.eclosion.memo && <div className="r-memo">{cur.eclosion.memo}</div>}
@@ -1938,27 +1091,20 @@ function App() {
             <div className="p-t lt">병갈이 기록 {recs.length ? `· ${recs.length}회` : ""}</div>
             {recs.length === 0 && <div className="empty sm"><div className="empty-d">아직 기록이 없어요. + 병갈이로 첫 기록을 남겨보세요.</div></div>}
             {recs.map((r, idx) => {
-              const prev = recs[idx - 1];
+              const prev = recs[idx + 1];
               const d = num(r.weight) && num(prev?.weight) ? num(r.weight) - num(prev.weight) : null;
-              const gap = prev ? daysBetween(prev.date, r.date) : null;
-              const isLast = idx === recs.length - 1;
               return (
                 <div key={r.id} className="rec" onClick={() => setModal({ type: "bottle", indId: cur.id, editId: r.id, initial: r })}>
                   <div className="r-top">
                     <span className="mono r-date">{r.date}</span>
                     {r.instar && <span className="r-ins">{r.instar}</span>}
-                    {gap != null && <span className="r-gap">먹은 기간 {gap}일</span>}
                     {num(r.weight) && <span className="mono r-w">{n1(num(r.weight))}g{d != null && <em className={d >= 0 ? "up" : "down"}> {d >= 0 ? "▲" : "▼"}{n1(Math.abs(d))}</em>}</span>}
                   </div>
-                  <div className="r-mid">{[r.feedType, r.feedBrand, ccLabel(r.bottleSize), num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
-                  {(r.flags || []).length > 0 && (
-                    <div className="flag-show">
-                      {r.flags.map((fl) => <span key={fl} className="flag-tag">{fl}</span>)}
-                    </div>
-                  )}
+                  <div className="r-mid">{[r.feedType, r.feedBrand, r.bottleSize, num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
                   {r.nextDate && (
                     <div className="r-next">
-                      다음 예정 <b className="mono">{r.nextDate}</b>{isLast && cur.status === "유충" && <span className="dim"> ({dday(r.nextDate) <= 0 ? `${-dday(r.nextDate)}일 지남` : `D-${dday(r.nextDate)}`})</span>}
+                      다음 예정 <b className="mono">{r.nextDate}</b>{idx === 0 && cur.status === "유충" && <span className="dim"> ({dday(r.nextDate) <= 0 ? `${-dday(r.nextDate)}일 지남` : `D-${dday(r.nextDate)}`})</span>}
+                      <button className="btn tiny" onClick={(e) => { e.stopPropagation(); calendarICS(cur, r); }}>📅 캘린더</button>
                     </div>
                   )}
                   {r.memo && <div className="r-memo">{r.memo}</div>}
@@ -1993,16 +1139,6 @@ function App() {
           existingCodes={data.parents.map((p) => p.code)}
           onSave={saveParent} onClose={() => setModal(null)} />
       )}
-      {modal?.type === "growthRow" && (
-        <div>
-          <GrowthRowForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveGrowthRow} onClose={() => setModal(null)} />
-          {modal.editId && (
-            <div className="del-float">
-              <ConfirmBtn className="btn danger sm" label="이 이력 삭제" onConfirm={deleteGrowthRow} />
-            </div>
-          )}
-        </div>
-      )}
       {modal?.type === "line" && (
         <LineForm
           initial={modal.editId ? data.lines.find((l) => l.id === modal.editId) : null}
@@ -2015,12 +1151,6 @@ function App() {
           line={lineById[modal.lineId]}
           existingCodes={larvaeOf(modal.lineId).map((i) => i.code)}
           onSave={addLarvae} onClose={() => setModal(null)} />
-      )}
-      {modal?.type === "bulkBottle" && (
-        <BulkBottleForm
-          larvae={larvaeOf(modal.lineId)}
-          brands={data.feedBrands}
-          onSave={saveBulkBottle} onClose={() => setModal(null)} />
       )}
       {modal?.type === "larvaEdit" && (
         <LarvaEditForm
@@ -2044,35 +1174,8 @@ function App() {
       {modal?.type === "pupation" && (
         <PupationForm initial={data.individuals.find((i) => i.id === modal.indId)?.pupation} onSave={savePupation} onClose={() => setModal(null)} />
       )}
-      {modal?.type === "eclosion" && (() => {
-        const ind = data.individuals.find((i) => i.id === modal.indId);
-        const species = (lineById[ind?.lineId]?.species) || "";
-        return <EclosionForm initial={ind?.eclosion} species={species} onSave={saveEclosion} onClose={() => setModal(null)} />;
-      })()}
-
-      {settingsOpen && (
-        <div className="overlay" onClick={() => setSettingsOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="mhead">
-              <button className="hbtn" onClick={() => setSettingsOpen(false)}>닫기</button>
-              <div className="mtitle">설정</div>
-              <span style={{ width: 40 }} />
-            </div>
-            <div className="mbody">
-              <div className="sect">엑셀로 한 번에 등록</div>
-              <div className="set-desc">양식을 받아 성충·라인·유충을 정리한 뒤 불러오면 한 번에 등록돼요. 같은 항목(종+관리번호, 라인명+종)은 최신 정보로 갱신하고, 새 항목은 추가해요. 유충의 병갈이 기록은 보존돼요.</div>
-              <button className="btn mt" style={{ width: "100%" }} onClick={() => { downloadTemplate(); }}>① 엑셀 양식 다운로드</button>
-              <button className="btn primary mt" style={{ width: "100%" }} onClick={() => xlsxRef.current?.click()}>② 엑셀 불러오기</button>
-              <input ref={xlsxRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={importXLSX} />
-
-              <div className="sect" style={{ marginTop: 24 }}>내보내기 / 백업</div>
-              <button className="btn mt" style={{ width: "100%" }} onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>전체 기록 엑셀로 내보내기</button>
-              <button className="btn mt" style={{ width: "100%" }} onClick={async () => { const how = await deliverFile(`사육기록_백업_${today()}.json`, JSON.stringify(data, null, 1), "application/json"); say(how === "fail" ? "⚠️ Safari에서 시도해주세요" : "백업 파일 저장됨"); }}>JSON 백업 (사진 포함)</button>
-              <button className="btn mt" style={{ width: "100%" }} onClick={() => fileRef.current?.click()}>JSON 백업 복원</button>
-              <div className="set-desc" style={{ marginTop: 12 }}>데이터는 이 기기에만 저장돼요. 가끔 백업해두면 안전해요.</div>
-            </div>
-          </div>
-        </div>
+      {modal?.type === "eclosion" && (
+        <EclosionForm initial={data.individuals.find((i) => i.id === modal.indId)?.eclosion} onSave={saveEclosion} onClose={() => setModal(null)} />
       )}
 
       {toast && <div className="toast">{toast}</div>}
