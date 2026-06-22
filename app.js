@@ -1162,8 +1162,12 @@ function App() {
               const kids = larvaeOf(L.id);
               const cnt = STATUSES.map((s) => [s, kids.filter((i) => i.status === s).length]).filter(([, n]) => n > 0);
               const dd = lineDday(L.id);
-              const ws = kids.map((i) => num(latestRec(i)?.weight)).filter(Boolean);
-              const avg = ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null;
+              const avgOf = (sexKey) => {
+                const ws = kids.filter((i) => sexKey === "수" ? i.sex?.includes("수") : sexKey === "암" ? i.sex?.includes("암") : !i.sex?.includes("수") && !i.sex?.includes("암"))
+                  .map((i) => num(latestRec(i)?.weight)).filter(Boolean);
+                return ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null;
+              };
+              const avgM = avgOf("수"), avgF = avgOf("암"), avgU = avgOf("미");
               return (
                 <div key={L.id} className="card" onClick={() => setView({ name: "lineDetail", id: L.id })}>
                   <div className="card-l">
@@ -1173,8 +1177,15 @@ function App() {
                     </div>
                     <div className="card-sub">{[L.species, pairLabel(L), L.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
                     <div className="card-val mono" style={{ fontSize: 17 }}>
-                      {kids.length ? <>{kids.length}<small>마리</small>{avg && <em> 평균 {n1(avg)}g</em>}</> : <span className="dim">유충 없음</span>}
+                      {kids.length ? <>{kids.length}<small>마리</small></> : <span className="dim">유충 없음</span>}
                     </div>
+                    {(avgM || avgF || avgU) && (
+                      <div className="avg-row">
+                        {avgM && <span className="avg-m">♂ 평균 {n1(avgM)}g</span>}
+                        {avgF && <span className="avg-f">♀ 평균 {n1(avgF)}g</span>}
+                        {avgU && <span className="avg-u">미구분 {n1(avgU)}g</span>}
+                      </div>
+                    )}
                     {cnt.length > 0 && (
                       <div className="lstat">
                         {cnt.map(([s, n]) => <span key={s} style={{ color: STATUS_COLOR[s] }}>{s} {n}</span>)}
@@ -1626,12 +1637,14 @@ function App() {
             {recs.map((r, idx) => {
               const prev = recs[idx - 1];
               const d = num(r.weight) && num(prev?.weight) ? num(r.weight) - num(prev.weight) : null;
+              const gap = prev ? daysBetween(prev.date, r.date) : null;
               const isLast = idx === recs.length - 1;
               return (
                 <div key={r.id} className="rec" onClick={() => setModal({ type: "bottle", indId: cur.id, editId: r.id, initial: r })}>
                   <div className="r-top">
                     <span className="mono r-date">{r.date}</span>
                     {r.instar && <span className="r-ins">{r.instar}</span>}
+                    {gap != null && <span className="r-gap">먹은 기간 {gap}일</span>}
                     {num(r.weight) && <span className="mono r-w">{n1(num(r.weight))}g{d != null && <em className={d >= 0 ? "up" : "down"}> {d >= 0 ? "▲" : "▼"}{n1(Math.abs(d))}</em>}</span>}
                   </div>
                   <div className="r-mid">{[r.feedType, r.feedBrand, ccLabel(r.bottleSize), num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
