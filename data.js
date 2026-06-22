@@ -8,6 +8,7 @@ window.APP_DATA = {
   INSTARS: ["1령", "2령", "3령 초기", "3령 중기", "3령 후기"],
   FEED_TYPES: ["균사", "발효톱밥", "기타"],
   BOTTLES: ["500", "800", "1400", "2000", "3000"],
+  FLAGS: ["원더링", "조기용화", "거식", "전용"],
   STATUS_COLOR: { "유충": "#6B8E4E", "용화": "#A8884F", "우화": "#9A6A3A", "사망": "#9A9088", "분양": "#6E8494" },
   get STATUSES() { return Object.keys(this.STATUS_COLOR); },
 };
