@@ -222,11 +222,43 @@ function Modal({ title, onClose, onSave, children }) {
   );
 }
 
+/* 단순 목록 펼침 선택 (종 등): 탭하면 목록 펼침, 맨 아래 직접 입력 */
+function SimplePicker({ options, value, onChange, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const [manual, setManual] = useState(false);
+  if (manual) {
+    return (
+      <div>
+        <input className="in" value={value} autoFocus onChange={(e) => onChange(e.target.value)} placeholder={placeholder || "직접 입력"} />
+        <button className="btn tiny mt" onClick={() => { setManual(false); setOpen(true); }}>← 목록에서 선택</button>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <button className="picker-btn" onClick={() => setOpen(!open)}>
+        <span className={value ? "" : "dim"}>{value || placeholder || "탭하여 선택"}</span>
+        <span className="picker-arrow">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className="picker-panel">
+          <div className="picker-items" style={{ padding: "11px 12px" }}>
+            {options.map((opt) => (
+              <button key={opt} className={"picker-item" + (value === opt ? " on" : "")} onClick={() => { onChange(opt); setOpen(false); }}>{opt}</button>
+            ))}
+          </div>
+          <button className="picker-manual" onClick={() => { setManual(true); setOpen(false); }}>✏️ 직접 입력</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ════════════════════ 성충 등록/수정 폼 ════════════════════ */
 function ParentForm({ initial, existingCodes, onSave, onClose }) {
   const [f, setF] = useState(initial || {
     code: "", sex: "수컷 ♂", species: "", line: "", origin: "",
-    totalLength: "", jawLength: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
+    totalLength: "", jawLength: "", jawWidth: "", jawThick: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -239,6 +271,9 @@ function ParentForm({ initial, existingCodes, onSave, onClose }) {
     e.target.value = "";
   };
   const isEdit = !!initial;
+  const isGeuktae = (f.species || "").includes("극태");
+  const isDanchi = (f.species || "").includes("단치");
+  const [showJaw, setShowJaw] = useState(!!(initial && (initial.jawWidth || initial.jawThick)));
   const save = () => {
     if (!f.code.trim()) return alert("관리번호는 필수입니다");
     if (!isEdit && existingCodes.includes(f.code.trim())) return alert("이미 사용 중인 관리번호입니다");
@@ -267,16 +302,32 @@ function ParentForm({ initial, existingCodes, onSave, onClose }) {
           </select>
         </F>
       </div>
-      <F label="종"><input className="in" list="dl-species" value={f.species} onChange={(e) => set("species", e.target.value)} placeholder="왕사슴벌레" /></F>
+      <F label="종"><SimplePicker options={SPECIES} value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
       <div className="row">
         <F label="혈통 / 계보" half><input className="in" value={f.line} onChange={(e) => set("line", e.target.value)} /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
       <div className="sect">측정값</div>
       <div className="row">
-        <F label="총장 mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
+        <F label="총장(체장) mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
         <F label="턱 길이 mm" half><input className="in mono" inputMode="decimal" value={f.jawLength} onChange={(e) => set("jawLength", e.target.value)} /></F>
       </div>
+      {num(f.totalLength) && num(f.jawLength) && (
+        <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>
+          턱 비율 <b>{n1(num(f.jawLength) / num(f.totalLength) * 100)}%</b> (턱÷체장){isDanchi ? " · 단치 평가" : ""}
+        </div>
+      )}
+      {(isGeuktae || showJaw) ? (
+        <>
+          {isGeuktae && <div className="hint" style={{ marginTop: -4, marginBottom: 8, color: "#937640" }}>극태 종 — 악폭·악후를 기록하세요</div>}
+          <div className="row">
+            <F label="악폭 mm" half><input className="in mono" inputMode="decimal" value={f.jawWidth} onChange={(e) => set("jawWidth", e.target.value)} /></F>
+            <F label="악후 mm" half><input className="in mono" inputMode="decimal" value={f.jawThick} onChange={(e) => set("jawThick", e.target.value)} /></F>
+          </div>
+        </>
+      ) : (
+        <button className="btn tiny" style={{ marginBottom: 13 }} onClick={() => setShowJaw(true)}>+ 악폭·악후 입력</button>
+      )}
       <F label="흉폭 mm"><input className="in mono" inputMode="decimal" value={f.thoraxWidth} onChange={(e) => set("thoraxWidth", e.target.value)} /></F>
       <div className="sect">기타</div>
       <div className="row">
@@ -370,7 +421,7 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose }) {
         </F>
       </div>
       <div className="row">
-        <F label="종" half><input className="in" list="dl-species" value={f.species} onChange={(e) => set("species", e.target.value)} /></F>
+        <F label="종" half><SimplePicker options={SPECIES} value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
       <div className="sect">날짜</div>
@@ -636,20 +687,37 @@ function PupationForm({ initial, onSave, onClose }) {
 }
 
 /* ════════════════════ 우화 폼 ════════════════════ */
-function EclosionForm({ initial, onSave, onClose }) {
+function EclosionForm({ initial, species, onSave, onClose }) {
   const [f, setF] = useState(initial || { date: today(), totalLength: "", jawLength: "", jawWidth: "", jawThick: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "" });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const sp = species || "";
+  const isGeuktae = sp.includes("극태");
+  const isDanchi = sp.includes("단치");
+  /* 극태면 악폭·악후 자동 표시. 아니어도 사용자가 펼칠 수 있게 */
+  const [showJaw, setShowJaw] = useState(isGeuktae || !!(initial && (initial.jawWidth || initial.jawThick)));
   return (
     <Modal title="우화 기록" onClose={onClose} onSave={() => onSave(f)}>
       <F label="우화일"><input type="date" className="in" value={f.date} onChange={(e) => set("date", e.target.value)} /></F>
       <div className="row">
-        <F label="총장 mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
+        <F label="총장(체장) mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
         <F label="턱 길이 mm" half><input className="in mono" inputMode="decimal" value={f.jawLength} onChange={(e) => set("jawLength", e.target.value)} /></F>
       </div>
-      <div className="row">
-        <F label="악폭 mm" half><input className="in mono" inputMode="decimal" value={f.jawWidth} onChange={(e) => set("jawWidth", e.target.value)} /></F>
-        <F label="악후 mm" half><input className="in mono" inputMode="decimal" value={f.jawThick} onChange={(e) => set("jawThick", e.target.value)} /></F>
-      </div>
+      {num(f.totalLength) && num(f.jawLength) && (
+        <div className="hint" style={{ marginTop: -4 }}>
+          턱 비율 <b>{n1(num(f.jawLength) / num(f.totalLength) * 100)}%</b> (턱÷체장){isDanchi ? " · 단치 평가" : ""}
+        </div>
+      )}
+      {showJaw ? (
+        <>
+          {isGeuktae && <div className="hint" style={{ marginTop: 2, marginBottom: 8, color: "#937640" }}>극태 종 — 악폭·악후를 기록하세요</div>}
+          <div className="row">
+            <F label="악폭 mm" half><input className="in mono" inputMode="decimal" value={f.jawWidth} onChange={(e) => set("jawWidth", e.target.value)} /></F>
+            <F label="악후 mm" half><input className="in mono" inputMode="decimal" value={f.jawThick} onChange={(e) => set("jawThick", e.target.value)} /></F>
+          </div>
+        </>
+      ) : (
+        <button className="btn tiny" style={{ marginBottom: 13 }} onClick={() => setShowJaw(true)}>+ 악폭·악후 입력</button>
+      )}
       <div className="row">
         <F label="두폭 mm" half><input className="in mono" inputMode="decimal" value={f.headWidth} onChange={(e) => set("headWidth", e.target.value)} /></F>
         <F label="흉폭 mm" half><input className="in mono" inputMode="decimal" value={f.thoraxWidth} onChange={(e) => set("thoraxWidth", e.target.value)} /></F>
@@ -701,7 +769,7 @@ function exportXLSX(data) {
   });
   const sheetP = data.parents.map((p) => ({
     "관리번호": p.code, "성별": p.sex, "종": p.species, "혈통": p.line, "산지": p.origin,
-    "총장(mm)": p.totalLength, "턱 길이(mm)": p.jawLength, "흉폭(mm)": p.thoraxWidth,
+    "총장(mm)": p.totalLength, "턱 길이(mm)": p.jawLength, "악폭(mm)": p.jawWidth || "", "악후(mm)": p.jawThick || "", "흉폭(mm)": p.thoraxWidth,
     "우화일": p.eclosionDate, "입수처": p.source, "메모": p.memo,
   }));
   const wb = XLSX.utils.book_new();
@@ -1222,7 +1290,7 @@ function App() {
       id: uid(), code,
       sex: ind.sex && ind.sex !== "미구분" ? ind.sex : "수컷 ♂",
       species: L.species || "", line: L.code || "", origin: L.origin || "",
-      totalLength: ec.totalLength || "", jawLength: ec.jawLength || "", thoraxWidth: ec.thoraxWidth || "",
+      totalLength: ec.totalLength || "", jawLength: ec.jawLength || "", jawWidth: ec.jawWidth || "", jawThick: ec.jawThick || "", thoraxWidth: ec.thoraxWidth || "",
       eclosionDate: ec.date || "", source: "자가", memo: ind.memo || "",
       status: "생존", photo: "", growthRecords,
       bornLineId: ind.lineId || "", bornLarvaId: ind.id,
@@ -1689,6 +1757,14 @@ function App() {
                 <div><div className="s-l">흉폭</div><div className="s-v mono">{num(p.thoraxWidth) ? n1(num(p.thoraxWidth)) + "mm" : "—"}</div></div>
                 <div><div className="s-l">우화일</div><div className="s-v mono">{p.eclosionDate ? shortDate(p.eclosionDate) : "—"}</div></div>
               </div>
+              {(num(p.jawWidth) || num(p.jawThick)) && (
+                <div className="bc-grid" style={{ marginTop: 8 }}>
+                  <div><div className="s-l">악폭</div><div className="s-v mono">{num(p.jawWidth) ? n1(num(p.jawWidth)) + "mm" : "—"}</div></div>
+                  <div><div className="s-l">악후</div><div className="s-v mono">{num(p.jawThick) ? n1(num(p.jawThick)) + "mm" : "—"}</div></div>
+                  <div><div className="s-l">턱 비율</div><div className="s-v mono">{num(p.totalLength) && num(p.jawLength) ? n1(num(p.jawLength) / num(p.totalLength) * 100) + "%" : "—"}</div></div>
+                  <div />
+                </div>
+              )}
               {(p.source || p.memo) && <div className="bc-line" />}
               {p.source && <div className="bc-foot">입수처 · {p.source}</div>}
               {p.memo && <div className="bc-foot">{p.memo}</div>}
@@ -1951,9 +2027,11 @@ function App() {
       {modal?.type === "pupation" && (
         <PupationForm initial={data.individuals.find((i) => i.id === modal.indId)?.pupation} onSave={savePupation} onClose={() => setModal(null)} />
       )}
-      {modal?.type === "eclosion" && (
-        <EclosionForm initial={data.individuals.find((i) => i.id === modal.indId)?.eclosion} onSave={saveEclosion} onClose={() => setModal(null)} />
-      )}
+      {modal?.type === "eclosion" && (() => {
+        const ind = data.individuals.find((i) => i.id === modal.indId);
+        const species = (lineById[ind?.lineId]?.species) || "";
+        return <EclosionForm initial={ind?.eclosion} species={species} onSave={saveEclosion} onClose={() => setModal(null)} />;
+      })()}
 
       {settingsOpen && (
         <div className="overlay" onClick={() => setSettingsOpen(false)}>
