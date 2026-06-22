@@ -768,9 +768,9 @@ function App() {
           </div>
 
           <div className="tabs">
-            <button className={"tab-b" + (tab === "lines" ? " on" : "")} onClick={() => setTab("lines")}><span className="tab-en">LINE</span><span className="tab-ko">라인 {data.lines.length}</span></button>
-            <button className={"tab-b" + (tab === "parents" ? " on" : "")} onClick={() => setTab("parents")}><span className="tab-en">PARENT</span><span className="tab-ko">종충 {data.parents.length}</span></button>
-            <button className={"tab-b" + (tab === "calendar" ? " on" : "")} onClick={() => setTab("calendar")}><span className="tab-en">CALENDAR</span><span className="tab-ko">캘린더</span></button>
+            <button className={"tab-b" + (tab === "lines" ? " on" : "")} onClick={() => setTab("lines")}>라인 {data.lines.length}</button>
+            <button className={"tab-b" + (tab === "parents" ? " on" : "")} onClick={() => setTab("parents")}>종충 {data.parents.length}</button>
+            <button className={"tab-b" + (tab === "calendar" ? " on" : "")} onClick={() => setTab("calendar")}>캘린더</button>
           </div>
 
           {tab === "calendar" && (
