@@ -1,7 +1,7 @@
 /* ════════ 앱 본체 — 기능 추가/수정은 여기서 ════════ */
 const { useState, useEffect, useRef } = React;
 /* 설정값과 CSS는 data.js / styles.js 에서 불러옵니다 */
-const { KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, STATUS_COLOR, STATUSES } = window.APP_DATA;
+const { KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, FLAGS, STATUS_COLOR, STATUSES } = window.APP_DATA;
 const CSS = window.APP_CSS;
 
 
@@ -430,9 +430,13 @@ function LarvaEditForm({ initial, lines, onSave, onClose }) {
 function BottleForm({ initial, brands, onSave, onClose }) {
   const [f, setF] = useState(initial || {
     date: today(), instar: "", weight: "", headWidth: "",
-    feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "",
+    feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "", flags: [],
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const toggleFlag = (flag) => setF((p) => {
+    const cur = p.flags || [];
+    return { ...p, flags: cur.includes(flag) ? cur.filter((x) => x !== flag) : [...cur, flag] };
+  });
   const save = () => { if (!f.date) return alert("날짜는 필수입니다"); onSave(f); };
   return (
     <Modal title={initial ? "병갈이 기록 수정" : "병갈이 기록"} onClose={onClose} onSave={save}>
@@ -475,7 +479,16 @@ function BottleForm({ initial, brands, onSave, onClose }) {
         </div>
         <div className="hint">예정일을 정하면 캘린더 탭에 자동으로 표시돼요</div>
       </F>
-      <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="식흔 상태, 거식 여부 등" /></F>
+      <F label="특이 케이스 (해당 시 선택)">
+        <div className="flagrow">
+          {FLAGS.map((flag) => (
+            <button key={flag} className={"flag-chip" + ((f.flags || []).includes(flag) ? " on" : "")} onClick={() => toggleFlag(flag)}>
+              {(f.flags || []).includes(flag) ? "✓ " : ""}{flag}
+            </button>
+          ))}
+        </div>
+      </F>
+      <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="식흔 상태 등" /></F>
       <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
     </Modal>
   );
@@ -1002,6 +1015,38 @@ function App() {
     updateInd(modal.indId, { eclosion: f, status: ["유충", "용화"].includes(ind.status) ? "우화" : ind.status });
     setModal(null); say("✓ 우화 기록 저장됨");
   };
+  const promoteToParent = (ind) => {
+    const L = lineById[ind.lineId] || {};
+    const ec = ind.eclosion || {};
+    /* 병갈이 기록 → 성충 사육 이력으로 복사 */
+    const growthRecords = sortedRecs(ind).map((r) => ({
+      id: uid(), date: r.date, instar: r.instar || "", feedType: r.feedType || "",
+      feedBrand: r.feedBrand || "", bottleSize: r.bottleSize || "", weight: r.weight || "", memo: r.memo || "",
+    }));
+    /* 우화일 행도 이력에 추가 */
+    if (ec.date) growthRecords.push({ id: uid(), date: ec.date, instar: "우화", feedType: "", feedBrand: "", bottleSize: "", weight: "", memo: num(ec.totalLength) ? `우화 ${ec.totalLength}mm` : "우화" });
+    /* 성충 관리번호: 라인코드+유충번호 조합으로 자동 생성, 중복 시 뒤에 숫자 */
+    let baseCode = `${L.code ? L.code + "-" : ""}${ind.code}`;
+    let code = baseCode, n = 2;
+    const exist = new Set(data.parents.map((p) => p.code));
+    while (exist.has(code)) { code = `${baseCode}-${n++}`; }
+    const newParent = {
+      id: uid(), code,
+      sex: ind.sex && ind.sex !== "미구분" ? ind.sex : "수컷 ♂",
+      species: L.species || "", line: L.code || "", origin: L.origin || "",
+      totalLength: ec.totalLength || "", jawLength: ec.jawLength || "", thoraxWidth: ec.thoraxWidth || "",
+      eclosionDate: ec.date || "", source: "자가", memo: ind.memo || "",
+      status: "생존", photo: "", growthRecords,
+      bornLineId: ind.lineId || "", bornLarvaId: ind.id,
+    };
+    persist({
+      ...data,
+      parents: [...data.parents, newParent],
+      individuals: data.individuals.map((i) => i.id === ind.id ? { ...i, promotedToParentId: newParent.id } : i),
+    });
+    say("✓ 성충으로 등록됐어요 — 사육 이력도 옮겨졌어요");
+    setView({ name: "parentDetail", id: newParent.id });
+  };
   const importJSON = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
@@ -1406,6 +1451,16 @@ function App() {
               <div className="bc-species serif">{p.species || "종 미입력"}</div>
               <div className="bc-sub">{[p.line, p.origin, p.sex].filter(Boolean).join(" · ")}</div>
               {p.status === "사망" && <div className="bc-dead">사망 · 계보 보존</div>}
+              {p.bornLineId && lineById[p.bornLineId] && (() => {
+                const bl = lineById[p.bornLineId];
+                const gf = parentById[bl.fatherId], gm = parentById[bl.motherId];
+                return (
+                  <div className="bc-lineage">
+                    출신 <b>{bl.code}</b>
+                    {(gf || gm) && <> · {gf ? gf.code : "?"}♂ × {gm ? gm.code : "?"}♀</>}
+                  </div>
+                );
+              })()}
               <div className="bc-line" />
               <div className="bc-grid">
                 <div><div className="s-l">총장</div><div className="s-v mono">{num(p.totalLength) ? n1(num(p.totalLength)) + "mm" : "—"}</div></div>
@@ -1518,6 +1573,20 @@ function App() {
               <button className="btn" onClick={() => setModal({ type: "eclosion", indId: cur.id })}>{cur.eclosion ? "우화 수정" : "우화 기록"}</button>
             </div>
 
+            {cur.eclosion && (
+              cur.promotedToParentId && data.parents.find((p) => p.id === cur.promotedToParentId) ? (
+                <button className="btn sm" style={{ width: "100%", marginBottom: 16, borderColor: "#A8884F66", color: "#937640" }}
+                  onClick={() => setView({ name: "parentDetail", id: cur.promotedToParentId })}>
+                  🪲 등록된 성충 보기 ›
+                </button>
+              ) : (
+                <button className="btn primary sm" style={{ width: "100%", marginBottom: 16 }}
+                  onClick={() => promoteToParent(cur)}>
+                  ⬆ 성충으로 등록 (사육 이력 자동 이관)
+                </button>
+              )
+            )}
+
             {cur.status === "사망" ? (
               <button className="btn ghost sm" style={{ width: "100%", marginBottom: 16 }}
                 onClick={() => { updateInd(cur.id, { status: "유충" }); say("사망 처리를 해제했어요"); }}>
@@ -1566,6 +1635,11 @@ function App() {
                     {num(r.weight) && <span className="mono r-w">{n1(num(r.weight))}g{d != null && <em className={d >= 0 ? "up" : "down"}> {d >= 0 ? "▲" : "▼"}{n1(Math.abs(d))}</em>}</span>}
                   </div>
                   <div className="r-mid">{[r.feedType, r.feedBrand, ccLabel(r.bottleSize), num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
+                  {(r.flags || []).length > 0 && (
+                    <div className="flag-show">
+                      {r.flags.map((fl) => <span key={fl} className="flag-tag">{fl}</span>)}
+                    </div>
+                  )}
                   {r.nextDate && (
                     <div className="r-next">
                       다음 예정 <b className="mono">{r.nextDate}</b>{isLast && cur.status === "유충" && <span className="dim"> ({dday(r.nextDate) <= 0 ? `${-dday(r.nextDate)}일 지남` : `D-${dday(r.nextDate)}`})</span>}
