@@ -1,7 +1,7 @@
 /* ════════ 앱 본체 — 기능 추가/수정은 여기서 ════════ */
 const { useState, useEffect, useRef } = React;
 /* 설정값과 CSS는 data.js / styles.js 에서 불러옵니다 */
-const { KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, FLAGS, STATUS_COLOR, STATUSES } = window.APP_DATA;
+const { KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, FLAGS, FEED_PRODUCTS, STATUS_COLOR, STATUSES } = window.APP_DATA;
 const CSS = window.APP_CSS;
 
 
@@ -151,6 +151,52 @@ const F = ({ label, children, half }) => (
   </div>
 );
 
+/* 균사/톱밥 브랜드 선택: 탭하면 샵별 제품 목록이 펼쳐지고, 맨 아래 직접 입력 */
+function FeedPicker({ feedType, value, brands, onChange, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const [manual, setManual] = useState(false);
+  const groups = (FEED_PRODUCTS && FEED_PRODUCTS[feedType]) || [];
+  const pick = (shop, item) => { onChange(`${shop} ${item}`); setOpen(false); setManual(false); };
+  /* 직접 입력 모드거나, 목록에 없는 값이 이미 들어있으면 입력창 표시 */
+  if (manual) {
+    return (
+      <div>
+        <input className="in" list="dl-brands" value={value} autoFocus
+          onChange={(e) => onChange(e.target.value)} placeholder={placeholder || "직접 입력"} />
+        <button className="btn tiny mt" onClick={() => { setManual(false); setOpen(true); }}>← 목록에서 선택</button>
+        <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <button className="picker-btn" onClick={() => setOpen(!open)}>
+        <span className={value ? "" : "dim"}>{value || placeholder || "탭하여 선택"}</span>
+        <span className="picker-arrow">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className="picker-panel">
+          {groups.length === 0 && <div className="picker-empty">등록된 제품이 없어요. 직접 입력해주세요.</div>}
+          {groups.map((g) => (
+            <div key={g.shop} className="picker-group">
+              <div className="picker-shop">{g.shop}</div>
+              <div className="picker-items">
+                {g.items.map((item) => {
+                  const full = `${g.shop} ${item}`;
+                  return (
+                    <button key={item} className={"picker-item" + (value === full ? " on" : "")} onClick={() => pick(g.shop, item)}>{item}</button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <button className="picker-manual" onClick={() => { setManual(true); setOpen(false); }}>✏️ 직접 입력</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConfirmBtn({ label, onConfirm, className }) {
   const [armed, setArmed] = useState(false);
   useEffect(() => { if (armed) { const t = setTimeout(() => setArmed(false), 2600); return () => clearTimeout(t); } }, [armed]);
@@ -275,7 +321,7 @@ function GrowthRowForm({ initial, brands, onSave, onClose }) {
             {FEED_TYPES.map((t) => <option key={t}>{t}</option>)}
           </select>
         </F>
-        <F label="브랜드" half><input className="in" list="dl-brands" value={f.feedBrand} onChange={(e) => set("feedBrand", e.target.value)} /></F>
+        <F label="브랜드" half><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
       </div>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
       <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
@@ -469,7 +515,7 @@ function BottleForm({ initial, brands, onSave, onClose }) {
           </div>
         </F>
       </div>
-      <F label="브랜드 · 제품명"><input className="in" list="dl-brands" value={f.feedBrand} onChange={(e) => set("feedBrand", e.target.value)} placeholder="자주 쓰는 제품은 자동 저장돼요" /></F>
+      <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
       <F label="다음 병갈이 예정일">
         <input type="date" className="in" value={f.nextDate} onChange={(e) => set("nextDate", e.target.value)} />
         <div className="chiprow">
@@ -542,7 +588,7 @@ function BulkBottleForm({ larvae, brands, onSave, onClose }) {
           </div>
         </F>
           </div>
-          <F label="브랜드 · 제품명"><input className="in" list="dl-brands" value={f.feedBrand} onChange={(e) => set("feedBrand", e.target.value)} /></F>
+          <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
           <F label="다음 병갈이 예정일">
             <input type="date" className="in" value={f.nextDate} onChange={(e) => set("nextDate", e.target.value)} />
             <div className="chiprow">
@@ -591,7 +637,7 @@ function PupationForm({ initial, onSave, onClose }) {
 
 /* ════════════════════ 우화 폼 ════════════════════ */
 function EclosionForm({ initial, onSave, onClose }) {
-  const [f, setF] = useState(initial || { date: today(), totalLength: "", jawLength: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "" });
+  const [f, setF] = useState(initial || { date: today(), totalLength: "", jawLength: "", jawWidth: "", jawThick: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "" });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   return (
     <Modal title="우화 기록" onClose={onClose} onSave={() => onSave(f)}>
@@ -599,6 +645,10 @@ function EclosionForm({ initial, onSave, onClose }) {
       <div className="row">
         <F label="총장 mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
         <F label="턱 길이 mm" half><input className="in mono" inputMode="decimal" value={f.jawLength} onChange={(e) => set("jawLength", e.target.value)} /></F>
+      </div>
+      <div className="row">
+        <F label="악폭 mm" half><input className="in mono" inputMode="decimal" value={f.jawWidth} onChange={(e) => set("jawWidth", e.target.value)} /></F>
+        <F label="악후 mm" half><input className="in mono" inputMode="decimal" value={f.jawThick} onChange={(e) => set("jawThick", e.target.value)} /></F>
       </div>
       <div className="row">
         <F label="두폭 mm" half><input className="in mono" inputMode="decimal" value={f.headWidth} onChange={(e) => set("headWidth", e.target.value)} /></F>
@@ -632,6 +682,7 @@ function exportXLSX(data) {
       "최대 유충무게(g)": maxWeight(ind) ?? "", "병갈이 횟수": (ind.bottleRecords || []).length,
       "전용일": ind.pupation?.prepupaDate || "", "용화일": ind.pupation?.pupaDate || "", "번데기 무게(g)": ind.pupation?.pupaWeight || "",
       "우화일": ind.eclosion?.date || "", "총장(mm)": ind.eclosion?.totalLength || "", "턱 길이(mm)": ind.eclosion?.jawLength || "",
+      "악폭(mm)": ind.eclosion?.jawWidth || "", "악후(mm)": ind.eclosion?.jawThick || "",
       "두폭(mm)": ind.eclosion?.headWidth || "", "흉폭(mm)": ind.eclosion?.thoraxWidth || "", "배 길이(mm)": ind.eclosion?.abdomenLength || "",
       "우화부전": ind.eclosion ? (ind.eclosion.defect ? "O" : "X") : "",
       "환원율(mm/g)": reduction(ind) != null ? Math.round(reduction(ind) * 100) / 100 : "",
@@ -1773,7 +1824,7 @@ function App() {
               <div className="panel">
                 <div className="p-t">우화 · {cur.eclosion.date}{cur.eclosion.defect && <span className="warn"> 우화부전</span>}</div>
                 <div className="meas mono">
-                  {[["총장", cur.eclosion.totalLength], ["턱", cur.eclosion.jawLength], ["두폭", cur.eclosion.headWidth], ["흉폭", cur.eclosion.thoraxWidth], ["배", cur.eclosion.abdomenLength]]
+                  {[["총장", cur.eclosion.totalLength], ["턱", cur.eclosion.jawLength], ["악폭", cur.eclosion.jawWidth], ["악후", cur.eclosion.jawThick], ["두폭", cur.eclosion.headWidth], ["흉폭", cur.eclosion.thoraxWidth], ["배", cur.eclosion.abdomenLength]]
                     .filter(([, v]) => num(v)).map(([k, v]) => <span key={k}>{k} <b>{v}</b>mm</span>)}
                 </div>
                 {cur.eclosion.memo && <div className="r-memo">{cur.eclosion.memo}</div>}
