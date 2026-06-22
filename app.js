@@ -1624,6 +1624,21 @@ function App() {
         });
         const shown = kids.filter((i) => filter === "전체" || i.status === filter);
         const counts = STATUSES.reduce((a, s) => ({ ...a, [s]: kids.filter((i) => i.status === s).length }), {});
+        /* 성별별 기대주(👑): 살아있는 개체 중 우화한 게 있으면 총장 최대, 없으면 유충무게 최대 */
+        const topOf = (sexKey) => {
+          const pool = kids.filter((i) => i.status !== "사망" && i.sex && i.sex.includes(sexKey));
+          if (pool.length === 0) return null;
+          const eclosed = pool.filter((i) => num(i.eclosion?.totalLength));
+          if (eclosed.length) {
+            return eclosed.reduce((best, i) => (num(i.eclosion.totalLength) > num(best.eclosion.totalLength) ? i : best)).id;
+          }
+          const weighed = pool.filter((i) => maxWeight(i));
+          if (weighed.length) {
+            return weighed.reduce((best, i) => (maxWeight(i) > maxWeight(best) ? i : best)).id;
+          }
+          return null;
+        };
+        const crownM = topOf("수"), crownF = topOf("암");
         return (
           <>
             <div className="topbar">
@@ -1681,10 +1696,12 @@ function App() {
               const dd = ind.status === "유충" && lr?.nextDate ? dday(lr.nextDate) : null;
               const red = reduction(ind);
               const dead = ind.status === "사망";
+              const isCrown = ind.id === crownM || ind.id === crownF;
               return (
-                <div key={ind.id} className={"card" + (dead ? " dead" : "")} onClick={() => setView({ name: "detail", id: ind.id })}>
+                <div key={ind.id} className={"card" + (dead ? " dead" : "") + (isCrown ? " crown" : "")} onClick={() => setView({ name: "detail", id: ind.id })}>
                   <div className="card-l">
                     <div className="tagrow">
+                      {isCrown && <span className="crown-ic" title="기대주">👑</span>}
                       <span className={"tag mono" + (dead ? " strike" : "")}>{ind.code}</span>
                       <span className="chip" style={{ color: STATUS_COLOR[ind.status], borderColor: STATUS_COLOR[ind.status] + "55" }}>{ind.status}</span>
                       {dd != null && <span className={"chip dd" + (dd <= 0 ? " over" : dd <= 3 ? " soon" : "")}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
