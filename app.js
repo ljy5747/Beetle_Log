@@ -19,6 +19,8 @@ const n2 = (v) => (v == null ? "—" : (Math.round(v * 100) / 100).toLocaleStrin
 const shortDate = (iso) => (iso ? iso.slice(2).replace(/-/g, ".") : "");
 /* 병 용량: 저장은 숫자만, 표시할 때 cc 붙임. 기존에 'cc'가 들어간 값도 안전 처리 */
 const ccLabel = (v) => { const s = String(v || "").trim(); return s ? (/cc$/i.test(s) ? s : s + "cc") : ""; };
+/* 병갈이 D-day 색상 등급: 7일 이내 빨강 / 8~30일 노랑 / 그 이상 초록 */
+const ddClass = (dd) => (dd <= 7 ? " dd-red" : dd <= 30 ? " dd-yellow" : " dd-green");
 
 /* 사진을 가로 최대 800px로 줄이고 JPEG로 압축해 base64로 반환 (용량 절약) */
 function resizeImage(file, maxW = 800, quality = 0.72) {
@@ -255,10 +257,11 @@ function SimplePicker({ options, value, onChange, placeholder }) {
 }
 
 /* ════════════════════ 성충 등록/수정 폼 ════════════════════ */
-function ParentForm({ initial, existingCodes, onSave, onClose }) {
+function ParentForm({ initial, existingCodes, allParents, onSave, onClose }) {
   const [f, setF] = useState(initial || {
     code: "", sex: "수컷 ♂", species: "", line: "", origin: "",
     totalLength: "", jawLength: "", jawWidth: "", jawThick: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
+    sireId: "", damId: "",
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -329,6 +332,27 @@ function ParentForm({ initial, existingCodes, onSave, onClose }) {
         <button className="btn tiny" style={{ marginBottom: 13 }} onClick={() => setShowJaw(true)}>+ 악폭·악후 입력</button>
       )}
       <F label="흉폭 mm"><input className="in mono" inputMode="decimal" value={f.thoraxWidth} onChange={(e) => set("thoraxWidth", e.target.value)} /></F>
+      <div className="sect">부모 (혈통 연결)</div>
+      {(!allParents || allParents.length === 0) && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>다른 성충을 등록하면 이 성충의 부모로 연결할 수 있어요</div>}
+      <div className="row">
+        <F label="부 성충 ♂" half>
+          <select className="in" value={f.sireId || ""} onChange={(e) => set("sireId", e.target.value)}>
+            <option value="">미지정</option>
+            {(allParents || []).filter((p) => p.sex.includes("수") && p.id !== (initial && initial.id)).map((p) => (
+              <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null].filter(Boolean).join(" · ")}</option>
+            ))}
+          </select>
+        </F>
+        <F label="모 성충 ♀" half>
+          <select className="in" value={f.damId || ""} onChange={(e) => set("damId", e.target.value)}>
+            <option value="">미지정</option>
+            {(allParents || []).filter((p) => p.sex.includes("암") && p.id !== (initial && initial.id)).map((p) => (
+              <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null].filter(Boolean).join(" · ")}</option>
+            ))}
+          </select>
+        </F>
+      </div>
+
       <div className="sect">기타</div>
       <div className="row">
         <F label="우화일" half><input type="date" className="in" value={f.eclosionDate} onChange={(e) => set("eclosionDate", e.target.value)} /></F>
@@ -410,13 +434,13 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose }) {
         <F label="부♂" half>
           <select className="in" value={f.fatherId || ""} onChange={(e) => pick("fatherId", e.target.value)}>
             <option value="">미지정</option>
-            {parents.filter((p) => p.sex.includes("수")).map((p) => <option key={p.id} value={p.id}>{p.code}{p.species ? ` · ${p.species}` : ""}</option>)}
+            {parents.filter((p) => p.sex.includes("수")).map((p) => <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line].filter(Boolean).join(" · ")}</option>)}
           </select>
         </F>
         <F label="모♀" half>
           <select className="in" value={f.motherId || ""} onChange={(e) => pick("motherId", e.target.value)}>
             <option value="">미지정</option>
-            {parents.filter((p) => p.sex.includes("암")).map((p) => <option key={p.id} value={p.id}>{p.code}{p.species ? ` · ${p.species}` : ""}</option>)}
+            {parents.filter((p) => p.sex.includes("암")).map((p) => <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line].filter(Boolean).join(" · ")}</option>)}
           </select>
         </F>
       </div>
@@ -1451,7 +1475,7 @@ function App() {
                   <div className="card-l">
                     <div className="tagrow">
                       <span className="tag mono">{L.code}</span>
-                      {dd != null && <span className={"chip dd" + (dd <= 0 ? " over" : dd <= 3 ? " soon" : "")}>{dd <= 0 ? `병갈이 D+${-dd}` : `병갈이 D-${dd}`}</span>}
+                      {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `병갈이 D+${-dd}` : `병갈이 D-${dd}`}</span>}
                     </div>
                     <div className="card-sub">{[L.species, pairLabel(L), L.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
                     <div className="card-val mono" style={{ fontSize: 17 }}>
@@ -1704,7 +1728,7 @@ function App() {
                       {isCrown && <span className="crown-ic" title="기대주">👑</span>}
                       <span className={"tag mono" + (dead ? " strike" : "")}>{ind.code}</span>
                       <span className="chip" style={{ color: STATUS_COLOR[ind.status], borderColor: STATUS_COLOR[ind.status] + "55" }}>{ind.status}</span>
-                      {dd != null && <span className={"chip dd" + (dd <= 0 ? " over" : dd <= 3 ? " soon" : "")}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
+                      {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
                     </div>
                     <div className="card-sub">{[ind.sex !== "미구분" ? ind.sex : null, lr ? `최근 ${shortDate(lr.date)}` : null].filter(Boolean).join(" · ") || "기록 전"}</div>
                     <div className="card-val mono">
@@ -1767,6 +1791,11 @@ function App() {
                   </div>
                 );
               })()}
+              {(p.sireId && parentById[p.sireId]) || (p.damId && parentById[p.damId]) ? (
+                <div className="bc-lineage">
+                  부모 {p.sireId && parentById[p.sireId] ? `${parentById[p.sireId].code}♂` : "?♂"} × {p.damId && parentById[p.damId] ? `${parentById[p.damId].code}♀` : "?♀"}
+                </div>
+              ) : null}
               <div className="bc-line" />
               <div className="bc-grid">
                 <div><div className="s-l">총장</div><div className="s-v mono">{num(p.totalLength) ? n1(num(p.totalLength)) + "mm" : "—"}</div></div>
@@ -1991,6 +2020,7 @@ function App() {
         <ParentForm
           initial={modal.editId ? data.parents.find((p) => p.id === modal.editId) : null}
           existingCodes={data.parents.map((p) => p.code)}
+          allParents={data.parents}
           onSave={saveParent} onClose={() => setModal(null)} />
       )}
       {modal?.type === "growthRow" && (
