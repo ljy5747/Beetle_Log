@@ -1,7 +1,7 @@
 /* ════════ 앱 본체 — 기능 추가/수정은 여기서 ════════ */
 const { useState, useEffect, useRef } = React;
 /* 설정값과 CSS는 data.js / styles.js 에서 불러옵니다 */
-const { KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, FLAGS, FEED_PRODUCTS, STATUS_COLOR, STATUSES } = window.APP_DATA;
+const { KEY, SUPABASE_URL, SUPABASE_KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, FLAGS, FEED_PRODUCTS, STATUS_COLOR, STATUSES } = window.APP_DATA;
 const CSS = window.APP_CSS;
 
 
@@ -42,6 +42,33 @@ function resizeImage(file, maxW = 800, quality = 0.72) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+/* ════════════════════ 클라우드 동기화 (Supabase) ════════════════════ */
+const SB_HEADERS = {
+  "apikey": SUPABASE_KEY,
+  "Authorization": `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json",
+};
+/* 동기화 키로 서버에 데이터 올리기 (있으면 갱신, 없으면 생성) */
+async function cloudUpload(syncKey, data) {
+  const body = JSON.stringify([{ user_key: syncKey, data, updated_at: new Date().toISOString() }]);
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/beetlelog_data?on_conflict=user_key`, {
+    method: "POST",
+    headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
+    body,
+  });
+  if (!res.ok) throw new Error(`업로드 실패 (${res.status})`);
+  return true;
+}
+/* 동기화 키로 서버에서 데이터 받기 (없으면 null) */
+async function cloudDownload(syncKey) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/beetlelog_data?user_key=eq.${encodeURIComponent(syncKey)}&select=data,updated_at`, {
+    headers: SB_HEADERS,
+  });
+  if (!res.ok) throw new Error(`불러오기 실패 (${res.status})`);
+  const rows = await res.json();
+  return rows.length ? rows[0] : null;
 }
 
 async function deliverFile(filename, content, mime) {
@@ -1165,6 +1192,8 @@ function App() {
   const [lineView, setLineView] = useState("card");
   const [infoOpen, setInfoOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [syncKey, setSyncKey] = useState("");
+  const [syncBusy, setSyncBusy] = useState(false);
   const fileRef = useRef(null);
   const xlsxRef = useRef(null);
   const toastT = useRef(null);
@@ -1188,6 +1217,7 @@ function App() {
         base.individuals = base.individuals.map((i) => (i.lineId ? i : { ...i, lineId: misc.id }));
       }
       setData(base);
+      try { const sk = await idbGet("beetle-sync-key"); if (sk) setSyncKey(sk); } catch (e) { /* 없으면 무시 */ }
     })();
   }, []);
 
@@ -1361,6 +1391,43 @@ function App() {
       } catch (err) { say("⚠️ 엑셀을 읽지 못했어요 — 양식 파일이 맞는지 확인해주세요"); }
     };
     reader.readAsArrayBuffer(file); e.target.value = "";
+  };
+  const saveSyncKey = async (k) => { setSyncKey(k); try { await idbSet("beetle-sync-key", k); } catch (e) {} };
+  const doUpload = async () => {
+    const k = syncKey.trim();
+    if (!k) return say("먼저 동기화 키를 입력해주세요");
+    setSyncBusy(true);
+    try {
+      await saveSyncKey(k);
+      await cloudUpload(k, data);
+      say("☁︎ 클라우드에 올렸어요");
+    } catch (e) { say("⚠️ 업로드 실패 — 인터넷을 확인해주세요"); }
+    setSyncBusy(false);
+  };
+  const doDownload = async () => {
+    const k = syncKey.trim();
+    if (!k) return say("먼저 동기화 키를 입력해주세요");
+    setSyncBusy(true);
+    try {
+      const row = await cloudDownload(k);
+      if (!row || !row.data || !Array.isArray(row.data.individuals)) {
+        say("이 키로 저장된 데이터가 없어요");
+        setSyncBusy(false);
+        return;
+      }
+      await saveSyncKey(k);
+      const d = row.data;
+      persist({
+        individuals: d.individuals,
+        lines: Array.isArray(d.lines) ? d.lines : [],
+        parents: Array.isArray(d.parents) ? d.parents : [],
+        customEvents: Array.isArray(d.customEvents) ? d.customEvents : [],
+        feedBrands: Array.isArray(d.feedBrands) ? d.feedBrands : [],
+      });
+      say(`☁︎ 불러왔어요 — 유충 ${d.individuals.length}`);
+      setSettingsOpen(false);
+    } catch (e) { say("⚠️ 불러오기 실패 — 인터넷을 확인해주세요"); }
+    setSyncBusy(false);
   };
 
   /* ── 라인 통계 ── */
@@ -2089,7 +2156,16 @@ function App() {
               <span style={{ width: 40 }} />
             </div>
             <div className="mbody">
-              <div className="sect">엑셀로 한 번에 등록</div>
+              <div className="sect">클라우드 동기화 (폰 ↔ PC)</div>
+              <div className="set-desc">동기화 키를 정해두면, 폰에서 올리고 PC에서 같은 키로 불러올 수 있어요. 기기가 바뀌어도 데이터가 안전해요.</div>
+              <input className="in mt" value={syncKey} onChange={(e) => setSyncKey(e.target.value)} placeholder="나만의 동기화 키 (예: jinyong-beetle)" />
+              <div className="row mt">
+                <button className="btn" style={{ flex: 1 }} disabled={syncBusy} onClick={doUpload}>{syncBusy ? "처리 중…" : "☁︎ 올리기"}</button>
+                <button className="btn primary" style={{ flex: 1 }} disabled={syncBusy} onClick={doDownload}>{syncBusy ? "처리 중…" : "⤓ 불러오기"}</button>
+              </div>
+              <div className="set-desc" style={{ marginTop: 8 }}>⚠️ 키는 비밀번호처럼 본인만 알게 하세요. 같은 키를 다른 기기에 입력하면 그 데이터를 받아올 수 있어요.</div>
+
+              <div className="sect" style={{ marginTop: 24 }}>엑셀로 한 번에 등록</div>
               <div className="set-desc">양식을 받아 성충·라인·유충을 정리한 뒤 불러오면 한 번에 등록돼요. 같은 항목(종+관리번호, 라인명+종)은 최신 정보로 갱신하고, 새 항목은 추가해요. 유충의 병갈이 기록은 보존돼요.</div>
               <button className="btn mt" style={{ width: "100%" }} onClick={() => { downloadTemplate(); }}>① 엑셀 양식 다운로드</button>
               <button className="btn primary mt" style={{ width: "100%" }} onClick={() => xlsxRef.current?.click()}>② 엑셀 불러오기</button>
