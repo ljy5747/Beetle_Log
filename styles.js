@@ -62,6 +62,9 @@ padding:6px 15px;font-size:12.5px;font-weight:600;cursor:pointer;letter-spacing:
 .chip.dd{color:var(--bg);border-color:var(--text);background:var(--text)}
 .chip.dd.soon{color:var(--bg);border-color:var(--gold-d);background:var(--gold-d)}
 .chip.dd.over{color:#fff;border-color:var(--red);background:var(--red)}
+.chip.dd.dd-red{color:#fff;border-color:var(--red);background:var(--red)}
+.chip.dd.dd-yellow{color:var(--bg);border-color:var(--gold-d);background:var(--gold-d)}
+.chip.dd.dd-green{color:#fff;border-color:var(--green);background:var(--green)}
 
 /* ═══════════ [06] 카드 (라인·성충 목록 공통) ═══════════ */
 .card{background:var(--surf);border:1px solid var(--line);border-radius:5px;padding:16px 17px;margin-bottom:11px;
