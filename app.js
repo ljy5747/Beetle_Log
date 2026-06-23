@@ -2158,7 +2158,7 @@ function App() {
             <div className="mbody">
               <div className="sect">클라우드 동기화 (폰 ↔ PC)</div>
               <div className="set-desc">동기화 키를 정해두면, 폰에서 올리고 PC에서 같은 키로 불러올 수 있어요. 기기가 바뀌어도 데이터가 안전해요.</div>
-              <input className="in mt" value={syncKey} onChange={(e) => setSyncKey(e.target.value)} placeholder="나만의 동기화 키 (예: jinyong-beetle)" />
+              <input className="in mt" value={syncKey} onChange={(e) => setSyncKey(e.target.value)} placeholder="나만의 동기화 키 (예: beetlelog)" />
               <div className="row mt">
                 <button className="btn" style={{ flex: 1 }} disabled={syncBusy} onClick={doUpload}>{syncBusy ? "처리 중…" : "☁︎ 올리기"}</button>
                 <button className="btn primary" style={{ flex: 1 }} disabled={syncBusy} onClick={doDownload}>{syncBusy ? "처리 중…" : "⤓ 불러오기"}</button>
