@@ -21,6 +21,13 @@ const shortDate = (iso) => (iso ? iso.slice(2).replace(/-/g, ".") : "");
 const ccLabel = (v) => { const s = String(v || "").trim(); return s ? (/cc$/i.test(s) ? s : s + "cc") : ""; };
 /* 병갈이 D-day 색상 등급: 7일 이내 빨강 / 8~30일 노랑 / 그 이상 초록 */
 const ddClass = (dd) => (dd <= 7 ? " dd-red" : dd <= 30 ? " dd-yellow" : " dd-green");
+/* 데이터 '분량' 점수 — 자동 동기화에서 데이터가 확 줄어드는 사고를 감지하는 용도 */
+function dataWeight(d) {
+  if (!d) return 0;
+  const ind = (d.individuals || []).length;
+  const recs = (d.individuals || []).reduce((a, i) => a + ((i.bottleRecords || []).length), 0);
+  return (d.parents || []).length + (d.lines || []).length + ind + recs;
+}
 
 /* 사진을 가로 최대 800px로 줄이고 JPEG로 압축해 base64로 반환 (용량 절약) */
 function resizeImage(file, maxW = 800, quality = 0.72) {
@@ -1373,6 +1380,7 @@ function App() {
   const [syncKey, setSyncKey] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
   const [authUser, setAuthUser] = useState(null);
+  const autoSyncRef = useRef({ on: false, key: "", timer: null });
   const fileRef = useRef(null);
   const xlsxRef = useRef(null);
   const toastT = useRef(null);
@@ -1404,9 +1412,38 @@ function App() {
         if (session && session.access) {
           const u = await authGetUser(session.access);
           if (u && u.email) {
+            const myKey = "user:" + u.email;
             setAuthUser(u);
-            setSyncKey("user:" + u.email);
-            try { await idbSet("beetle-sync-key", "user:" + u.email); } catch (e) {}
+            setSyncKey(myKey);
+            try { await idbSet("beetle-sync-key", myKey); } catch (e) {}
+            /* 자동 동기화 켜기 */
+            autoSyncRef.current.on = true;
+            autoSyncRef.current.key = myKey;
+            /* 앱 켤 때: 서버에 더 최신 데이터가 있으면 받아오기 (안전장치 포함) */
+            try {
+              const row = await cloudDownload(myKey);
+              if (row && row.data && Array.isArray(row.data.individuals)) {
+                const serverW = dataWeight(row.data), localW = dataWeight(base);
+                /* 서버가 로컬보다 분량이 확 적으면(사고 의심) 자동 덮어쓰기 안 함 */
+                if (serverW >= localW * 0.5 || localW === 0) {
+                  const merged = {
+                    individuals: row.data.individuals,
+                    lines: Array.isArray(row.data.lines) ? row.data.lines : [],
+                    parents: Array.isArray(row.data.parents) ? row.data.parents : [],
+                    customEvents: Array.isArray(row.data.customEvents) ? row.data.customEvents : [],
+                    feedBrands: Array.isArray(row.data.feedBrands) ? row.data.feedBrands : [],
+                  };
+                  setData(merged);
+                  try { await idbSet(KEY, JSON.stringify(merged)); } catch (e) {}
+                } else if (serverW < localW * 0.5 && serverW > 0) {
+                  /* 의심스러우면 알림만 (자동 안 덮음) */
+                  setTimeout(() => say("☁︎ 서버 데이터가 로컬보다 적어요 — 설정에서 확인 후 불러오세요"), 1000);
+                }
+              } else {
+                /* 서버에 아무것도 없으면 내 로컬을 올려둠 */
+                if (dataWeight(base) > 0) cloudUpload(myKey, base).catch(() => {});
+              }
+            } catch (e) { /* 네트워크 문제면 조용히 — 로컬로 계속 */ }
           }
         }
       } catch (e) { /* 로그인 안 했으면 무시 */ }
@@ -1419,6 +1456,14 @@ function App() {
     setData(next);
     try { await idbSet(KEY, JSON.stringify(next)); }
     catch (e) { say("⚠️ 저장 실패 — 네트워크를 확인해주세요"); }
+    /* 자동 동기화 켜져 있으면 2초 뒤 서버에 올림 (연속 변경은 묶어서 한 번만) */
+    const as = autoSyncRef.current;
+    if (as.on && as.key) {
+      clearTimeout(as.timer);
+      as.timer = setTimeout(() => {
+        cloudUpload(as.key, next).catch(() => {/* 실패해도 조용히 — 다음 변경 때 재시도 */});
+      }, 2000);
+    }
   };
 
   const updateInd = (id, patch) =>
@@ -2368,10 +2413,10 @@ function App() {
                     <span className="auth-dot" />
                     <div>
                       <div className="auth-email">{authUser.email}</div>
-                      <div className="auth-stat">구글 로그인됨 · 이 계정으로 동기화돼요</div>
+                      <div className="auth-stat">구글 로그인됨 · 자동 동기화 켜짐 ✓</div>
                     </div>
                   </div>
-                  <button className="btn ghost sm mt" onClick={async () => { await authSignOut(); setAuthUser(null); setSyncKey(""); try { await idbSet("beetle-sync-key", ""); } catch (e) {} say("로그아웃됐어요"); }}>로그아웃</button>
+                  <button className="btn ghost sm mt" onClick={async () => { await authSignOut(); setAuthUser(null); setSyncKey(""); autoSyncRef.current.on = false; autoSyncRef.current.key = ""; clearTimeout(autoSyncRef.current.timer); try { await idbSet("beetle-sync-key", ""); } catch (e) {} say("로그아웃됐어요"); }}>로그아웃</button>
                 </div>
               ) : (
                 <>
@@ -2386,7 +2431,7 @@ function App() {
                 <button className="btn primary" style={{ flex: 1 }} disabled={syncBusy} onClick={doDownload}>{syncBusy ? "처리 중…" : "⤓ 불러오기"}</button>
               </div>
               <div className="set-desc" style={{ marginTop: 8 }}>
-                {authUser ? "기기마다 ☁︎올리기 / ⤓불러오기로 최신 데이터를 맞추세요." : "⚠️ 키 방식은 같은 키를 다른 기기에 입력하면 그 데이터를 받아올 수 있어요. 비밀번호처럼 관리하세요."}
+                {authUser ? "기록하면 자동으로 서버에 저장돼요. 다른 기기에서 같은 계정으로 열면 최신 데이터를 자동으로 받아와요. (아래 버튼으로 수동으로도 가능)" : "⚠️ 키 방식은 같은 키를 다른 기기에 입력하면 그 데이터를 받아올 수 있어요. 비밀번호처럼 관리하세요."}
               </div>
 
               <div className="sect" style={{ marginTop: 24 }}>엑셀로 한 번에 등록</div>
