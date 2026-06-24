@@ -265,6 +265,11 @@ border:1px dashed var(--line);border-radius:6px;color:var(--dim);font-size:14px;
 border-radius:5px;padding:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
 .remind-toggle.on{background:#FBF1EE;border-color:#EBD3CC;color:#9A4A3A}
 .set-desc{font-size:12.5px;color:var(--dim);line-height:1.6;margin-top:2px}
+.auth-box{background:var(--surf);border:1px solid var(--line);border-radius:5px;padding:14px 15px;margin-top:4px}
+.auth-me{display:flex;align-items:center;gap:11px}
+.auth-dot{width:9px;height:9px;border-radius:50%;background:var(--green);flex:none}
+.auth-email{font-size:14px;font-weight:700}
+.auth-stat{font-size:11.5px;color:var(--dim);margin-top:3px}
 
 /* ═══════════ [19] 입력 피커 (균사/톱밥 브랜드 선택) ═══════════ */
 .picker-btn{width:100%;display:flex;align-items:center;justify-content:space-between;background:var(--surf);
