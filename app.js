@@ -71,6 +71,43 @@ async function cloudDownload(syncKey) {
   return rows.length ? rows[0] : null;
 }
 
+/* ════════════════════ 구글 로그인 (Supabase Auth) ════════════════════ */
+/* 로그인 시작: 구글 동의 화면으로 이동 → 끝나면 우리 앱으로 복귀 */
+function authStartGoogle() {
+  const redirect = window.location.origin + window.location.pathname;
+  const url = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirect)}`;
+  window.location.href = url;
+}
+/* 복귀 시 주소(#access_token=...)에서 토큰을 꺼내 저장하고 주소를 깨끗이 정리 */
+async function authHandleRedirect() {
+  const hash = window.location.hash || "";
+  if (!hash.includes("access_token")) return null;
+  const p = new URLSearchParams(hash.slice(1));
+  const access = p.get("access_token"), refresh = p.get("refresh_token");
+  if (!access) return null;
+  /* 주소창의 토큰 부분 제거 (새로고침해도 안 남게) */
+  history.replaceState(null, "", window.location.origin + window.location.pathname);
+  const session = { access, refresh, at: Date.now() };
+  try { await idbSet("beetle-auth", JSON.stringify(session)); } catch (e) {}
+  return session;
+}
+/* 저장된 로그인 세션 불러오기 */
+async function authLoadSession() {
+  try { const s = await idbGet("beetle-auth"); return s ? JSON.parse(s) : null; } catch (e) { return null; }
+}
+/* 액세스 토큰으로 내 정보(이메일 등) 조회 */
+async function authGetUser(access) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${access}` },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+/* 로그아웃: 저장된 세션 삭제 */
+async function authSignOut() {
+  try { await idbSet("beetle-auth", ""); } catch (e) {}
+}
+
 async function deliverFile(filename, content, mime) {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
   /* 방법1. iOS 공유 시트 — 앱 내 미리보기에서 가장 잘 동작 */
@@ -1335,6 +1372,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncKey, setSyncKey] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
   const fileRef = useRef(null);
   const xlsxRef = useRef(null);
   const toastT = useRef(null);
@@ -1359,6 +1397,19 @@ function App() {
       }
       setData(base);
       try { const sk = await idbGet("beetle-sync-key"); if (sk) setSyncKey(sk); } catch (e) { /* 없으면 무시 */ }
+      /* 구글 로그인 처리: 복귀(주소에 토큰) → 아니면 저장된 세션 */
+      try {
+        let session = await authHandleRedirect();
+        if (!session) session = await authLoadSession();
+        if (session && session.access) {
+          const u = await authGetUser(session.access);
+          if (u && u.email) {
+            setAuthUser(u);
+            setSyncKey("user:" + u.email);
+            try { await idbSet("beetle-sync-key", "user:" + u.email); } catch (e) {}
+          }
+        }
+      } catch (e) { /* 로그인 안 했으면 무시 */ }
     })();
   }, []);
 
@@ -2311,13 +2362,32 @@ function App() {
             </div>
             <div className="mbody">
               <div className="sect">클라우드 동기화 (폰 ↔ PC)</div>
-              <div className="set-desc">동기화 키를 정해두면, 폰에서 올리고 PC에서 같은 키로 불러올 수 있어요. 기기가 바뀌어도 데이터가 안전해요.</div>
-              <input className="in mt" value={syncKey} onChange={(e) => setSyncKey(e.target.value)} placeholder="나만의 동기화 키 (예: beetlelog-2026)" />
+              {authUser ? (
+                <div className="auth-box">
+                  <div className="auth-me">
+                    <span className="auth-dot" />
+                    <div>
+                      <div className="auth-email">{authUser.email}</div>
+                      <div className="auth-stat">구글 로그인됨 · 이 계정으로 동기화돼요</div>
+                    </div>
+                  </div>
+                  <button className="btn ghost sm mt" onClick={async () => { await authSignOut(); setAuthUser(null); setSyncKey(""); try { await idbSet("beetle-sync-key", ""); } catch (e) {} say("로그아웃됐어요"); }}>로그아웃</button>
+                </div>
+              ) : (
+                <>
+                  <div className="set-desc">구글로 로그인하면 이 계정으로 안전하게 동기화돼요. 기기가 바뀌어도 같은 계정으로 로그인하면 데이터를 그대로 볼 수 있어요.</div>
+                  <button className="btn mt" style={{ width: "100%" }} onClick={authStartGoogle}>구글로 로그인</button>
+                  <div className="set-desc" style={{ marginTop: 14 }}>또는 동기화 키를 직접 정해서 쓸 수도 있어요 (로그인 없이):</div>
+                  <input className="in mt" value={syncKey} onChange={(e) => setSyncKey(e.target.value)} placeholder="나만의 동기화 키 (예: beetlelog-2026)" />
+                </>
+              )}
               <div className="row mt">
                 <button className="btn" style={{ flex: 1 }} disabled={syncBusy} onClick={doUpload}>{syncBusy ? "처리 중…" : "☁︎ 올리기"}</button>
                 <button className="btn primary" style={{ flex: 1 }} disabled={syncBusy} onClick={doDownload}>{syncBusy ? "처리 중…" : "⤓ 불러오기"}</button>
               </div>
-              <div className="set-desc" style={{ marginTop: 8 }}>⚠️ 키는 비밀번호처럼 본인만 알게 하세요. 같은 키를 다른 기기에 입력하면 그 데이터를 받아올 수 있어요.</div>
+              <div className="set-desc" style={{ marginTop: 8 }}>
+                {authUser ? "기기마다 ☁︎올리기 / ⤓불러오기로 최신 데이터를 맞추세요." : "⚠️ 키 방식은 같은 키를 다른 기기에 입력하면 그 데이터를 받아올 수 있어요. 비밀번호처럼 관리하세요."}
+              </div>
 
               <div className="sect" style={{ marginTop: 24 }}>엑셀로 한 번에 등록</div>
               <div className="set-desc">양식을 받아 성충·라인·유충을 정리한 뒤 불러오면 한 번에 등록돼요. 같은 항목(종+관리번호, 라인명+종)은 최신 정보로 갱신하고, 새 항목은 추가해요. 유충의 병갈이 기록은 보존돼요.</div>
