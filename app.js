@@ -1003,11 +1003,12 @@ function collectEvents(data) {
 const EV_COLOR = { bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A", custom: "#5A7A9A", remind: "#C2705F" };
 
 /* ════════════════════ 월별 달력 ════════════════════ */
-function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent }) {
+function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent, onEditEvent }) {
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [sel, setSel] = useState(today());
   const [adding, setAdding] = useState(false);
+  const [editId, setEditId] = useState(null);
   const [draft, setDraft] = useState({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" });
   const events = collectEvents(data);
 
@@ -1077,12 +1078,28 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
               <div className="cal-item-l">{e.label}</div>
               {e.sub && <div className="cal-item-s">{e.sub}</div>}
             </div>
-            {e.customId && <button className="cal-del" onClick={() => onDeleteEvent(e.customId)}>삭제</button>}
+            {e.customId && (
+              <div style={{ display: "flex", gap: 4, flex: "none" }}>
+                <button className="cal-del" style={{ color: "var(--gold-d)" }} onClick={() => {
+                  const c = (data.customEvents || []).find((x) => x.id === e.customId);
+                  if (!c) return;
+                  setEditId(c.id);
+                  setDraft({
+                    title: c.title || "", memo: c.memo || "", date: c.date || sel,
+                    useRemind: !!c.remindDate, remindDate: c.remindDate || "",
+                    remindTitle: c.remindTitle || "", remindMemo: c.remindMemo || "",
+                  });
+                  setAdding(true);
+                }}>수정</button>
+                <button className="cal-del" onClick={() => onDeleteEvent(e.customId)}>삭제</button>
+              </div>
+            )}
           </div>
         ))}
 
         {adding ? (
           <div className="cal-add">
+            {editId && <div className="hint" style={{ marginTop: 0, marginBottom: 10, color: "var(--gold-d)", fontWeight: 700 }}>일정 수정 중</div>}
             <input className="in" placeholder="일정 제목 (예: 온도 점검)" value={draft.title}
               onChange={(e) => setDraft({ ...draft, title: e.target.value })} autoFocus />
             <div className="label" style={{ marginTop: 10, marginBottom: 6 }}>날짜</div>
@@ -1133,7 +1150,7 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
             </div>
 
             <div className="cal-add-btns">
-              <button className="btn ghost sm" onClick={() => { setAdding(false); setDraft({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); }}>취소</button>
+              <button className="btn ghost sm" onClick={() => { setAdding(false); setEditId(null); setDraft({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); }}>취소</button>
               <button className="btn primary sm" onClick={() => {
                 if (!draft.title.trim()) return;
                 if (!draft.date) return;
@@ -1143,9 +1160,10 @@ function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent
                   ev.remindTitle = draft.remindTitle.trim();
                   ev.remindMemo = draft.remindMemo.trim();
                 }
-                onAddEvent(ev);
-                setDraft({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); setAdding(false);
-              }}>추가</button>
+                if (editId) onEditEvent(editId, ev);
+                else onAddEvent(ev);
+                setDraft({ title: "", memo: "", date: today(), useRemind: false, remindDate: "", remindTitle: "", remindMemo: "" }); setAdding(false); setEditId(null);
+              }}>{editId ? "수정 완료" : "추가"}</button>
             </div>
           </div>
         ) : (
@@ -1189,6 +1207,7 @@ function App() {
   const [filter, setFilter] = useState("전체");
   const [tab, setTab] = useState("lines");
   const [speciesFolder, setSpeciesFolder] = useState(null);
+  const [folderBy, setFolderBy] = useState("species");
   const [lineView, setLineView] = useState("card");
   const [infoOpen, setInfoOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1470,6 +1489,7 @@ function App() {
               onOpenLine={(id) => setView({ name: "lineDetail", id })}
               onOpenLarva={(id) => setView({ name: "detail", id })}
               onAddEvent={(ev) => { persist({ ...data, customEvents: [...(data.customEvents || []), { ...ev, id: uid() }] }); say("✓ 일정 추가됨"); }}
+              onEditEvent={(id, ev) => { persist({ ...data, customEvents: (data.customEvents || []).map((c) => c.id === id ? { ...c, ...ev, id } : c) }); say("✓ 일정 수정됨"); }}
               onDeleteEvent={(id) => { persist({ ...data, customEvents: (data.customEvents || []).filter((c) => c.id !== id) }); say("일정 삭제됨"); }} />
           )}
 
@@ -1616,21 +1636,28 @@ function App() {
               </div>
             )}
             {data.parents.length > 0 && (() => {
-              /* 종별 그룹핑: 종 미입력은 '종 미지정'으로 */
+              /* 폴더 기준(종/혈통)으로 그룹핑. 미입력은 '미지정'으로 */
+              const byLabel = folderBy === "line" ? "혈통" : "종";
+              const noneKey = byLabel + " 미지정";
               const groups = {};
               data.parents.forEach((p) => {
-                const key = (p.species || "").trim() || "종 미지정";
+                const key = (folderBy === "line" ? (p.line || "") : (p.species || "")).trim() || noneKey;
                 (groups[key] = groups[key] || []).push(p);
               });
               const groupNames = Object.keys(groups).sort((a, b) => {
-                if (a === "종 미지정") return 1;
-                if (b === "종 미지정") return -1;
+                if (a === noneKey) return 1;
+                if (b === noneKey) return -1;
                 return a.localeCompare(b, "ko");
               });
 
-              /* 종을 선택하지 않았으면 → 종 폴더 목록 */
+              /* 종을 선택하지 않았으면 → 폴더 목록 */
               if (!speciesFolder || !groups[speciesFolder]) {
                 return (
+                  <>
+                    <div className="view-toggle">
+                      <button className={"vt-btn" + (folderBy === "species" ? " on" : "")} onClick={() => { setFolderBy("species"); setSpeciesFolder(null); }}>종별</button>
+                      <button className={"vt-btn" + (folderBy === "line" ? " on" : "")} onClick={() => { setFolderBy("line"); setSpeciesFolder(null); }}>혈통별</button>
+                    </div>
                   <div className="sp-grid">
                     {groupNames.map((gname) => {
                       const list = groups[gname];
@@ -1639,13 +1666,16 @@ function App() {
                       const alive = list.filter((p) => p.status !== "사망").length;
                       return (
                         <div key={gname} className="sp-card" onClick={() => setSpeciesFolder(gname)}>
-                          <div className="sp-name serif">{gname}</div>
-                          <div className="sp-meta">{list.length}마리 · ♂{males} ♀{females}</div>
+                          <div className="sp-card-l">
+                            <div className="sp-name serif">{gname}</div>
+                            <div className="sp-meta">{list.length}마리 · ♂{males} ♀{females}</div>
+                          </div>
                           <div className="sp-go">보기 ›</div>
                         </div>
                       );
                     })}
                   </div>
+                  </>
                 );
               }
 
@@ -1659,7 +1689,7 @@ function App() {
               const females = list.filter((p) => p.sex.includes("암")).length;
               return (
                 <>
-                  <div className="sp-back" onClick={() => setSpeciesFolder(null)}>‹ 종 목록</div>
+                  <div className="sp-back" onClick={() => setSpeciesFolder(null)}>‹ {folderBy === "line" ? "혈통" : "종"} 목록</div>
                   <div className="grp-head">
                     <span className="grp-name serif">{speciesFolder}</span>
                     <span className="grp-cnt">{list.length}마리 · ♂{males} ♀{females}</span>
@@ -2158,7 +2188,7 @@ function App() {
             <div className="mbody">
               <div className="sect">클라우드 동기화 (폰 ↔ PC)</div>
               <div className="set-desc">동기화 키를 정해두면, 폰에서 올리고 PC에서 같은 키로 불러올 수 있어요. 기기가 바뀌어도 데이터가 안전해요.</div>
-              <input className="in mt" value={syncKey} onChange={(e) => setSyncKey(e.target.value)} placeholder="나만의 동기화 키 (예: beetlelog)" />
+              <input className="in mt" value={syncKey} onChange={(e) => setSyncKey(e.target.value)} placeholder="나만의 동기화 키 (예: beetlelog-2026)" />
               <div className="row mt">
                 <button className="btn" style={{ flex: 1 }} disabled={syncBusy} onClick={doUpload}>{syncBusy ? "처리 중…" : "☁︎ 올리기"}</button>
                 <button className="btn primary" style={{ flex: 1 }} disabled={syncBusy} onClick={doDownload}>{syncBusy ? "처리 중…" : "⤓ 불러오기"}</button>
