@@ -844,23 +844,35 @@ function downloadTemplate() {
   const lineRows = [
     { "라인명": "26-A", "부 관리번호": "P-01", "모 관리번호": "P-02", "종": "왕사슴벌레", "산지": "", "산란셋팅일(YYYY-MM-DD)": "", "산란해체일(YYYY-MM-DD)": "", "부화일(YYYY-MM-DD)": "", "온도": "23~25", "장소": "", "메모": "" },
   ];
-  /* 유충 시트 */
+  /* 유충 시트 — 기본정보 + 용화·우화 (한 마리 = 한 줄) */
   const larvaRows = [
-    { "관리번호": "A-01", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "메모": "" },
-    { "관리번호": "A-02", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "메모": "" },
+    { "관리번호": "A-01", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "상태(유충/용화/우화/사망/분양)": "유충", "메모": "",
+      "전용일(YYYY-MM-DD)": "", "용화일(YYYY-MM-DD)": "", "번데기무게(g)": "",
+      "우화일(YYYY-MM-DD)": "", "성충총장(mm)": "", "턱길이(mm)": "", "악폭(mm)": "", "악후(mm)": "", "두폭(mm)": "", "흉폭(mm)": "", "배길이(mm)": "", "우화부전(O/X)": "" },
+    { "관리번호": "A-02", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "상태(유충/용화/우화/사망/분양)": "유충", "메모": "",
+      "전용일(YYYY-MM-DD)": "", "용화일(YYYY-MM-DD)": "", "번데기무게(g)": "",
+      "우화일(YYYY-MM-DD)": "", "성충총장(mm)": "", "턱길이(mm)": "", "악폭(mm)": "", "악후(mm)": "", "두폭(mm)": "", "흉폭(mm)": "", "배길이(mm)": "", "우화부전(O/X)": "" },
+  ];
+  /* 병갈이기록 시트 — 한 마리가 여러 줄 가능 */
+  const bottleRows = [
+    { "관리번호": "A-01", "소속 라인명": "26-A", "병갈이날짜(YYYY-MM-DD)": "2026-03-15", "령": "3령 초기", "유충무게(g)": 18.5, "두폭(mm)": "", "먹이종류(균사/발효톱밥)": "균사", "브랜드": "뿔샵 오오히라", "병용량(cc)": "1400", "다음예정일(YYYY-MM-DD)": "", "메모": "" },
+    { "관리번호": "A-01", "소속 라인명": "26-A", "병갈이날짜(YYYY-MM-DD)": "2026-05-20", "령": "3령 중기", "유충무게(g)": 28.0, "두폭(mm)": "", "먹이종류(균사/발효톱밥)": "균사", "브랜드": "뿔샵 오오히라", "병용량(cc)": "2000", "다음예정일(YYYY-MM-DD)": "", "메모": "" },
   ];
   const guide = [
-    { "안내": "이 파일의 각 시트(성충/라인/유충)를 채운 뒤, 앱 ⚙️설정 → '엑셀 불러오기'로 올리세요." },
+    { "안내": "이 파일의 각 시트(성충/라인/유충/병갈이기록)를 채운 뒤, 앱 ⚙️설정 → '엑셀 불러오기'로 올리세요." },
     { "안내": "예시로 적힌 줄은 지우고 본인 데이터를 넣으세요. 빈 줄은 무시됩니다." },
     { "안내": "라인의 '부/모 관리번호'는 성충 시트의 관리번호와 같아야 연결됩니다." },
     { "안내": "유충의 '소속 라인명'은 라인 시트의 라인명과 같아야 연결됩니다." },
+    { "안내": "병갈이기록 시트: 한 유충이 여러 번 병갈이했으면 줄을 여러 개 적으세요. (관리번호+소속라인으로 유충을 찾습니다)" },
     { "안내": "같은 항목(성충=종+관리번호, 라인=라인명+종, 유충=관리번호+소속라인)은 최신 정보로 갱신됩니다." },
+    { "안내": "병갈이기록은 같은 날짜가 이미 있으면 건너뛰고, 없는 날짜만 추가됩니다." },
     { "안내": "날짜는 2026-03-15 형식으로 적어주세요." },
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(guide), "사용법");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(parentRows), "성충");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lineRows), "라인");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(larvaRows), "유충");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bottleRows), "병갈이기록");
   const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   const xmime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   return deliverFile(`사육기록_양식.xlsx`, new Blob([out], { type: xmime }), xmime);
@@ -943,25 +955,70 @@ function parseImportXLSX(arrayBuffer, data) {
   lines.forEach((l) => { codeToLineId[l.code] = l.id; });
 
   /* 3) 유충 — 관리번호+소속라인이 같으면 덮어쓰기(병갈이 기록은 보존), 없으면 추가 */
+  const VALID_STATUS = ["유충", "용화", "우화", "사망", "분양"];
+  /* 용화/우화 정보를 행에서 뽑아오기 (값 있는 것만) */
+  const readPupation = (row, old) => {
+    const pre = str(row["전용일(YYYY-MM-DD)"]), pup = str(row["용화일(YYYY-MM-DD)"]), pw = str(row["번데기무게(g)"]);
+    if (!pre && !pup && !pw) return old || null;
+    return { prepupaDate: pre || (old && old.prepupaDate) || "", pupaDate: pup || (old && old.pupaDate) || "", pupaWeight: pw || (old && old.pupaWeight) || "", memo: (old && old.memo) || "" };
+  };
+  const readEclosion = (row, old) => {
+    const d = str(row["우화일(YYYY-MM-DD)"]), tl = str(row["성충총장(mm)"]);
+    const jl = str(row["턱길이(mm)"]), jw = str(row["악폭(mm)"]), jt = str(row["악후(mm)"]);
+    const hw = str(row["두폭(mm)"]), tw = str(row["흉폭(mm)"]), ab = str(row["배길이(mm)"]), df = str(row["우화부전(O/X)"]);
+    if (!d && !tl && !jl && !jw && !jt && !hw && !tw && !ab) return old || null;
+    return {
+      date: d || (old && old.date) || "", totalLength: tl || (old && old.totalLength) || "",
+      jawLength: jl || (old && old.jawLength) || "", jawWidth: jw || (old && old.jawWidth) || "", jawThick: jt || (old && old.jawThick) || "",
+      headWidth: hw || (old && old.headWidth) || "", thoraxWidth: tw || (old && old.thoraxWidth) || "", abdomenLength: ab || (old && old.abdomenLength) || "",
+      defect: df ? /O/i.test(df) : (old ? old.defect : false), memo: (old && old.memo) || "",
+    };
+  };
   sheet("유충").forEach((row) => {
     const code = str(row["관리번호"]);
     const lineCode = str(row["소속 라인명"]);
     if (!code) return;
     const lineId = codeToLineId[lineCode];
     if (!lineId) { report.skipped++; return; } /* 라인 못 찾으면 건너뜀 */
+    const st = str(row["상태(유충/용화/우화/사망/분양)"]);
     const existing = individuals.find((i) => i.lineId === lineId && i.code === code);
     if (existing) {
       if (str(row["성별(수컷/암컷/미구분)"])) existing.sex = sexNorm(row["성별(수컷/암컷/미구분)"]);
       existing.memo = keep(row["메모"], existing.memo);
-      /* bottleRecords / pupation / eclosion 은 건드리지 않음 */
+      if (VALID_STATUS.includes(st)) existing.status = st;
+      existing.pupation = readPupation(row, existing.pupation);
+      existing.eclosion = readEclosion(row, existing.eclosion);
+      /* bottleRecords 는 병갈이기록 시트에서 따로 처리 */
       report.larvaeUpd++;
     } else {
       individuals.push({
         id: uid(), code, lineId, sex: sexNorm(row["성별(수컷/암컷/미구분)"]),
-        status: "유충", memo: str(row["메모"]), bottleRecords: [], pupation: null, eclosion: null,
+        status: VALID_STATUS.includes(st) ? st : "유충", memo: str(row["메모"]),
+        bottleRecords: [], pupation: readPupation(row, null), eclosion: readEclosion(row, null),
       });
       report.larvaeNew++;
     }
+  });
+
+  /* 4) 병갈이기록 — 관리번호+소속라인으로 유충 찾아서, 없는 날짜만 추가 */
+  report.bottleNew = 0;
+  sheet("병갈이기록").forEach((row) => {
+    const code = str(row["관리번호"]);
+    const lineCode = str(row["소속 라인명"]);
+    const date = str(row["병갈이날짜(YYYY-MM-DD)"]);
+    if (!code || !date) return;
+    const lineId = codeToLineId[lineCode];
+    if (!lineId) { report.skipped++; return; }
+    const ind = individuals.find((i) => i.lineId === lineId && i.code === code);
+    if (!ind) { report.skipped++; return; }
+    if (!Array.isArray(ind.bottleRecords)) ind.bottleRecords = [];
+    if (ind.bottleRecords.some((r) => r.date === date)) return; /* 같은 날짜 이미 있으면 건너뜀 */
+    ind.bottleRecords.push({
+      id: uid(), date, instar: str(row["령"]), weight: str(row["유충무게(g)"]), headWidth: str(row["두폭(mm)"]),
+      feedType: str(row["먹이종류(균사/발효톱밥)"]) || "균사", feedBrand: str(row["브랜드"]),
+      bottleSize: str(row["병용량(cc)"]), nextDate: str(row["다음예정일(YYYY-MM-DD)"]), memo: str(row["메모"]), flags: [],
+    });
+    report.bottleNew++;
   });
 
   return { next: { ...data, parents, lines, individuals }, report };
@@ -1397,14 +1454,16 @@ function App() {
         const { next, report } = parseImportXLSX(reader.result, data);
         const totalNew = report.parentsNew + report.linesNew + report.larvaeNew;
         const totalUpd = report.parentsUpd + report.linesUpd + report.larvaeUpd;
-        if (totalNew + totalUpd === 0) {
-          say(report.skipped > 0 ? "라인을 못 찾아 건너뛴 유충만 있어요" : "⚠️ 양식에서 데이터를 찾지 못했어요");
+        const bottleNew = report.bottleNew || 0;
+        if (totalNew + totalUpd + bottleNew === 0) {
+          say(report.skipped > 0 ? "라인/유충을 못 찾아 건너뛴 항목만 있어요" : "⚠️ 양식에서 데이터를 찾지 못했어요");
           return;
         }
         persist(next);
         const parts = [];
         if (totalNew) parts.push(`신규 ${totalNew}`);
         if (totalUpd) parts.push(`갱신 ${totalUpd}`);
+        if (bottleNew) parts.push(`병갈이 ${bottleNew}`);
         say(`✓ ${parts.join(" · ")}${report.skipped ? ` · ${report.skipped} 건너뜀` : ""}`);
         setSettingsOpen(false);
       } catch (err) { say("⚠️ 엑셀을 읽지 못했어요 — 양식 파일이 맞는지 확인해주세요"); }
