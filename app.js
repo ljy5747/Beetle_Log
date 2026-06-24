@@ -833,49 +833,114 @@ function exportXLSX(data) {
 }
 
 /* ════════════════════ 엑셀 가져오기 양식 다운로드 ════════════════════ */
-function downloadTemplate() {
-  const wb = XLSX.utils.book_new();
-  /* 성충 시트 */
-  const parentRows = [
-    { "관리번호": "P-01", "성별(수컷/암컷)": "수컷", "종": "왕사슴벌레", "혈통": "", "산지": "", "총장(mm)": 85.5, "턱길이(mm)": "", "흉폭(mm)": "", "우화일(YYYY-MM-DD)": "", "입수처": "샵명", "메모": "" },
-    { "관리번호": "P-02", "성별(수컷/암컷)": "암컷", "종": "왕사슴벌레", "혈통": "", "산지": "", "총장(mm)": 52.0, "턱길이(mm)": "", "흉폭(mm)": "", "우화일(YYYY-MM-DD)": "", "입수처": "", "메모": "" },
-  ];
-  /* 라인 시트 */
-  const lineRows = [
-    { "라인명": "26-A", "부 관리번호": "P-01", "모 관리번호": "P-02", "종": "왕사슴벌레", "산지": "", "산란셋팅일(YYYY-MM-DD)": "", "산란해체일(YYYY-MM-DD)": "", "부화일(YYYY-MM-DD)": "", "온도": "23~25", "장소": "", "메모": "" },
-  ];
-  /* 유충 시트 — 기본정보 + 용화·우화 (한 마리 = 한 줄) */
-  const larvaRows = [
-    { "관리번호": "A-01", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "상태(유충/용화/우화/사망/분양)": "유충", "메모": "",
-      "전용일(YYYY-MM-DD)": "", "용화일(YYYY-MM-DD)": "", "번데기무게(g)": "",
-      "우화일(YYYY-MM-DD)": "", "성충총장(mm)": "", "턱길이(mm)": "", "악폭(mm)": "", "악후(mm)": "", "두폭(mm)": "", "흉폭(mm)": "", "배길이(mm)": "", "우화부전(O/X)": "" },
-    { "관리번호": "A-02", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "상태(유충/용화/우화/사망/분양)": "유충", "메모": "",
-      "전용일(YYYY-MM-DD)": "", "용화일(YYYY-MM-DD)": "", "번데기무게(g)": "",
-      "우화일(YYYY-MM-DD)": "", "성충총장(mm)": "", "턱길이(mm)": "", "악폭(mm)": "", "악후(mm)": "", "두폭(mm)": "", "흉폭(mm)": "", "배길이(mm)": "", "우화부전(O/X)": "" },
-  ];
-  /* 병갈이기록 시트 — 한 마리가 여러 줄 가능 */
-  const bottleRows = [
-    { "관리번호": "A-01", "소속 라인명": "26-A", "병갈이날짜(YYYY-MM-DD)": "2026-03-15", "령": "3령 초기", "유충무게(g)": 18.5, "두폭(mm)": "", "먹이종류(균사/발효톱밥)": "균사", "브랜드": "뿔샵 오오히라", "병용량(cc)": "1400", "다음예정일(YYYY-MM-DD)": "", "메모": "" },
-    { "관리번호": "A-01", "소속 라인명": "26-A", "병갈이날짜(YYYY-MM-DD)": "2026-05-20", "령": "3령 중기", "유충무게(g)": 28.0, "두폭(mm)": "", "먹이종류(균사/발효톱밥)": "균사", "브랜드": "뿔샵 오오히라", "병용량(cc)": "2000", "다음예정일(YYYY-MM-DD)": "", "메모": "" },
-  ];
-  const guide = [
-    { "안내": "이 파일의 각 시트(성충/라인/유충/병갈이기록)를 채운 뒤, 앱 ⚙️설정 → '엑셀 불러오기'로 올리세요." },
-    { "안내": "예시로 적힌 줄은 지우고 본인 데이터를 넣으세요. 빈 줄은 무시됩니다." },
-    { "안내": "라인의 '부/모 관리번호'는 성충 시트의 관리번호와 같아야 연결됩니다." },
-    { "안내": "유충의 '소속 라인명'은 라인 시트의 라인명과 같아야 연결됩니다." },
-    { "안내": "병갈이기록 시트: 한 유충이 여러 번 병갈이했으면 줄을 여러 개 적으세요. (관리번호+소속라인으로 유충을 찾습니다)" },
-    { "안내": "같은 항목(성충=종+관리번호, 라인=라인명+종, 유충=관리번호+소속라인)은 최신 정보로 갱신됩니다." },
-    { "안내": "병갈이기록은 같은 날짜가 이미 있으면 건너뛰고, 없는 날짜만 추가됩니다." },
-    { "안내": "날짜는 2026-03-15 형식으로 적어주세요." },
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(guide), "사용법");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(parentRows), "성충");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lineRows), "라인");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(larvaRows), "유충");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bottleRows), "병갈이기록");
-  const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+async function downloadTemplate() {
+  /* 드롭다운 목록 준비 */
+  const speciesOpts = SPECIES;
+  const sexParent = ["수컷", "암컷"];
+  const sexLarva = ["수컷", "암컷", "미구분"];
+  const statusOpts = ["유충", "용화", "우화", "사망", "분양"];
+  const instarOpts = INSTARS;
+  const feedTypeOpts = FEED_TYPES;
+  const bottleOpts = BOTTLES;
+  /* 균사+톱밥 브랜드를 "샵 제품" 형태로 합치기 */
+  const brandOpts = [];
+  Object.keys(FEED_PRODUCTS || {}).forEach((cat) => {
+    (FEED_PRODUCTS[cat] || []).forEach((g) => {
+      (g.items || []).forEach((it) => brandOpts.push(`${g.shop} ${it}`));
+    });
+  });
+  /* 엑셀 드롭다운은 목록 문자열이 255자를 넘으면 깨지므로, 숨김 시트에 목록을 넣고 범위로 참조 */
+  const wb = new ExcelJS.Workbook();
+
+  /* 숨김 시트: 드롭다운 원본 목록 */
+  const listSheet = wb.addWorksheet("목록");
+  const lists = {
+    종: speciesOpts, 성별P: sexParent, 성별L: sexLarva, 상태: statusOpts,
+    령: instarOpts, 먹이종류: feedTypeOpts, 병용량: bottleOpts, 브랜드: brandOpts,
+  };
+  const colNames = Object.keys(lists);
+  colNames.forEach((name, ci) => {
+    const colLetter = String.fromCharCode(65 + ci); /* A, B, C... */
+    listSheet.getCell(`${colLetter}1`).value = name;
+    lists[name].forEach((v, ri) => { listSheet.getCell(`${colLetter}${ri + 2}`).value = v; });
+  });
+  const rangeOf = (name) => {
+    const ci = colNames.indexOf(name);
+    const colLetter = String.fromCharCode(65 + ci);
+    return `목록!$${colLetter}$2:$${colLetter}$${lists[name].length + 1}`;
+  };
+  listSheet.state = "veryHidden"; /* 사용자에게 안 보이게 */
+
+  /* 드롭다운을 특정 열에 N행까지 적용하는 헬퍼 */
+  const ROWS = 200;
+  const applyDV = (ws, colLetter, listName) => {
+    for (let r = 2; r <= ROWS; r++) {
+      ws.getCell(`${colLetter}${r}`).dataValidation = {
+        type: "list", allowBlank: true, formulae: [rangeOf(listName)],
+      };
+    }
+  };
+
+  /* 헤더만 채우고 시트 만들기 */
+  const makeSheet = (name, headers) => {
+    const ws = wb.addWorksheet(name);
+    ws.addRow(headers);
+    ws.getRow(1).font = { bold: true };
+    headers.forEach((h, i) => { ws.getColumn(i + 1).width = Math.max(12, Math.min(22, h.length + 4)); });
+    return ws;
+  };
+  const colL = (i) => String.fromCharCode(65 + i); /* 0→A */
+
+  /* 사용법 */
+  const guide = wb.addWorksheet("사용법");
+  [
+    ["이 파일의 각 시트(성충/라인/유충/병갈이기록)를 채운 뒤, 앱 ⚙️설정 → '엑셀 불러오기'로 올리세요."],
+    ["색 있는 칸(종·성별·상태·령·먹이종류·브랜드·병용량)은 셀을 누르면 ▼ 목록에서 고를 수 있어요. (PC 엑셀 권장)"],
+    ["라인의 '부/모 관리번호'는 성충 시트의 관리번호와 같아야 연결됩니다."],
+    ["유충의 '소속 라인명'은 라인 시트의 라인명과 같아야 연결됩니다."],
+    ["병갈이기록: 한 유충이 여러 번 병갈이했으면 줄을 여러 개 적으세요(관리번호+소속라인으로 찾음)."],
+    ["같은 항목은 최신 정보로 갱신됩니다. 병갈이는 같은 날짜면 건너뜁니다."],
+    ["날짜는 2026-03-15 형식으로 적어주세요."],
+  ].forEach((r) => guide.addRow(r));
+  guide.getColumn(1).width = 80;
+
+  /* 성충 */
+  const pHeaders = ["관리번호", "성별(수컷/암컷)", "종", "혈통", "산지", "총장(mm)", "턱길이(mm)", "악폭(mm)", "악후(mm)", "흉폭(mm)", "우화일(YYYY-MM-DD)", "입수처", "메모"];
+  const pWs = makeSheet("성충", pHeaders);
+  pWs.addRow(["P-01", "수컷", "왕사슴벌레(극태)", "", "", 85.5, "", "", "", "", "", "샵명", ""]);
+  pWs.addRow(["P-02", "암컷", "왕사슴벌레(극태)", "", "", 52.0, "", "", "", "", "", "", ""]);
+  applyDV(pWs, colL(pHeaders.indexOf("성별(수컷/암컷)")), "성별P");
+  applyDV(pWs, colL(pHeaders.indexOf("종")), "종");
+
+  /* 라인 */
+  const lHeaders = ["라인명", "부 관리번호", "모 관리번호", "종", "산지", "산란셋팅일(YYYY-MM-DD)", "산란해체일(YYYY-MM-DD)", "부화일(YYYY-MM-DD)", "온도", "장소", "메모"];
+  const lWs = makeSheet("라인", lHeaders);
+  lWs.addRow(["26-A", "P-01", "P-02", "왕사슴벌레(극태)", "", "", "", "", "23~25", "", ""]);
+  applyDV(lWs, colL(lHeaders.indexOf("종")), "종");
+
+  /* 유충 */
+  const gHeaders = ["관리번호", "소속 라인명", "성별(수컷/암컷/미구분)", "상태(유충/용화/우화/사망/분양)", "메모",
+    "전용일(YYYY-MM-DD)", "용화일(YYYY-MM-DD)", "번데기무게(g)",
+    "우화일(YYYY-MM-DD)", "성충총장(mm)", "턱길이(mm)", "악폭(mm)", "악후(mm)", "두폭(mm)", "흉폭(mm)", "배길이(mm)", "우화부전(O/X)"];
+  const gWs = makeSheet("유충", gHeaders);
+  gWs.addRow(["A-01", "26-A", "미구분", "유충", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
+  gWs.addRow(["A-02", "26-A", "미구분", "유충", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
+  applyDV(gWs, colL(gHeaders.indexOf("성별(수컷/암컷/미구분)")), "성별L");
+  applyDV(gWs, colL(gHeaders.indexOf("상태(유충/용화/우화/사망/분양)")), "상태");
+
+  /* 병갈이기록 */
+  const bHeaders = ["관리번호", "소속 라인명", "병갈이날짜(YYYY-MM-DD)", "령", "유충무게(g)", "두폭(mm)", "먹이종류(균사/발효톱밥)", "브랜드", "병용량(cc)", "다음예정일(YYYY-MM-DD)", "메모"];
+  const bWs = makeSheet("병갈이기록", bHeaders);
+  bWs.addRow(["A-01", "26-A", "2026-03-15", "3령 초기", 18.5, "", "균사", "뿔샵 오오히라", "1400", "", ""]);
+  bWs.addRow(["A-01", "26-A", "2026-05-20", "3령 중기", 28.0, "", "균사", "뿔샵 오오히라", "2000", "", ""]);
+  applyDV(bWs, colL(bHeaders.indexOf("령")), "령");
+  applyDV(bWs, colL(bHeaders.indexOf("먹이종류(균사/발효톱밥)")), "먹이종류");
+  applyDV(bWs, colL(bHeaders.indexOf("브랜드")), "브랜드");
+  applyDV(bWs, colL(bHeaders.indexOf("병용량(cc)")), "병용량");
+
+  const buf = await wb.xlsx.writeBuffer();
   const xmime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  return deliverFile(`사육기록_양식.xlsx`, new Blob([out], { type: xmime }), xmime);
+  return deliverFile(`사육기록_양식.xlsx`, new Blob([buf], { type: xmime }), xmime);
 }
 
 /* 엑셀 파일 → 데이터 객체로 파싱 (성충/라인/유충 추가) */
@@ -2256,7 +2321,7 @@ function App() {
 
               <div className="sect" style={{ marginTop: 24 }}>엑셀로 한 번에 등록</div>
               <div className="set-desc">양식을 받아 성충·라인·유충을 정리한 뒤 불러오면 한 번에 등록돼요. 같은 항목(종+관리번호, 라인명+종)은 최신 정보로 갱신하고, 새 항목은 추가해요. 유충의 병갈이 기록은 보존돼요.</div>
-              <button className="btn mt" style={{ width: "100%" }} onClick={() => { downloadTemplate(); }}>① 엑셀 양식 다운로드</button>
+              <button className="btn mt" style={{ width: "100%" }} onClick={async () => { try { await downloadTemplate(); } catch (e) { say("⚠️ 양식 생성 실패 — 새로고침 후 다시 시도"); } }}>① 엑셀 양식 다운로드</button>
               <button className="btn primary mt" style={{ width: "100%" }} onClick={() => xlsxRef.current?.click()}>② 엑셀 불러오기</button>
               <input ref={xlsxRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={importXLSX} />
 
