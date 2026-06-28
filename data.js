@@ -21,6 +21,8 @@ window.APP_DATA = {
       { shop: "카미나가", items: ["S8", "C3", "루카디아"] },
       { shop: "혜제원", items: ["오오히라", "히라타케"] },
       { shop: "Exceed-craft", items: ["레빈지", "레빈지SP", "GLC"] },
+      { shop: "KB", items: ["AG"] },
+      { shop: "DDA ism", items: ["F-ZERO(참)", "F-ZERO(너도밤)", "G-ZERO", "ZERO-ONE", "K-ZERO"] },
     ],
     "발효톱밥": [
       { shop: "투곤", items: ["투곤A", "투곤B", "투곤C"] },
