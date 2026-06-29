@@ -540,6 +540,53 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose }) {
   );
 }
 
+/* ════════════════════ 번호 일괄 변경 폼 (접두어 바꾸기) ════════════════════ */
+function RenumberForm({ line, larvae, onSave, onClose }) {
+  const splitCode = (code) => {
+    const m = String(code).match(/^(.*?)(\d+)\s*$/); /* 접두어 + 끝 숫자 */
+    return m ? { prefix: m[1], num: m[2] } : { prefix: code, num: "" };
+  };
+  const guessPrefix = (() => {
+    const counts = {};
+    larvae.forEach((i) => { const p = splitCode(i.code).prefix; counts[p] = (counts[p] || 0) + 1; });
+    let best = "", bestN = -1;
+    Object.keys(counts).forEach((p) => { if (counts[p] > bestN) { best = p; bestN = counts[p]; } });
+    return best;
+  })();
+  const [newPrefix, setNewPrefix] = useState(guessPrefix);
+  const sorted = [...larvae].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true }));
+  const preview = sorted.map((i) => {
+    const { num } = splitCode(i.code);
+    const newCode = num ? `${newPrefix}${num}` : `${newPrefix}${i.code}`;
+    return { id: i.id, old: i.code, neu: newCode };
+  });
+  const newCodes = preview.map((p) => p.neu);
+  const dupCode = newCodes.find((c, idx) => newCodes.indexOf(c) !== idx);
+  const save = () => {
+    if (dupCode) return alert(`'${dupCode}' 번호가 겹쳐요. 접두어를 다시 확인해주세요`);
+    onSave(preview.filter((p) => p.old !== p.neu).map((p) => ({ id: p.id, code: p.neu })));
+  };
+  return (
+    <Modal title={`${line.code} 번호 일괄 변경`} onClose={onClose} onSave={save}>
+      <div className="hint" style={{ marginTop: -2, marginBottom: 12 }}>
+        끝 번호(01, 02…)는 그대로 두고 <b>앞부분(접두어)만</b> 한 번에 바꿔요. 예: <b className="mono">A-01</b> → 접두어 <b className="mono">B-</b> → <b className="mono">B-01</b>
+      </div>
+      <F label="새 접두어"><input className="in mono" value={newPrefix} onChange={(e) => setNewPrefix(e.target.value)} placeholder="예: B-" /></F>
+      <div className="sect">변경 미리보기 ({preview.length}마리)</div>
+      <div className="panel" style={{ maxHeight: 280, overflowY: "auto" }}>
+        {preview.map((p) => (
+          <div key={p.id} className="kv-row">
+            <span className="kv-k mono" style={{ width: "auto", flex: 1 }}>{p.old}</span>
+            <span className="dim">→</span>
+            <span className="kv-v mono" style={{ flex: 1, textAlign: "right", color: p.old !== p.neu ? "var(--gold-d)" : "var(--dim)", fontWeight: 700 }}>{p.neu}</span>
+          </div>
+        ))}
+      </div>
+      {dupCode && <div className="hint" style={{ color: "#B4503F" }}>⚠️ '{dupCode}' 번호가 겹쳐요. 접두어를 확인해주세요</div>}
+    </Modal>
+  );
+}
+
 /* ════════════════════ 유충 일괄 추가 폼 ════════════════════ */
 function LarvaAddForm({ line, existingCodes, onSave, onClose }) {
   const nextStart = (() => {
@@ -1526,6 +1573,12 @@ function App() {
     setModal(null); say(`✓ ${news.length}마리 추가됨`);
   };
   const saveLarvaEdit = (f) => { updateInd(modal.indId, f); setModal(null); say("✓ 저장됨"); };
+  const saveRenumber = (changes) => {
+    if (!changes.length) { setModal(null); say("바뀐 번호가 없어요"); return; }
+    const map = Object.fromEntries(changes.map((c) => [c.id, c.code]));
+    persist({ ...data, individuals: data.individuals.map((i) => (map[i.id] ? { ...i, code: map[i.id] } : i)) });
+    setModal(null); say(`✓ ${changes.length}마리 번호 변경됨`);
+  };
   const saveBottle = (f) => {
     let d = rememberBrand(data, f.feedBrand);
     d = {
@@ -2015,6 +2068,9 @@ function App() {
               {kids.some((i) => i.status === "유충") && (
                 <button className="btn" onClick={() => setModal({ type: "bulkBottle", lineId: L.id })}>+ 일괄 병갈이</button>
               )}
+              {kids.length > 0 && (
+                <button className="btn" onClick={() => setModal({ type: "renumber", lineId: L.id })}>번호 변경</button>
+              )}
             </div>
 
             {kids.length > 0 && (
@@ -2323,10 +2379,12 @@ function App() {
                     ["온도", L.temp && L.temp + "℃"], ["장소", L.place], ["메모", cur.memo],
                   ].filter(([, v]) => v).map(([k, v]) => <div key={k} className="kv-row"><span className="kv-k">{k}</span><span className="kv-v">{v}</span></div>)}
                 </div>
-                <ConfirmBtn className="btn danger sm mt" label="이 유충 삭제"
-                  onConfirm={() => { const lid = cur.lineId; persist({ ...data, individuals: data.individuals.filter((i) => i.id !== cur.id) }); setView(lid ? { name: "lineDetail", id: lid } : { name: "list" }); say("삭제됐어요"); }} />
               </div>
             )}
+            <div style={{ marginTop: 22, textAlign: "center" }}>
+              <ConfirmBtn className="btn danger sm" label="이 유충 삭제"
+                onConfirm={() => { const lid = cur.lineId; persist({ ...data, individuals: data.individuals.filter((i) => i.id !== cur.id) }); setView(lid ? { name: "lineDetail", id: lid } : { name: "list" }); say("삭제됐어요"); }} />
+            </div>
             <div style={{ height: 40 }} />
           </>
         );
@@ -2368,6 +2426,12 @@ function App() {
           larvae={larvaeOf(modal.lineId)}
           brands={data.feedBrands}
           onSave={saveBulkBottle} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === "renumber" && (
+        <RenumberForm
+          line={lineById[modal.lineId]}
+          larvae={larvaeOf(modal.lineId)}
+          onSave={saveRenumber} onClose={() => setModal(null)} />
       )}
       {modal?.type === "larvaEdit" && (
         <LarvaEditForm
