@@ -190,6 +190,7 @@ padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inher
 .flag-show{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 .flag-tag{background:#FBF1EE;color:#9A4A3A;border:1px solid #EBD3CC;border-radius:4px;
 padding:2px 9px;font-size:11px;font-weight:700}
+.chip.flag-mini{color:#9A4A3A;border-color:#EBD3CC;background:#FBF1EE}
 
 /* ═══════════ [14] 기본정보 (키-값 줄) ═══════════ */
 .kv-row{display:flex;gap:12px;padding:7px 0;font-size:13.5px;border-bottom:1px solid var(--line2)}
