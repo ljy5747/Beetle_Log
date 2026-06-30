@@ -186,6 +186,10 @@ const latestRec = (ind) => { const s = sortedRecs(ind); return s.length ? s[s.le
 const maxWeight = (ind) => { const ws = (ind.bottleRecords || []).map((r) => num(r.weight)).filter(Boolean); return ws.length ? Math.max(...ws) : null; };
 const reduction = (ind) => { const L = num(ind.eclosion?.totalLength), W = num(ind.pupation?.pupaWeight); return L && W ? L / W : null; };
 const lossRate = (ind) => { const mw = maxWeight(ind), pw = num(ind.pupation?.pupaWeight); return mw && pw ? (1 - pw / mw) * 100 : null; };
+/* 가장 최근 병갈이의 두폭 (없으면 그 이전 기록에서) */
+const lastHeadWidth = (ind) => { const s = sortedRecs(ind).map((r) => num(r.headWidth)).filter(Boolean); return s.length ? s[s.length - 1] : null; };
+/* 병갈이 기록 중 한 번이라도 해당 플래그가 있었는지 */
+const hasFlag = (ind, flag) => (ind.bottleRecords || []).some((r) => (r.flags || []).includes(flag));
 const larvaDays = (ind, line) => {
   const s = line?.hatchDate || line?.breakdownDate;
   const e = ind.pupation?.prepupaDate || ind.pupation?.pupaDate;
@@ -476,7 +480,7 @@ function GrowthRowForm({ initial, brands, onSave, onClose }) {
 }
 
 /* ════════════════════ 라인 등록/수정 폼 ════════════════════ */
-function LineForm({ initial, parents, existingCodes, onSave, onClose }) {
+function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber, hasLarvae }) {
   const [f, setF] = useState(initial || {
     code: "", fatherId: "", motherId: "", species: "", origin: "",
     setDate: "", breakdownDate: "", hatchDate: "", temp: "", place: "", memo: "",
@@ -536,6 +540,13 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose }) {
         <F label="사육 장소" half><input className="in" value={f.place} onChange={(e) => set("place", e.target.value)} placeholder="온장고" /></F>
       </div>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
+      {isEdit && hasLarvae && (
+        <>
+          <div className="sect">유충 관리</div>
+          <button className="btn" style={{ width: "100%" }} onClick={onRenumber}>유충 번호 일괄 변경</button>
+          <div className="hint" style={{ marginTop: 7 }}>이 라인 유충들의 관리번호 앞부분(접두어)을 한 번에 바꿔요. 예: A-01 → B-01</div>
+        </>
+      )}
     </Modal>
   );
 }
@@ -2068,9 +2079,6 @@ function App() {
               {kids.some((i) => i.status === "유충") && (
                 <button className="btn" onClick={() => setModal({ type: "bulkBottle", lineId: L.id })}>+ 일괄 병갈이</button>
               )}
-              {kids.length > 0 && (
-                <button className="btn" onClick={() => setModal({ type: "renumber", lineId: L.id })}>번호 변경</button>
-              )}
             </div>
 
             {kids.length > 0 && (
@@ -2102,6 +2110,8 @@ function App() {
                       <span className={"tag mono" + (dead ? " strike" : "")}>{ind.code}</span>
                       <span className="chip" style={{ color: STATUS_COLOR[ind.status], borderColor: STATUS_COLOR[ind.status] + "55" }}>{ind.status}</span>
                       {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
+                      {hasFlag(ind, "거식") && <span className="chip flag-mini">거식</span>}
+                      {hasFlag(ind, "원더링") && <span className="chip flag-mini">원더링</span>}
                     </div>
                     <div className="card-sub">{[ind.sex !== "미구분" ? ind.sex : null, lr ? `최근 ${shortDate(lr.date)}` : null].filter(Boolean).join(" · ") || "기록 전"}</div>
                     <div className="card-val mono">
@@ -2257,7 +2267,7 @@ function App() {
       {view.name === "detail" && cur && (() => {
         const L = lineById[cur.lineId] || {};
         const recs = sortedRecs(cur);
-        const mw = maxWeight(cur), red = reduction(cur), loss = lossRate(cur), ld = larvaDays(cur, L);
+        const mw = maxWeight(cur), red = reduction(cur), ld = larvaDays(cur, L);
         return (
           <>
             <div className="topbar">
@@ -2275,7 +2285,7 @@ function App() {
               <div className="stat"><div className="s-l">번데기 무게</div><div className="s-v mono">{num(cur.pupation?.pupaWeight) ? n1(num(cur.pupation.pupaWeight)) + "g" : "—"}</div></div>
               <div className="stat"><div className="s-l">성충 총장</div><div className="s-v mono">{num(cur.eclosion?.totalLength) ? n1(num(cur.eclosion.totalLength)) + "mm" : "—"}</div></div>
               <div className="stat hl"><div className="s-l">환원율</div><div className="s-v mono">{red ? n2(red) : "—"}</div></div>
-              <div className="stat"><div className="s-l">로스율</div><div className="s-v mono">{loss != null ? n1(loss) + "%" : "—"}</div></div>
+              <div className="stat"><div className="s-l">두폭</div><div className="s-v mono">{lastHeadWidth(cur) ? n1(lastHeadWidth(cur)) + "mm" : "—"}</div></div>
               <div className="stat"><div className="s-l">유충 기간</div><div className="s-v mono">{ld != null ? ld + "일" : "—"}</div></div>
             </div>
 
@@ -2413,6 +2423,8 @@ function App() {
           initial={modal.editId ? data.lines.find((l) => l.id === modal.editId) : null}
           parents={data.parents}
           existingCodes={data.lines.map((l) => l.code)}
+          hasLarvae={modal.editId ? larvaeOf(modal.editId).length > 0 : false}
+          onRenumber={() => setModal({ type: "renumber", lineId: modal.editId })}
           onSave={saveLine} onClose={() => setModal(null)} />
       )}
       {modal?.type === "larvaAdd" && (
