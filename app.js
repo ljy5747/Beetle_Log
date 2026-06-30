@@ -2120,7 +2120,8 @@ function App() {
                       ) : lr && num(lr.weight) ? (
                         <>{n1(num(lr.weight))}<small>g</small>
                           {dl != null && <em className={dl >= 0 ? "up" : "down"}> {dl >= 0 ? "▲" : "▼"}{n1(Math.abs(dl))}</em>}
-                          {mw && num(lr.weight) < mw && <em> 최대 {n1(mw)}g</em>}</>
+                          {mw && num(lr.weight) < mw && <em> 최대 {n1(mw)}g</em>}
+                          {lastHeadWidth(ind) && <em> 두폭 {n1(lastHeadWidth(ind))}</em>}</>
                       ) : <span className="dim">기록 없음</span>}
                     </div>
                   </div>
