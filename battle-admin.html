@@ -73,7 +73,7 @@ var SUPA_ANON = "sb_publishable_IwNmQESmOgj-DHR0sxOIlw_4EKsa4wu";
 
 var TOKEN_KEY = "battle-admin-token";
 var PAGE_URL = location.origin + location.pathname;
-var TEAM_COLORS = { A: "#A8884F", B: "#6E8494" };
+var TEAM_COLORS = { A: "#C43B32", B: "#3E7FB0" };
 
 /* ══════════ 유틸 ══════════ */
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -163,21 +163,23 @@ var S = null; /* {title, subtitle, season, rounds[], teams{}, breeders[{name,tea
 var userEmail = "";
 
 function defaultState() {
-  var bs = [];
-  for (var i = 1; i <= 8; i++) bs.push({ name: "참가자" + i, team: i <= 4 ? "A" : "B", text: "" });
+  var roster = [
+    ["피눈물", "A"], ["슈퍼맨", "A"], ["일팜이", "A"], ["창원한토리", "A"],
+    ["한테란", "B"], ["천궁", "B"], ["디디", "B"], ["매미킴", "B"],
+  ];
   return {
-    title: "왕사슴벌레 4 : 4 배틀",
-    subtitle: "성충 총장 · 브리더별 암수 평균 승부",
-    season: "2026 시즌",
+    title: "국균연구소 2026 체장왕전",
+    subtitle: "최장의 체장을 가리는 단 하나의 전쟁",
+    season: "體長王戰",
     rounds: ["1병"],
-    teams: { A: { name: "팀 A", color: TEAM_COLORS.A }, B: { name: "팀 B", color: TEAM_COLORS.B } },
-    breeders: bs,
+    teams: { A: { name: "팀 피눈물", color: TEAM_COLORS.A }, B: { name: "팀 한테란", color: TEAM_COLORS.B } },
+    breeders: roster.map(function (r) { return { name: r[0], team: r[1], text: "" }; }),
   };
 }
 function stateFromData(B) {
   if (!B || !B.breeders || !B.breeders.length) return defaultState();
   return {
-    title: B.title || "왕사슴벌레 4 : 4 배틀",
+    title: B.title || "국균연구소 2026 체장왕전",
     subtitle: B.subtitle || "",
     season: B.season || "",
     rounds: (B.rounds && B.rounds.length ? B.rounds : ["1병"]).slice(),
@@ -207,9 +209,10 @@ function renderForm() {
     + '<div class="brand">Battle <span style="font-style:italic">admin</span><small>' + esc(userEmail || "로그인됨") + '</small></div>'
     + '<button class="hbtn" id="logoutBtn">로그아웃</button></div>';
 
-  html += '<div class="guide">✍️ 유충은 <b>한 줄에 한 마리</b>씩:<br/>'
+  html += '<div class="guide">✍️ 유충은 <b>한 줄에 한 마리</b>씩 · 인당 <b>10두</b>:<br/>'
     + '<b>번호 성별 무게1 무게2 …</b> — 예) <b>01 수 9.4 14.2</b><br/>'
-    + '빠진 라운드는 <b>-</b> , 우화하면 맨 뒤에 <b>82.5mm</b> 처럼 추가</div>';
+    + '빠진 라운드는 <b>-</b> , 우화하면 맨 뒤에 체장 <b>82.5mm</b> 추가<br/>'
+    + '<span style="color:#8A7A55">최고 암/수 1두씩은 자동 선발돼요 — 따로 표시 안 해도 됩니다</span></div>';
 
   html += '<div class="sect">기본 설정</div><div class="panel">'
     + '<div class="field"><div class="label">배틀 이름</div><input class="in" id="f-title" value="' + esc(S.title) + '"/></div>'
@@ -220,8 +223,8 @@ function renderForm() {
     + '<input class="in mono" id="f-rounds" value="' + esc(S.rounds.join(", ")) + '"/>'
     + '<div class="hint">병갈이 하면 여기에 추가 — 예: <b>1병, 2병</b></div></div>'
     + '<div class="row">'
-    + '<div class="field"><div class="label">팀 A 이름</div><input class="in" id="f-ta" value="' + esc(S.teams.A ? S.teams.A.name : "팀 A") + '"/></div>'
-    + '<div class="field"><div class="label">팀 B 이름</div><input class="in" id="f-tb" value="' + esc(S.teams.B ? S.teams.B.name : "팀 B") + '"/></div></div>'
+    + '<div class="field"><div class="label">팀 1 이름</div><input class="in" id="f-ta" value="' + esc(S.teams.A ? S.teams.A.name : "팀 A") + '"/></div>'
+    + '<div class="field"><div class="label">팀 2 이름</div><input class="in" id="f-tb" value="' + esc(S.teams.B ? S.teams.B.name : "팀 B") + '"/></div></div>'
     + '</div>';
 
   html += '<div class="sect">참가자 ' + S.breeders.length + '명</div>';
@@ -230,8 +233,8 @@ function renderForm() {
       + '<div class="bhead">'
       + '<input class="in name" id="b-name-' + i + '" value="' + esc(br.name) + '" placeholder="이름"/>'
       + '<select class="in team" id="b-team-' + i + '">'
-      + '<option value="A"' + (br.team !== "B" ? " selected" : "") + '>팀 A</option>'
-      + '<option value="B"' + (br.team === "B" ? " selected" : "") + '>팀 B</option></select>'
+      + '<option value="A"' + (br.team !== "B" ? " selected" : "") + '>' + esc(S.teams.A ? S.teams.A.name : "팀 A") + '</option>'
+      + '<option value="B"' + (br.team === "B" ? " selected" : "") + '>' + esc(S.teams.B ? S.teams.B.name : "팀 B") + '</option></select>'
       + '<button class="bdel" id="b-del-' + i + '" title="삭제">✕</button></div>'
       + '<textarea class="in" id="b-text-' + i + '" placeholder="01 수 9.4&#10;02 암 5.8">' + esc(br.text) + '</textarea>'
       + '<div class="pv" id="b-pv-' + i + '"></div>'
@@ -278,7 +281,7 @@ function updatePreview(i) {
   r.larvae.forEach(function (l) { cnt[l[1]] = (cnt[l[1]] || 0) + 1; });
   var elm = $("b-pv-" + i);
   var head = r.larvae.length
-    ? '<span class="ok">✓ ' + r.larvae.length + "마리</span> · 수 " + cnt["수"] + " / 암 " + cnt["암"] + (cnt[""] ? " / 미구분 " + cnt[""] : "")
+    ? '<span class="' + (r.larvae.length === 10 ? "ok" : "") + '">' + (r.larvae.length === 10 ? "✓ " : "") + r.larvae.length + "/10두</span> · 수 " + cnt["수"] + " / 암 " + cnt["암"] + (cnt[""] ? " / 미구분 " + cnt[""] : "")
     : '<span style="color:var(--dim)">데이터 없음</span>';
   elm.innerHTML = head + r.errors.map(function (e) { return '<span class="err">⚠️ ' + esc(e) + "</span>"; }).join("");
 }
