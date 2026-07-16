@@ -136,6 +136,7 @@ font-family:"Times New Roman",Georgia,serif;font-style:italic;font-size:19px}
 .chart-tbl{overflow-x:auto;margin-top:10px;border-top:1px solid var(--line2);padding-top:8px}
 .chart-tbl table{min-width:100%}
 .dt{color:var(--gold-l);font-weight:700}
+.u{color:#6E6559;font-size:9.5px;margin-left:1px}
 
 /* ── 상세 ── */
 details{background:var(--surf);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden}
@@ -384,7 +385,8 @@ function chart(series,rounds,unit,cid){
     +series.map(function(sr){return '<th>'+esc(sr.name)+'</th>';}).join("")+'</tr>';
   rounds.forEach(function(r,i){
     s+='<tr><td><span class="dt">'+esc(r.name)+'</span>'+(r.date?' <span style="color:#6E6559;font-size:11px">'+esc(shortDate(r.date))+'</span>':"")+'</td>'
-      +series.map(function(sr){var v=sr.vals[i];return '<td class="mono">'+(v!=null?n1(v):"·")+'</td>';}).join("")+'</tr>';
+      +series.map(function(sr){var v=sr.vals[i];
+        return '<td class="mono">'+(v!=null?n1(v)+'<span class="u">'+esc(unit)+'</span>':"·")+'</td>';}).join("")+'</tr>';
   });
   s+='</table></div>';
   return s;
@@ -505,7 +507,7 @@ function render(B){
         .map(function(l){return num(l.weights[i]);}).filter(function(v){return v!=null;});
     };
     var charts=[
-      ["가장 무거운 유충","각 브리더의 라운드별 최고 무게",function(br,i){var a=wAt(br,i);return a.length?Math.max.apply(null,a):null;}],
+      ["최고 무게 유충","각 브리더의 라운드별 최고 무게",function(br,i){var a=wAt(br,i);return a.length?Math.max.apply(null,a):null;}],
       ["수컷 유충 평균","♂ 개체들의 라운드별 평균",function(br,i){return avg(wAt(br,i,"m"));}],
       ["암컷 유충 평균","♀ 개체들의 라운드별 평균",function(br,i){return avg(wAt(br,i,"f"));}],
     ];
