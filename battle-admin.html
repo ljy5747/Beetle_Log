@@ -253,7 +253,7 @@ function defaultState(){
 }
 function blankBreeder(name,team){
   return {name:name||"",team:team||"A",photo:"",
-    line:{blood:"",male:{size:"",photo:""},female:{size:""}},text:""};
+    line:{male:{size:"",photo:"",blood:""},female:{size:"",blood:""}},text:""};
 }
 function stateFromData(B){
   if(!B||!B.breeders||!B.breeders.length)return defaultState();
@@ -265,11 +265,12 @@ function stateFromData(B){
     }),
     teams:B.teams||d.teams,
     breeders:B.breeders.map(function(br){
-      var L=br.line||{};
+      var L=br.line||{},M=L.male||{},F=L.female||{};
+      var mb=M.blood||"",fb=F.blood||"";
+      if(!mb&&!fb&&L.blood)mb=L.blood;   /* 옛 공통 혈통 → ♂ 칸으로 */
       return {name:br.name||"",team:br.team==="B"?"B":"A",photo:br.photo||"",
-        line:{blood:L.blood||"",
-          male:{size:(L.male&&L.male.size)||"",photo:(L.male&&L.male.photo)||""},
-          female:{size:(L.female&&L.female.size)||""}},
+        line:{male:{size:M.size||"",photo:M.photo||"",blood:mb},
+              female:{size:F.size||"",blood:fb}},
         text:larvaeToText(br.larvae)};
     }),
   };
@@ -336,10 +337,12 @@ function renderForm(){
       +'<div class="pfields"><div class="ptitle">종충 정보</div>'
       +'<div class="row"><div class="field"><div class="label">♂ 사이즈 mm</div>'
       +'<input class="in mono" inputmode="decimal" id="p-m-'+i+'" value="'+esc(L.male.size)+'" placeholder="82.5"/></div>'
-      +'<div class="field"><div class="label">♀ 사이즈 mm</div>'
-      +'<input class="in mono" inputmode="decimal" id="p-f-'+i+'" value="'+esc(L.female.size)+'" placeholder="48.3"/></div></div>'
-      +'<div class="field"><div class="label">혈통</div>'
-      +'<input class="in" id="p-b-'+i+'" value="'+esc(L.blood)+'" placeholder="예) 능걸산 WD 직자"/></div>'
+      +'<div class="field"><div class="label">♂ 혈통</div>'
+      +'<input class="in" id="p-mb-'+i+'" value="'+esc(L.male.blood)+'" placeholder="능걸산 WD"/></div></div>'
+      +'<div class="row"><div class="field"><div class="label">♀ 사이즈 mm</div>'
+      +'<input class="in mono" inputmode="decimal" id="p-f-'+i+'" value="'+esc(L.female.size)+'" placeholder="48.3"/></div>'
+      +'<div class="field"><div class="label">♀ 혈통</div>'
+      +'<input class="in" id="p-fb-'+i+'" value="'+esc(L.female.blood)+'" placeholder="자가 F2"/></div></div>'
       +'</div></div>'
 
       +'<textarea class="in" id="b-text-'+i+'" placeholder="01 수 9.4&#10;02 암 5.8">'+esc(br.text)+'</textarea>'
@@ -409,9 +412,8 @@ function readForm(){
            B:{name:$("f-tb").value.trim()||"팀 B",color:TEAM_COLORS.B}};
   S.breeders=S.breeders.map(function(br,i){
     return {name:$("b-name-"+i).value.trim(),team:$("b-team-"+i).value,photo:br.photo||"",
-      line:{blood:$("p-b-"+i).value.trim(),
-        male:{size:$("p-m-"+i).value.trim(),photo:br.line.male.photo||""},
-        female:{size:$("p-f-"+i).value.trim()}},
+      line:{male:{size:$("p-m-"+i).value.trim(),photo:br.line.male.photo||"",blood:$("p-mb-"+i).value.trim()},
+            female:{size:$("p-f-"+i).value.trim(),blood:$("p-fb-"+i).value.trim()}},
       text:$("b-text-"+i).value};
   });
 }
@@ -424,9 +426,8 @@ function save(){
     var r=parseLines(br.text,S.rounds.length);
     errCount+=r.errors.length;
     breeders.push({name:br.name||"참가자"+(i+1),team:br.team,photo:br.photo,
-      line:{blood:br.line.blood,
-        male:{size:num(br.line.male.size),photo:br.line.male.photo},
-        female:{size:num(br.line.female.size)}},
+      line:{male:{size:num(br.line.male.size),photo:br.line.male.photo,blood:br.line.male.blood},
+            female:{size:num(br.line.female.size),blood:br.line.female.blood}},
       larvae:r.larvae});
   });
   if(errCount)return say("⚠️ 입력 오류 "+errCount+"건 — 빨간 표시를 고쳐주세요");
