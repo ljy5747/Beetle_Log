@@ -144,28 +144,28 @@ function say(msg){
 }
 
 /*CONV-START*/
-/* 저장형식 [code,sex,weights,adult,heads,pupa] ↔ 편집형식 {code,sex,w[],h[],pupa,adult} */
+/* 저장형식 [code,sex,weights[],adult,head,pupa] ↔ 편집형식 {code,sex,w[],head,pupa,adult}
+   · 무게(w)만 라운드별, 두폭(head)·용무게(pupa)·체장(adult)은 1회 측정 */
 function larvaFromData(r,nR){
-  var w=Array.isArray(r[2])?r[2]:[],h=Array.isArray(r[4])?r[4]:[];
-  var o={code:r[0]||"",sex:r[1]==="수"||r[1]==="암"?r[1]:"",w:[],h:[],
+  var w=Array.isArray(r[2])?r[2]:[];
+  var hd=r[4],head=null;
+  if(Array.isArray(hd)){                       /* 옛 형식: 라운드별 두폭 배열 → 마지막 값 */
+    for(var k=hd.length-1;k>=0;k--){var v=num(hd[k]);if(v!=null){head=v;break;}}
+  } else head=num(hd);
+  var o={code:r[0]||"",sex:r[1]==="수"||r[1]==="암"?r[1]:"",w:[],
+    head:head!=null?String(head):"",
     pupa:r[5]!=null?String(r[5]):"",adult:r[3]!=null?String(r[3]):""};
-  for(var i=0;i<nR;i++){
-    o.w.push(w[i]!=null?String(w[i]):"");
-    o.h.push(h[i]!=null?String(h[i]):"");
-  }
+  for(var i=0;i<nR;i++)o.w.push(w[i]!=null?String(w[i]):"");
   return o;
 }
 function larvaToData(o,nR){
-  var w=[],h=[];
-  for(var i=0;i<nR;i++){
-    w.push(num(o.w[i]));
-    h.push(num(o.h[i]));
-  }
-  return [o.code||"",o.sex||"",w,num(o.adult),h,num(o.pupa)];
+  var w=[];
+  for(var i=0;i<nR;i++)w.push(num(o.w[i]));
+  return [o.code||"",o.sex||"",w,num(o.adult),num(o.head),num(o.pupa)];
 }
 function blankLarva(code,nR){
-  var o={code:code||"",sex:"",w:[],h:[],pupa:"",adult:""};
-  for(var i=0;i<nR;i++){o.w.push("");o.h.push("");}
+  var o={code:code||"",sex:"",w:[],head:"",pupa:"",adult:""};
+  for(var i=0;i<nR;i++)o.w.push("");
   return o;
 }
 function pad2(n){return (n<10?"0":"")+n;}
@@ -253,7 +253,7 @@ function defaultState(){
               ["한테란","B"],["천궁","B"],["디디","B"],["매미킴","B"]];
   return {
     title:"국균연구소 2026 체장왕전",subtitle:"최장의 체장을 가리는 단 하나의 전쟁",season:"體長王戰",
-    rounds:[{name:"1병",date:""}],
+    rounds:[1,2,3,4,5].map(function(n){return {name:n+"병",date:""};}),
     teams:{A:{name:"팀 피눈물",color:TEAM_COLORS.A},B:{name:"팀 한테란",color:TEAM_COLORS.B}},
     breeders:roster.map(function(r){return blankBreeder(r[0],r[1],1);}),
   };
@@ -270,6 +270,7 @@ function stateFromData(B){
   var rounds=(B.rounds&&B.rounds.length?B.rounds:["1병"]).map(function(r,i){
     return typeof r==="string"?{name:r,date:""}:{name:r.name||(i+1)+"병",date:r.date||""};
   });
+  while(rounds.length<5)rounds.push({name:(rounds.length+1)+"병",date:""});   /* 5병까지 자동 확보 */
   var nR=rounds.length;
   return {
     title:B.title||d.title,subtitle:B.subtitle||"",season:B.season||"",
@@ -307,8 +308,8 @@ function renderForm(){
     +'<button class="hbtn" id="logoutBtn">로그아웃</button></div>';
 
   h+='<div class="guide">'
-    +(isL?'📝 <b>'+esc(S.rounds[CUR].name)+'</b> 무게·두폭을 칸에 채워주세요. 성별은 ♂/♀ 버튼을 탭해서 바꿔요.'
-        :'🦋 용화 무게와 우화 체장을 입력해요. 라운드와 무관하게 한 번만 적으면 됩니다.')
+    +(isL?'📝 <b>'+esc(S.rounds[CUR].name)+'</b> 무게만 채우면 돼요. 성별은 ♂/♀ 버튼을 탭해서 바꿔요.'
+        :'🦋 두폭 · 용화 무게 · 우화 체장은 병갈이와 무관하게 한 번만 적어요.')
     +'<br/><span style="color:#8A7A55">빈칸은 그냥 두면 돼요 · 최고 암/수 1두씩은 자동 선발</span></div>';
 
   /* 기본 설정 */
@@ -330,8 +331,8 @@ function renderForm(){
 
   /* 모드 · 라운드 */
   h+='<div class="sticky"><div class="modes">'
-    +'<button class="mode-b'+(isL?" on":"")+'" id="m-larva">유충 기록</button>'
-    +'<button class="mode-b'+(!isL?" on":"")+'" id="m-adult">용화 · 우화</button></div>';
+    +'<button class="mode-b'+(isL?" on":"")+'" id="m-larva">병갈이 무게</button>'
+    +'<button class="mode-b'+(!isL?" on":"")+'" id="m-adult">두폭 · 용화 · 우화</button></div>';
   if(isL){
     h+='<div class="rtabs">';
     S.rounds.forEach(function(r,i){
@@ -375,16 +376,18 @@ function renderForm(){
       /* 유충 표 */
       +'<div class="lg"><div class="lg-h">'
       +'<span class="c-no">번호</span><span class="c-sx">성별</span>'
-      +(isL?'<span class="c-v">무게 g</span><span class="c-v">두폭 mm</span>'
-           :'<span class="c-v">용 무게 g</span><span class="c-v">체장 mm</span>')
+      +(isL?'<span class="c-v">'+esc(S.rounds[CUR].name)+' 무게 g</span>'
+           :'<span class="c-v">두폭 mm</span><span class="c-v">용 무게 g</span><span class="c-v">체장 mm</span>')
       +'<span class="c-x"></span></div>';
     br.larvae.forEach(function(l,j){
-      var v1=isL?l.w[CUR]:l.pupa, v2=isL?l.h[CUR]:l.adult;
       h+='<div class="lg-r">'
         +'<input class="li no c-no mono" id="l-c-'+i+'-'+j+'" value="'+esc(l.code)+'" placeholder="'+pad2(j+1)+'"/>'
         +'<button class="sxb c-sx" id="l-s-'+i+'-'+j+'" data-v="'+esc(l.sex)+'">'+(l.sex==="수"?"♂":l.sex==="암"?"♀":"?")+'</button>'
-        +'<input class="li c-v" inputmode="decimal" id="l-a-'+i+'-'+j+'" value="'+esc(v1==null?"":v1)+'"/>'
-        +'<input class="li c-v" inputmode="decimal" id="l-b-'+i+'-'+j+'" value="'+esc(v2==null?"":v2)+'"/>'
+        +(isL
+          ? '<input class="li c-v" inputmode="decimal" id="l-a-'+i+'-'+j+'" value="'+esc(l.w[CUR]==null?"":l.w[CUR])+'"/>'
+          : '<input class="li c-v" inputmode="decimal" id="l-a-'+i+'-'+j+'" value="'+esc(l.head)+'"/>'
+           +'<input class="li c-v" inputmode="decimal" id="l-b-'+i+'-'+j+'" value="'+esc(l.pupa)+'"/>'
+           +'<input class="li c-v" inputmode="decimal" id="l-d-'+i+'-'+j+'" value="'+esc(l.adult)+'"/>')
         +'<button class="delx c-x" id="l-x-'+i+'-'+j+'">✕</button></div>';
     });
     h+='</div><div class="lg-acts"><button class="addmini" id="l-add-'+i+'">＋ 유충 1두</button>'
@@ -408,7 +411,7 @@ function renderForm(){
   $("addRound").addEventListener("click",function(){
     readForm();
     S.rounds.push({name:(S.rounds.length+1)+"병",date:""});
-    S.breeders.forEach(function(b){b.larvae.forEach(function(l){l.w.push("");l.h.push("");});});
+    S.breeders.forEach(function(b){b.larvae.forEach(function(l){l.w.push("");});});
     CUR=S.rounds.length-1;MODE="larva";renderForm();
   });
   $("addBreeder").addEventListener("click",function(){readForm();S.breeders.push(blankBreeder("","A",S.rounds.length));renderForm();});
@@ -419,7 +422,7 @@ function renderForm(){
       if(!confirmOnce("rd"+i,"한 번 더 누르면 "+S.rounds[i].name+" 라운드를 삭제해요"))return;
       readForm();
       S.rounds.splice(i,1);
-      S.breeders.forEach(function(b){b.larvae.forEach(function(l){l.w.splice(i,1);l.h.splice(i,1);});});
+      S.breeders.forEach(function(b){b.larvae.forEach(function(l){l.w.splice(i,1);});});
       if(CUR>=S.rounds.length)CUR=S.rounds.length-1;
       renderForm();
     });
@@ -450,8 +453,9 @@ function renderForm(){
         if(!confirmOnce("l"+i+"-"+j,"한 번 더 누르면 이 유충을 삭제해요"))return;
         readForm();S.breeders[i].larvae.splice(j,1);renderForm();
       });
-      ["l-a-","l-b-"].forEach(function(pre){
-        $(pre+i+"-"+j).addEventListener("input",function(){
+      ["l-a-","l-b-","l-d-"].forEach(function(pre){
+        var el=$(pre+i+"-"+j); if(!el)return;
+        el.addEventListener("input",function(){
           this.classList.toggle("bad",this.value.trim()!==""&&num(this.value)==null);
           updateCount(i);
         });
@@ -472,14 +476,15 @@ function updateCount(i){
   for(var j=0;j<n;j++){
     var v=$("l-s-"+i+"-"+j).dataset.v;
     if(v==="수")m++; else if(v==="암")f++;
-    var a=$("l-a-"+i+"-"+j).value.trim();
-    if(a!==""){ if(num(a)!=null)filled++; else bad++; }
-    var b=$("l-b-"+i+"-"+j).value.trim();
-    if(b!==""&&num(b)==null)bad++;
+    ["l-a-","l-b-","l-d-"].forEach(function(pre,k){
+      var el=$(pre+i+"-"+j); if(!el)return;
+      var val=el.value.trim(); if(val==="")return;
+      if(num(val)==null)bad++; else if(k===0)filled++;
+    });
   }
-  var lbl=MODE==="larva"?"무게":"용 무게";
+  var lbl=MODE==="larva"?S.rounds[CUR].name+" 무게":"두폭";
   $("b-cnt-"+i).innerHTML=(n===10?'<b>'+n+'/10두</b>':'<span class="warn">'+n+'/10두</span>')
-    +' · ♂'+m+' ♀'+f+' · '+lbl+' '+filled+'두 입력'
+    +' · ♂'+m+' ♀'+f+' · '+lbl+' '+filled+'두'
     +(bad?' · <span class="warn">숫자 오류 '+bad+'칸</span>':"");
 }
 
@@ -496,10 +501,14 @@ function readForm(){
   S.breeders=S.breeders.map(function(br,i){
     var ls=br.larvae.map(function(l,j){
       var o={code:$("l-c-"+i+"-"+j).value.trim(),sex:$("l-s-"+i+"-"+j).dataset.v,
-             w:l.w.slice(),h:l.h.slice(),pupa:l.pupa,adult:l.adult};
-      var a=$("l-a-"+i+"-"+j).value.trim(),b=$("l-b-"+i+"-"+j).value.trim();
-      if(MODE==="larva"){o.w[CUR]=a;o.h[CUR]=b;}
-      else {o.pupa=a;o.adult=b;}
+             w:l.w.slice(),head:l.head,pupa:l.pupa,adult:l.adult};
+      if(MODE==="larva"){
+        o.w[CUR]=$("l-a-"+i+"-"+j).value.trim();
+      }else{
+        o.head=$("l-a-"+i+"-"+j).value.trim();
+        o.pupa=$("l-b-"+i+"-"+j).value.trim();
+        o.adult=$("l-d-"+i+"-"+j).value.trim();
+      }
       return o;
     });
     return {name:$("b-name-"+i).value.trim(),team:$("b-team-"+i).value,photo:br.photo||"",
@@ -517,20 +526,18 @@ function save(){
   var breeders=S.breeders.map(function(br,i){
     var nm=br.name||"참가자"+(i+1);
     br.larvae.forEach(function(l,j){
-      var chk=[["무게",l.w],["두폭",l.h]];
-      chk.forEach(function(c){
-        c[1].forEach(function(v,k){
-          if(v!==""&&v!=null&&num(v)==null)bad.push(nm+" "+(l.code||j+1)+"행 "+S.rounds[k].name+" "+c[0]);
-        });
+      l.w.forEach(function(v,k){
+        if(v!==""&&v!=null&&num(v)==null)bad.push(nm+" "+(l.code||j+1)+"행 "+S.rounds[k].name+" 무게");
       });
-      if(l.pupa!==""&&num(l.pupa)==null)bad.push(nm+" "+(l.code||j+1)+"행 용 무게");
-      if(l.adult!==""&&num(l.adult)==null)bad.push(nm+" "+(l.code||j+1)+"행 체장");
+      [["두폭",l.head],["용 무게",l.pupa],["체장",l.adult]].forEach(function(c){
+        if(c[1]!==""&&c[1]!=null&&num(c[1])==null)bad.push(nm+" "+(l.code||j+1)+"행 "+c[0]);
+      });
     });
     return {name:nm,team:br.team,photo:br.photo,motto:br.motto,
       line:{male:{size:num(br.line.male.size),photo:br.line.male.photo,blood:br.line.male.blood},
             female:{size:num(br.line.female.size),blood:br.line.female.blood}},
       larvae:br.larvae.filter(function(l){
-        return l.code||l.sex||l.pupa||l.adult||l.w.some(function(v){return v!=="";});
+        return l.code||l.sex||l.head||l.pupa||l.adult||l.w.some(function(v){return v!=="";});
       }).map(function(l){return larvaToData(l,nR);})};
   });
   if(bad.length)return say("⚠️ 숫자 오류: "+bad.slice(0,2).join(", ")+(bad.length>2?" 외 "+(bad.length-2)+"건":""));
