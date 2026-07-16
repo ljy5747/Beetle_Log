@@ -216,8 +216,12 @@ function normBreeder(br){
     line:{male:{size:num(M.size),photo:M.photo||"",blood:mb},
           female:{size:num(F.size),blood:fb}},
     larvae:(br.larvae||[]).map(function(r){
+      var hd=r[4],head=null;
+      if(Array.isArray(hd)){                      /* 옛 형식: 라운드별 두폭 배열 → 마지막 값 사용 */
+        for(var k=hd.length-1;k>=0;k--){var v=num(hd[k]);if(v!=null){head=v;break;}}
+      } else head=num(hd);
       return {code:r[0]||"",sex:String(r[1]||""),weights:Array.isArray(r[2])?r[2]:[],adult:num(r[3]),
-              heads:Array.isArray(r[4])?r[4]:[],pupa:num(r[5])};
+              head:head,pupa:num(r[5])};
     })
   };
 }
@@ -226,7 +230,6 @@ function normBreeder(br){
 /*RULES-START*/
 function sexOf(s){s=String(s||"");return s.indexOf("수")>=0?"m":s.indexOf("암")>=0?"f":"u";}
 function latestW(l){for(var i=l.weights.length-1;i>=0;i--){var v=num(l.weights[i]);if(v!=null)return v;}return null;}
-function latestH(l){for(var i=(l.heads||[]).length-1;i>=0;i--){var v=num(l.heads[i]);if(v!=null)return v;}return null;}
 function maxW(l){var a=(l.weights||[]).map(num).filter(function(v){return v!=null;});return a.length?Math.max.apply(null,a):null;}
 /* 성별별 요약 통계 */
 function sexStats(larvae,sex){
@@ -235,7 +238,7 @@ function sexStats(larvae,sex){
   var ads=ls.map(function(l){return l.adult;}).filter(function(v){return v!=null;});
   return {n:ls.length,
     wAvg:avg(ls.map(latestW)),
-    hAvg:avg(ls.map(latestH)),
+    hAvg:avg(ls.map(function(l){return l.head;})),
     pAvg:avg(ls.map(function(l){return l.pupa;})),
     aAvg:avg(ads),
     wMax:mws.length?Math.max.apply(null,mws):null,
@@ -545,17 +548,20 @@ function openRecords(bi){
   var h='<div class="rec-head"><div class="rec-t">'+esc(br.name)+' · 개체별 기록</div>'
     +'<button class="rec-x" onclick="closeRecords()">✕</button></div>'
     +'<div class="rec-body"><table><tr><th>번호</th><th>성별</th>'
-    +rounds.map(function(rd){return '<th>'+esc(rd.name)+'<br/><span class="th-s">무게/두폭</span></th>';}).join("")
-    +'<th>용<br/><span class="th-s">무게</span></th><th>체장</th></tr>';
+    +rounds.map(function(rd){return '<th>'+esc(rd.name)+'<br/><span class="th-s">무게 g</span></th>';}).join("")
+    +'<th>두폭<br/><span class="th-s">mm</span></th>'
+    +'<th>용<br/><span class="th-s">무게 g</span></th>'
+    +'<th>체장<br/><span class="th-s">mm</span></th></tr>';
   br.larvae.forEach(function(l){
     var sx=sexOf(l.sex);
     var isBest=(r.best.m&&r.best.m.code===l.code&&sx==="m")||(r.best.f&&r.best.f.code===l.code&&sx==="f");
     h+='<tr class="'+(isBest?"best":"")+'"><td class="mono">'+(isBest?'<span class="star">★</span> ':"")+esc(l.code)+'</td>'
       +'<td>'+(sx==="m"?'<span class="sx-m">♂</span>':sx==="f"?'<span class="sx-f">♀</span>':'<span style="color:var(--dim)">—</span>')+'</td>'
       +rounds.map(function(_,i){
-        var w=num(l.weights[i]),hd=num((l.heads||[])[i]);
-        return '<td class="mono">'+(w!=null?n1(w)+(hd!=null?'<span class="hw">/'+n1(hd)+'</span>':""):"·")+'</td>';
+        var w=num(l.weights[i]);
+        return '<td class="mono">'+(w!=null?n1(w):"·")+'</td>';
       }).join("")
+      +'<td class="mono">'+(l.head!=null?n1(l.head):"·")+'</td>'
       +'<td class="mono">'+(l.pupa!=null?n1(l.pupa):"·")+'</td>'
       +'<td class="mono">'+(l.adult!=null?n1(l.adult):"·")+'</td></tr>';
   });
