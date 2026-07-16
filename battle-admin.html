@@ -72,6 +72,8 @@ color:var(--dim);font-size:11px;font-weight:700;text-align:center;line-height:1.
 .pfields .in{padding:8px 10px;font-size:15px}
 .pfields .label{font-size:11px;margin-bottom:4px}
 .ptitle{font-size:10.5px;font-weight:800;color:var(--gold-d);letter-spacing:.08em;margin-bottom:8px}
+.motto-f{margin-bottom:11px}
+.motto-f .in{font-style:italic}
 .pv{font-size:12px;margin-top:8px;line-height:1.7}
 .pv .ok{color:var(--green);font-weight:700}
 .pv .err{color:var(--red);font-weight:600;display:block}
@@ -252,7 +254,7 @@ function defaultState(){
   };
 }
 function blankBreeder(name,team){
-  return {name:name||"",team:team||"A",photo:"",
+  return {name:name||"",team:team||"A",photo:"",motto:"",
     line:{male:{size:"",photo:"",blood:""},female:{size:"",blood:""}},text:""};
 }
 function stateFromData(B){
@@ -268,7 +270,7 @@ function stateFromData(B){
       var L=br.line||{},M=L.male||{},F=L.female||{};
       var mb=M.blood||"",fb=F.blood||"";
       if(!mb&&!fb&&L.blood)mb=L.blood;   /* 옛 공통 혈통 → ♂ 칸으로 */
-      return {name:br.name||"",team:br.team==="B"?"B":"A",photo:br.photo||"",
+      return {name:br.name||"",team:br.team==="B"?"B":"A",photo:br.photo||"",motto:br.motto||"",
         line:{male:{size:M.size||"",photo:M.photo||"",blood:mb},
               female:{size:F.size||"",blood:fb}},
         text:larvaeToText(br.larvae)};
@@ -412,6 +414,7 @@ function readForm(){
            B:{name:$("f-tb").value.trim()||"팀 B",color:TEAM_COLORS.B}};
   S.breeders=S.breeders.map(function(br,i){
     return {name:$("b-name-"+i).value.trim(),team:$("b-team-"+i).value,photo:br.photo||"",
+      motto:$("b-motto-"+i).value.trim(),
       line:{male:{size:$("p-m-"+i).value.trim(),photo:br.line.male.photo||"",blood:$("p-mb-"+i).value.trim()},
             female:{size:$("p-f-"+i).value.trim(),blood:$("p-fb-"+i).value.trim()}},
       text:$("b-text-"+i).value};
@@ -425,7 +428,7 @@ function save(){
   S.breeders.forEach(function(br,i){
     var r=parseLines(br.text,S.rounds.length);
     errCount+=r.errors.length;
-    breeders.push({name:br.name||"참가자"+(i+1),team:br.team,photo:br.photo,
+    breeders.push({name:br.name||"참가자"+(i+1),team:br.team,photo:br.photo,motto:br.motto,
       line:{male:{size:num(br.line.male.size),photo:br.line.male.photo,blood:br.line.male.blood},
             female:{size:num(br.line.female.size),blood:br.line.female.blood}},
       larvae:r.larvae});
