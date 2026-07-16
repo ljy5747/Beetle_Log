@@ -98,6 +98,7 @@ details[open] .lsum .arw{transform:rotate(180deg)}
 border-radius:9px;padding:10px 11px;font-size:16px;font-family:ui-monospace,Menlo,monospace;appearance:none}
 .lc-in:focus{outline:none;border-color:var(--gold);background:#FFFDF8}
 .lc-in.bad{border-color:var(--red);background:#FDF4F2}
+.lc-in.txt{font-family:inherit;font-size:15px}
 .sxseg{flex:1;display:flex;gap:6px}
 .sxseg button{flex:1;border:1px solid var(--line);background:var(--surf);border-radius:9px;padding:9px 0;
 font-size:15px;font-weight:700;color:#C4BDB1;cursor:pointer;font-family:inherit}
@@ -129,6 +130,9 @@ box-shadow:0 8px 24px rgba(28,26,23,.25);max-width:92vw;text-align:center}
 <body>
 <div id="root" class="app"><div class="boot">불러오는 중…</div></div>
 <input type="file" id="filepick" accept="image/*" style="display:none" />
+<datalist id="dl-size"><option value="500cc"></option><option value="800cc"></option><option value="1100cc"></option>
+<option value="1400cc"></option><option value="2000cc"></option><option value="3000cc"></option></datalist>
+<datalist id="dl-feed"></datalist>
 
 <script>
 var SUPA_URL = "https://qybgsztoegkzqsdipili.supabase.co";
@@ -149,28 +153,41 @@ function say(msg){
 }
 
 /*CONV-START*/
-/* 저장형식 [code,sex,weights[],adult,head,pupa] ↔ 편집형식 {code,sex,w[],head,pupa,adult}
-   · 무게(w)만 라운드별, 두폭(head)·용무게(pupa)·체장(adult)은 1회 측정 */
+/* 저장형식 [code,sex,weights[],adult,head,pupa,feeds[],sizes[]] ↔ 편집형식
+   · 무게·균사·용량은 라운드별 / 두폭·용무게·체장은 1회 측정 */
 function larvaFromData(r,nR){
   var w=Array.isArray(r[2])?r[2]:[];
+  var fd=Array.isArray(r[6])?r[6]:[];
+  var sz=Array.isArray(r[7])?r[7]:[];
   var hd=r[4],head=null;
   if(Array.isArray(hd)){                       /* 옛 형식: 라운드별 두폭 배열 → 마지막 값 */
     for(var k=hd.length-1;k>=0;k--){var v=num(hd[k]);if(v!=null){head=v;break;}}
   } else head=num(hd);
-  var o={code:r[0]||"",sex:r[1]==="수"||r[1]==="암"?r[1]:"",w:[],
+  var o={code:r[0]||"",sex:r[1]==="수"||r[1]==="암"?r[1]:"",w:[],feed:[],size:[],
     head:head!=null?String(head):"",
     pupa:r[5]!=null?String(r[5]):"",adult:r[3]!=null?String(r[3]):""};
-  for(var i=0;i<nR;i++)o.w.push(w[i]!=null?String(w[i]):"");
+  for(var i=0;i<nR;i++){
+    o.w.push(w[i]!=null?String(w[i]):"");
+    o.feed.push(fd[i]||"");
+    o.size.push(sz[i]||"");
+  }
   return o;
 }
 function larvaToData(o,nR){
-  var w=[];
-  for(var i=0;i<nR;i++)w.push(num(o.w[i]));
-  return [o.code||"",o.sex||"",w,num(o.adult),num(o.head),num(o.pupa)];
+  var w=[],fd=[],sz=[],any=false;
+  for(var i=0;i<nR;i++){
+    w.push(num(o.w[i]));
+    var f=(o.feed[i]||"").trim(),z=(o.size[i]||"").trim();
+    fd.push(f);sz.push(z);
+    if(f||z)any=true;
+  }
+  var out=[o.code||"",o.sex||"",w,num(o.adult),num(o.head),num(o.pupa)];
+  if(any)out.push(fd,sz);                      /* 균사·용량 없으면 저장 안 함 (용량 절약) */
+  return out;
 }
 function blankLarva(code,nR){
-  var o={code:code||"",sex:"",w:[],head:"",pupa:"",adult:""};
-  for(var i=0;i<nR;i++)o.w.push("");
+  var o={code:code||"",sex:"",w:[],feed:[],size:[],head:"",pupa:"",adult:""};
+  for(var i=0;i<nR;i++){o.w.push("");o.feed.push("");o.size.push("");}
   return o;
 }
 function pad2(n){return (n<10?"0":"")+n;}
@@ -393,7 +410,11 @@ function renderForm(){
         +'<button data-s="암"'+(l.sex==="암"?' class="on"':"")+'>♀</button></div></div>';
       if(isL){
         h+='<div class="lc-f"><span class="lc-l">'+esc(S.rounds[CUR].name)+' 무게</span>'
-          +'<input class="lc-in" inputmode="decimal" id="l-a-'+i+'-'+j+'" value="'+esc(l.w[CUR]==null?"":l.w[CUR])+'" placeholder="g"/></div>';
+          +'<input class="lc-in" inputmode="decimal" id="l-a-'+i+'-'+j+'" value="'+esc(l.w[CUR]==null?"":l.w[CUR])+'" placeholder="g"/></div>'
+          +'<div class="lc-f"><span class="lc-l">균사</span>'
+          +'<input class="lc-in txt" list="dl-feed" id="l-f-'+i+'-'+j+'" value="'+esc(l.feed[CUR]||"")+'" placeholder="국균 등"/></div>'
+          +'<div class="lc-f"><span class="lc-l">용량</span>'
+          +'<input class="lc-in txt" list="dl-size" id="l-v-'+i+'-'+j+'" value="'+esc(l.size[CUR]||"")+'" placeholder="1400cc"/></div>';
       }else{
         h+='<div class="lc-f"><span class="lc-l">두폭</span>'
           +'<input class="lc-in" inputmode="decimal" id="l-a-'+i+'-'+j+'" value="'+esc(l.head)+'" placeholder="mm"/></div>'
@@ -406,6 +427,7 @@ function renderForm(){
     });
     h+='<div class="lg-acts"><button class="addmini" id="l-add-'+i+'">＋ 유충 1두</button>'
       +'<button class="addmini" id="l-fill-'+i+'">번호 자동 (01~)</button></div>'
+      +(isL?'<div class="lg-acts" style="margin-top:6px"><button class="addmini" id="l-copy-'+i+'">개체 1의 균사·용량을 전체 적용</button></div>':"")
       +'</div></details></div>';
   });
   h+='<button class="addb" id="addBreeder">＋ 참가자 추가</button>';
@@ -416,6 +438,13 @@ function renderForm(){
 
   $("root").innerHTML=h;
 
+  /* 이미 입력한 균사 이름을 자동완성으로 */
+  var feeds={};
+  S.breeders.forEach(function(b){b.larvae.forEach(function(l){
+    (l.feed||[]).forEach(function(f){if(f&&f.trim())feeds[f.trim()]=1;});});});
+  var dl=$("dl-feed");
+  if(dl)dl.innerHTML=Object.keys(feeds).map(function(f){return '<option value="'+esc(f)+'"></option>';}).join("");
+
   /* 이벤트 */
   $("logoutBtn").addEventListener("click",logout);
   $("previewBtn").addEventListener("click",function(){window.open("battle.html","_blank");});
@@ -425,7 +454,7 @@ function renderForm(){
   $("addRound").addEventListener("click",function(){
     readForm();
     S.rounds.push({name:(S.rounds.length+1)+"병",date:""});
-    S.breeders.forEach(function(b){b.larvae.forEach(function(l){l.w.push("");});});
+    S.breeders.forEach(function(b){b.larvae.forEach(function(l){l.w.push("");l.feed.push("");l.size.push("");});});
     CUR=S.rounds.length-1;MODE="larva";renderForm();
   });
   $("addBreeder").addEventListener("click",function(){readForm();S.breeders.push(blankBreeder("","A",S.rounds.length));renderForm();});
@@ -436,7 +465,7 @@ function renderForm(){
       if(!confirmOnce("rd"+i,"한 번 더 누르면 "+S.rounds[i].name+" 라운드를 삭제해요"))return;
       readForm();
       S.rounds.splice(i,1);
-      S.breeders.forEach(function(b){b.larvae.forEach(function(l){l.w.splice(i,1);});});
+      S.breeders.forEach(function(b){b.larvae.forEach(function(l){l.w.splice(i,1);l.feed.splice(i,1);l.size.splice(i,1);});});
       if(CUR>=S.rounds.length)CUR=S.rounds.length-1;
       renderForm();
     });
@@ -450,6 +479,15 @@ function renderForm(){
     });
     $("l-add-"+i).addEventListener("click",function(){
       readForm();S.breeders[i].larvae.push(blankLarva(pad2(S.breeders[i].larvae.length+1),S.rounds.length));renderForm();
+    });
+    if($("l-copy-"+i))$("l-copy-"+i).addEventListener("click",function(){
+      readForm();
+      var f0=S.breeders[i].larvae[0];
+      if(!f0)return say("유충이 없어요");
+      var fd=f0.feed[CUR]||"",sz=f0.size[CUR]||"";
+      if(!fd&&!sz)return say("개체 1에 균사·용량을 먼저 적어주세요");
+      S.breeders[i].larvae.forEach(function(l){l.feed[CUR]=fd;l.size[CUR]=sz;});
+      renderForm();say("✓ "+S.rounds[CUR].name+" 균사·용량을 전체 적용했어요");
     });
     $("l-fill-"+i).addEventListener("click",function(){
       readForm();
@@ -517,9 +555,12 @@ function readForm(){
   S.breeders=S.breeders.map(function(br,i){
     var ls=br.larvae.map(function(l,j){
       var o={code:$("l-c-"+i+"-"+j).value.trim(),sex:$("l-s-"+i+"-"+j).dataset.v,
-             w:l.w.slice(),head:l.head,pupa:l.pupa,adult:l.adult};
+             w:l.w.slice(),feed:l.feed.slice(),size:l.size.slice(),
+             head:l.head,pupa:l.pupa,adult:l.adult};
       if(MODE==="larva"){
         o.w[CUR]=$("l-a-"+i+"-"+j).value.trim();
+        o.feed[CUR]=$("l-f-"+i+"-"+j).value.trim();
+        o.size[CUR]=$("l-v-"+i+"-"+j).value.trim();
       }else{
         o.head=$("l-a-"+i+"-"+j).value.trim();
         o.pupa=$("l-b-"+i+"-"+j).value.trim();
@@ -553,7 +594,8 @@ function save(){
       line:{male:{size:num(br.line.male.size),photo:br.line.male.photo,blood:br.line.male.blood},
             female:{size:num(br.line.female.size),blood:br.line.female.blood}},
       larvae:br.larvae.filter(function(l){
-        return l.code||l.sex||l.head||l.pupa||l.adult||l.w.some(function(v){return v!=="";});
+        return l.code||l.sex||l.head||l.pupa||l.adult||l.w.some(function(v){return v!=="";})
+          ||l.feed.some(function(v){return v!=="";})||l.size.some(function(v){return v!=="";});
       }).map(function(l){return larvaToData(l,nR);})};
   });
   if(bad.length)return say("⚠️ 숫자 오류: "+bad.slice(0,2).join(", ")+(bad.length>2?" 외 "+(bad.length-2)+"건":""));
