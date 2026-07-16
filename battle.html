@@ -428,8 +428,7 @@ function render(B){
 
   var html="";
 
-  /* ── 스코어보드 ── */
-  html+='<div class="sec-t"><span>'+(mode==="adult"?"공식 스코어 · 선발개체 평균":"중간 집계 · 유충 무게")+'</span></div>';
+  /* ── 스코어보드 (우화 데이터가 있을 때만 공개) ── */
   function side(k,s){
     var on=lead===k;
     return '<div class="side"><span class="crown">'+(on?"👑":"")+'</span>'
@@ -437,14 +436,14 @@ function render(B){
       +'<div class="side-score" style="color:'+(on?"var(--gold-l)":"var(--text)")+'">'+(s.score!=null?n1(s.score):"—")+'<small>'+unit+'</small></div>'
       +'<div class="side-sub">선발 '+s.n+'두 · 브리더 '+s.breeders+'명</div></div>';
   }
-  if(tA&&tB){
+  if(mode==="adult"&&tA&&tB){
+    html+='<div class="sec-t"><span>공식 스코어 · 선발개체 평균</span></div>';
     html+='<div class="score">'+side(tA,sA)+'<div class="vs">VS</div>'+side(tB,sB)+'</div>';
     if(sA.score!=null&&sB.score!=null){
       if(tieBreak)html+='<div class="gap-note">동점! <b>수컷 평균</b>으로 판가름 — '+(lead?esc(tname(lead))+' 우세':'수컷 평균도 동일')+'</div>';
       else html+='<div class="gap-note">격차 <b class="mono">'+n1(Math.abs(sA.score-sB.score))+unit+'</b> · '+esc(tname(lead))+' 리드</div>';
       html+='<div class="tie-note">수컷 평균 '+esc(tname(tA))+' <b class="mono">'+n1(sA.male)+unit+'</b> · '+esc(tname(tB))+' <b class="mono">'+n1(sB.male)+unit+'</b></div>';
-    }else html+='<div class="gap-note">데이터가 모이면 스코어가 표시돼요</div>';
-    if(mode!=="adult")html+='<div class="tie-note">※ 우화 전 참고용 집계 — 공식 판정은 성충 체장(Be-Kuwa)</div>';
+    }
   }
 
   /* ── 브리더 랭킹 ── */
