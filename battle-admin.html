@@ -115,6 +115,8 @@ function normSex(t){t=String(t||"");
   if(/[수♂mM]/.test(t))return "수";
   if(/[암♀fF]/.test(t))return "암";
   return "";}
+/* 형식: 번호 성별 무게/두폭 무게/두폭 … 용무게 체장mm
+   예)   01 수 9.4/11.2 14.2/12.6 용25.3 82.5mm            */
 function parseLines(text,nRounds){
   var larvae=[],errors=[];
   String(text||"").split("\n").forEach(function(line,idx){
@@ -123,28 +125,47 @@ function parseLines(text,nRounds){
     if(t.length<2){errors.push((idx+1)+"행: 「번호 성별 무게…」 순서로 적어주세요");return;}
     var code=t[0],sex=normSex(t[1]);
     if(!sex&&!/^[?\-.미]/.test(t[1])){errors.push((idx+1)+"행: 성별은 수 / 암 / ? 로 적어주세요");return;}
-    var weights=[],adult=null;
+    var weights=[],heads=[],adult=null,pupa=null;
     for(var i=2;i<t.length;i++){
       var tk=t[i];
-      if(/mm$/i.test(tk)){
+      if(/mm$/i.test(tk)){                                   /* 체장 */
         var a=parseFloat(tk);
         if(isFinite(a)&&a>0)adult=a; else errors.push((idx+1)+"행: 체장 값을 확인해주세요");
         continue;
       }
-      if(tk==="-"||tk==="."){weights.push(null);continue;}
-      var w=parseFloat(tk);
-      if(isFinite(w)&&w>0)weights.push(w);
+      if(/^(용|[pP])/.test(tk)){                             /* 용화 무게 */
+        var pw=parseFloat(tk.replace(/^(용|[pP])/,""));
+        if(isFinite(pw)&&pw>0)pupa=pw; else errors.push((idx+1)+"행: 용 무게를 확인해주세요 (예: 용25.3)");
+        continue;
+      }
+      if(tk==="-"||tk==="."){weights.push(null);heads.push(null);continue;}
+      if(tk.indexOf("/")>=0){                                /* 무게/두폭 */
+        var pr=tk.split("/"),w1=parseFloat(pr[0]),h1=parseFloat(pr[1]);
+        if(!(isFinite(w1)&&w1>0)){errors.push((idx+1)+"행: 「"+tk+"」의 무게를 확인해주세요");continue;}
+        weights.push(w1);
+        if(pr[1]==="" || pr[1]==="-"){heads.push(null);}
+        else if(isFinite(h1)&&h1>0){heads.push(h1);}
+        else {heads.push(null);errors.push((idx+1)+"행: 「"+tk+"」의 두폭을 확인해주세요");}
+        continue;
+      }
+      var w=parseFloat(tk);                                  /* 무게만 */
+      if(isFinite(w)&&w>0){weights.push(w);heads.push(null);}
       else errors.push((idx+1)+"행: 「"+tk+"」는 숫자가 아니에요");
     }
     if(weights.length>nRounds)errors.push((idx+1)+"행: 무게 "+weights.length+"개 — 라운드("+nRounds+"개)보다 많아요. 위에서 라운드를 먼저 추가하세요");
-    larvae.push([code,sex,weights,adult]);
+    larvae.push([code,sex,weights,adult,heads,pupa]);
   });
   return {larvae:larvae,errors:errors};
 }
 function larvaeToText(larvae){
   return (larvae||[]).map(function(r){
-    var ws=(Array.isArray(r[2])?r[2]:[]).map(function(w){return w==null?"-":w;});
-    var parts=[r[0]||"?",r[1]||"?"].concat(ws);
+    var ws=Array.isArray(r[2])?r[2]:[], hs=Array.isArray(r[4])?r[4]:[];
+    var parts=[r[0]||"?",r[1]||"?"];
+    ws.forEach(function(w,i){
+      if(w==null){parts.push("-");return;}
+      parts.push(hs[i]!=null?(w+"/"+hs[i]):String(w));
+    });
+    if(r[5]!=null)parts.push("용"+r[5]);
     if(r[3]!=null)parts.push(r[3]+"mm");
     return parts.join(" ");
   }).join("\n");
@@ -295,8 +316,10 @@ function renderForm(){
     +'<button class="hbtn" id="logoutBtn">로그아웃</button></div>';
 
   h+='<div class="guide">✍️ 유충은 <b>한 줄에 한 마리</b>씩 · 인당 <b>10두</b>:<br/>'
-    +'<b>번호 성별 무게1 무게2 …</b> — 예) <b>01 수 9.4 14.2</b><br/>'
-    +'빠진 라운드는 <b>-</b> , 우화하면 맨 뒤에 체장 <b>82.5mm</b> 추가<br/>'
+    +'<b>번호 성별 무게/두폭 … 용무게 체장</b><br/>'
+    +'예) <b>01 수 9.4/11.2 14.2/12.6 용25.3 82.5mm</b><br/>'
+    +'· 두폭 모르면 무게만: <b>14.2</b><br/>'
+    +'· 건너뛴 라운드: <b>-</b> · 용화 무게: <b>용25.3</b> · 우화 체장: <b>82.5mm</b><br/>'
     +'<span style="color:#8A7A55">최고 암/수 1두씩은 자동 선발돼요 · 사진은 동그라미/네모를 탭</span></div>';
 
   /* 기본 설정 */
@@ -350,7 +373,7 @@ function renderForm(){
       +'<input class="in" id="p-fb-'+i+'" value="'+esc(L.female.blood)+'" placeholder="자가 F2"/></div></div>'
       +'</div></div>'
 
-      +'<textarea class="in" id="b-text-'+i+'" placeholder="01 수 9.4&#10;02 암 5.8">'+esc(br.text)+'</textarea>'
+      +'<textarea class="in" id="b-text-'+i+'" placeholder="01 수 9.4/11.2&#10;02 암 5.8/8.9">'+esc(br.text)+'</textarea>'
       +'<div class="pv" id="b-pv-'+i+'"></div></div>';
   });
   h+='<button class="addb" id="addBreeder">＋ 참가자 추가</button>';
