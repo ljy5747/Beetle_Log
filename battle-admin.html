@@ -332,6 +332,9 @@ function renderForm(){
       +'<option value="B"'+(br.team==="B"?" selected":"")+'>'+esc(S.teams.B?S.teams.B.name:"팀 B")+'</option></select>'
       +'<button class="xbtn" id="b-del-'+i+'">✕</button></div>'
 
+      +'<div class="field motto-f"><div class="label">포부 · 한 줄 각오</div>'
+      +'<input class="in" id="b-motto-'+i+'" value="'+esc(br.motto||"")+'" placeholder="올해는 기필코 90 넘긴다" maxlength="60"/></div>'
+
       +'<div class="pgrid">'
       +(L.male.photo
         ? '<img class="pimg" id="pimg-'+i+'" src="'+esc(L.male.photo)+'" alt="종충 수컷"/>'
