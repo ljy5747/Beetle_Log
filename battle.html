@@ -135,6 +135,9 @@ summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;align-item
 summary::-webkit-details-marker{display:none}
 .sm-name{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:6px;flex:none}
 .sm-name i{width:7px;height:7px;border-radius:50%;flex:none}
+.sm-like{flex:none;font-size:11px;font-weight:800;color:#E8827A;letter-spacing:-.02em;
+background:#2A1614;border:1px solid #C4413844;border-radius:999px;padding:1px 7px}
+.sm-like.zero{color:#6E6559;background:transparent;border-color:var(--line2);font-weight:600}
 .sm-motto{flex:1;min-width:0;color:var(--gold-l);font-size:12px;font-style:italic;opacity:.82;
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sm-sub{font-size:11.5px;color:var(--dim);margin-left:auto;text-align:right;flex:none;padding-left:6px}
@@ -511,6 +514,7 @@ function render(B){
     var br=r.br,L=br.line;
     dh+='<details><summary>'+avatarHTML(br,34)
       +'<span class="sm-name"><i style="background:'+bcolor(br)+'"></i>'+esc(br.name)+'</span>'
+      +'<span class="sm-like'+((LIKES[br.name]||0)?"":" zero")+'" id="lkc-'+bi+'">❤️ '+(LIKES[br.name]||0)+'</span>'
       +(br.motto?'<span class="sm-motto" title="'+esc(br.motto)+'">“'+esc(br.motto)+'”</span>':"")
       +'<span class="sm-sub mono">'+(r.score!=null?n1(r.score)+unit+" · ":"")+br.larvae.length+'두</span>'
       +'<span class="sm-arrow">▾</span></summary><div class="dbody">';
@@ -650,6 +654,13 @@ function likeHTML(bi,name){
   return '<button class="likebtn'+(liked?" on":"")+'" id="lk-'+bi+'" onclick="toggleLike('+bi+')">'
     +likeFace(bi,liked,LIKES[name]||0)+'</button>';
 }
+function syncLikeCount(bi,name){
+  var c=document.getElementById("lkc-"+bi);
+  if(!c)return;
+  var n=LIKES[name]||0;
+  c.textContent="❤️ "+n;
+  c.classList.toggle("zero",!n);
+}
 function toggleLike(bi){
   var r=(window.__REC||[])[bi]; if(!r)return;
   var name=r.br.name;
@@ -658,12 +669,14 @@ function toggleLike(bi){
   LIKES[name]=Math.max(0,(LIKES[name]||0)+delta);
   var el=document.getElementById("lk-"+bi);
   if(el){el.classList.toggle("on",!liked);el.innerHTML=likeFace(bi,!liked,LIKES[name]);}
+  syncLikeCount(bi,name);
   bump("like:"+name,delta).then(function(res){
     var v=(res&&typeof res==="number")?res:(Array.isArray(res)?res[0]:null);
     if(typeof v==="number"){
       LIKES[name]=v;
       var e2=document.getElementById("lk-"+bi);
       if(e2){var b=e2.querySelector("b");if(b)b.textContent=v;}
+      syncLikeCount(bi,name);
     }
   }).catch(function(){});
 }
