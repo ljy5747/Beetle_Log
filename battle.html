@@ -659,24 +659,20 @@ function readStats(){
     .then(function(r){return r.ok?r.json():[];}).catch(function(){return [];});
 }
 
-/* ── 방문자 카운터 ── */
+/* ── 방문자 카운터 (들어올 때마다 +1) ── */
 function initVisits(){
   var el=document.getElementById("visit");
-  var day=todayKey(),flag="bl-visit-"+day;
-  var first=!lsGet(flag);
-  var p=Promise.resolve();
-  if(first){
-    lsSet(flag,"1");
-    p=Promise.all([bump("visit:"+day,1),bump("visit:total",1)]).catch(function(){});
-  }
-  p.then(readStats).then(function(rows){
-    var m={};(rows||[]).forEach(function(r){m[r.key]=r.n;});
-    var t=m["visit:"+day]||0,all=m["visit:total"]||0;
-    el.innerHTML='<span>오늘 <b>'+t.toLocaleString()+'</b>명</span><span class="sep">·</span>'
-      +'<span>누적 <b>'+all.toLocaleString()+'</b>명</span>';
-  }).catch(function(){
-    el.innerHTML='<span class="dim">방문 집계를 불러오지 못했어요</span>';
-  });
+  var day=todayKey();
+  Promise.all([bump("visit:"+day,1),bump("visit:total",1)])
+    .catch(function(){})
+    .then(readStats).then(function(rows){
+      var m={};(rows||[]).forEach(function(r){m[r.key]=r.n;});
+      var t=m["visit:"+day]||0,all=m["visit:total"]||0;
+      el.innerHTML='<span>오늘 <b>'+t.toLocaleString()+'</b>명</span><span class="sep">·</span>'
+        +'<span>누적 <b>'+all.toLocaleString()+'</b>명</span>';
+    }).catch(function(){
+      el.innerHTML='<span class="dim">방문 집계를 불러오지 못했어요</span>';
+    });
 }
 
 /* ── 좋아요 ── */
