@@ -136,6 +136,33 @@ tr.best td{color:var(--gold-l);font-weight:700}
 .foot a{color:var(--gold-d);text-decoration:none;font-weight:700}
 svg{display:block}
 
+/* ── 암/수 요약표 ── */
+.sxt{width:100%;border-collapse:collapse;font-size:13px}
+.sxt th{font-size:11.5px;font-weight:800;text-align:right;padding:0 4px 7px;border-bottom:1px solid var(--line2)}
+.sxt th:first-child{text-align:left}
+.sxt td{text-align:right;padding:7px 4px;border-bottom:1px solid var(--line2);font-weight:700;color:var(--text)}
+.sxt tr:last-child td{border-bottom:none}
+.sxt-k{text-align:left!important;color:var(--dim);font-weight:400!important;font-size:12.5px}
+.sxt .nul{color:#5A5349;font-weight:400}
+.recbtn{width:100%;margin-top:11px;background:var(--surf2);border:1px solid var(--line);color:var(--gold-l);
+border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.recbtn:active{background:#2A241C}
+
+/* ── 개체별 기록 창 ── */
+.rec-ov{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:98;display:flex;align-items:center;
+justify-content:center;padding:14px;backdrop-filter:blur(3px)}
+.rec-box{background:var(--surf);border:1px solid var(--line);border-radius:14px;width:100%;max-width:620px;
+max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 44px rgba(0,0,0,.7)}
+.rec-head{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line);flex:none}
+.rec-t{font-weight:800;font-size:15px;flex:1;min-width:0}
+.rec-x{background:none;border:none;color:var(--dim);font-size:19px;cursor:pointer;padding:0 4px;flex:none}
+.rec-body{overflow:auto;padding:6px 15px 15px}
+.rec-body table{min-width:100%}
+.rec-body th{position:sticky;top:0;background:var(--surf);z-index:1}
+.th-s{font-size:9px;font-weight:400;color:#6E6559}
+.hw{color:var(--dim);font-weight:400}
+.rec-note{font-size:11px;color:var(--dim);margin-top:11px;text-align:center}
+
 /* ── 사진 확대 ── */
 .lb{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:99;display:flex;align-items:center;
 justify-content:center;padding:20px;cursor:zoom-out}
@@ -188,7 +215,8 @@ function normBreeder(br){
     line:{male:{size:num(M.size),photo:M.photo||"",blood:mb},
           female:{size:num(F.size),blood:fb}},
     larvae:(br.larvae||[]).map(function(r){
-      return {code:r[0]||"",sex:String(r[1]||""),weights:Array.isArray(r[2])?r[2]:[],adult:num(r[3])};
+      return {code:r[0]||"",sex:String(r[1]||""),weights:Array.isArray(r[2])?r[2]:[],adult:num(r[3]),
+              heads:Array.isArray(r[4])?r[4]:[],pupa:num(r[5])};
     })
   };
 }
@@ -197,6 +225,21 @@ function normBreeder(br){
 /*RULES-START*/
 function sexOf(s){s=String(s||"");return s.indexOf("수")>=0?"m":s.indexOf("암")>=0?"f":"u";}
 function latestW(l){for(var i=l.weights.length-1;i>=0;i--){var v=num(l.weights[i]);if(v!=null)return v;}return null;}
+function latestH(l){for(var i=(l.heads||[]).length-1;i>=0;i--){var v=num(l.heads[i]);if(v!=null)return v;}return null;}
+function maxW(l){var a=(l.weights||[]).map(num).filter(function(v){return v!=null;});return a.length?Math.max.apply(null,a):null;}
+/* 성별별 요약 통계 */
+function sexStats(larvae,sex){
+  var ls=larvae.filter(function(l){return sexOf(l.sex)===sex;});
+  var mws=ls.map(maxW).filter(function(v){return v!=null;});
+  var ads=ls.map(function(l){return l.adult;}).filter(function(v){return v!=null;});
+  return {n:ls.length,
+    wAvg:avg(ls.map(latestW)),
+    hAvg:avg(ls.map(latestH)),
+    pAvg:avg(ls.map(function(l){return l.pupa;})),
+    aAvg:avg(ads),
+    wMax:mws.length?Math.max.apply(null,mws):null,
+    aMax:ads.length?Math.max.apply(null,ads):null};
+}
 function pickBest(larvae,metric){
   var best={m:null,f:null};
   larvae.forEach(function(l){
@@ -424,8 +467,9 @@ function render(B){
   }
 
   /* ── 참가자별 상세 ── */
+  window.__REC=ranked; window.__ROUNDS=rounds; window.__UNIT=unit;
   html+='<div class="sec-t"><span>참가자별 상세</span></div>';
-  ranked.forEach(function(r){
+  ranked.forEach(function(r,bi){
     var br=r.br,L=br.line;
     html+='<details><summary>'+avatarHTML(br,34)
       +'<span class="sm-name"><i style="background:'+bcolor(br)+'"></i>'+esc(br.name)+'</span>'
@@ -451,21 +495,30 @@ function render(B){
         +'</div></div>';
     }
 
-    /* 유충 표 */
+    /* 암/수 요약 */
     if(!br.larvae.length){
       html+='<div style="color:var(--dim);text-align:center;padding:10px 0;font-size:13px">아직 유충 데이터가 없어요</div>';
     }else{
-      html+='<div class="tbl-wrap"><table><tr><th>번호</th><th>성별</th>'
-        +rounds.map(function(rd){return '<th>'+esc(rd.name)+'</th>';}).join("")+'<th>체장</th></tr>';
-      br.larvae.forEach(function(l){
-        var sx=sexOf(l.sex);
-        var isBest=(r.best.m&&r.best.m.code===l.code&&sx==="m")||(r.best.f&&r.best.f.code===l.code&&sx==="f");
-        html+='<tr class="'+(isBest?"best":"")+'"><td class="mono">'+(isBest?'<span class="star">★</span> ':"")+esc(l.code)+'</td>'
-          +'<td>'+(sx==="m"?'<span class="sx-m">♂</span>':sx==="f"?'<span class="sx-f">♀</span>':'<span style="color:var(--dim)">—</span>')+'</td>'
-          +rounds.map(function(_,i){var v=num(l.weights[i]);return '<td class="mono">'+(v!=null?n1(v):"·")+'</td>';}).join("")
-          +'<td class="mono">'+(l.adult!=null?n1(l.adult)+"mm":"·")+'</td></tr>';
+      var M=sexStats(br.larvae,"m"),Fm=sexStats(br.larvae,"f");
+      var rowsDef=[
+        ["유충 무게 평균",function(x){return x.wAvg!=null?n1(x.wAvg)+"g":null;}],
+        ["두폭 평균",function(x){return x.hAvg!=null?n1(x.hAvg)+"mm":null;}],
+        ["용 무게 평균",function(x){return x.pAvg!=null?n1(x.pAvg)+"g":null;}],
+        ["우화 평균",function(x){return x.aAvg!=null?n1(x.aAvg)+"mm":null;}],
+        ["최대 유충 무게",function(x){return x.wMax!=null?n1(x.wMax)+"g":null;}],
+        ["최대 체장",function(x){return x.aMax!=null?n1(x.aMax)+"mm":null;}],
+      ];
+      html+='<table class="sxt"><tr><th></th>'
+        +'<th class="sx-m">♂ '+M.n+'두</th><th class="sx-f">♀ '+Fm.n+'두</th></tr>';
+      rowsDef.forEach(function(rd){
+        var a=rd[1](M),b=rd[1](Fm);
+        if(a==null&&b==null)return;   /* 양쪽 다 없는 항목은 숨김 */
+        html+='<tr><td class="sxt-k">'+rd[0]+'</td>'
+          +'<td class="mono'+(a?"":" nul")+'">'+(a||"—")+'</td>'
+          +'<td class="mono'+(b?"":" nul")+'">'+(b||"—")+'</td></tr>';
       });
-      html+='</table></div>';
+      html+='</table>';
+      html+='<button class="recbtn" onclick="openRecords('+bi+')">개체별 기록 '+br.larvae.length+'두 보기 ›</button>';
     }
     html+='</div></details>';
   });
@@ -483,6 +536,35 @@ function render(B){
 
   document.getElementById("live").innerHTML=html;
 }
+
+/* 개체별 기록 창 */
+function openRecords(bi){
+  var r=(window.__REC||[])[bi]; if(!r)return;
+  var br=r.br,rounds=window.__ROUNDS||[];
+  var h='<div class="rec-head"><div class="rec-t">'+esc(br.name)+' · 개체별 기록</div>'
+    +'<button class="rec-x" onclick="closeRecords()">✕</button></div>'
+    +'<div class="rec-body"><table><tr><th>번호</th><th>성별</th>'
+    +rounds.map(function(rd){return '<th>'+esc(rd.name)+'<br/><span class="th-s">무게/두폭</span></th>';}).join("")
+    +'<th>용<br/><span class="th-s">무게</span></th><th>체장</th></tr>';
+  br.larvae.forEach(function(l){
+    var sx=sexOf(l.sex);
+    var isBest=(r.best.m&&r.best.m.code===l.code&&sx==="m")||(r.best.f&&r.best.f.code===l.code&&sx==="f");
+    h+='<tr class="'+(isBest?"best":"")+'"><td class="mono">'+(isBest?'<span class="star">★</span> ':"")+esc(l.code)+'</td>'
+      +'<td>'+(sx==="m"?'<span class="sx-m">♂</span>':sx==="f"?'<span class="sx-f">♀</span>':'<span style="color:var(--dim)">—</span>')+'</td>'
+      +rounds.map(function(_,i){
+        var w=num(l.weights[i]),hd=num((l.heads||[])[i]);
+        return '<td class="mono">'+(w!=null?n1(w)+(hd!=null?'<span class="hw">/'+n1(hd)+'</span>':""):"·")+'</td>';
+      }).join("")
+      +'<td class="mono">'+(l.pupa!=null?n1(l.pupa):"·")+'</td>'
+      +'<td class="mono">'+(l.adult!=null?n1(l.adult):"·")+'</td></tr>';
+  });
+  h+='</table><div class="rec-note">★ = 팀 스코어에 반영되는 선발 개체</div></div>';
+  var d=document.createElement("div");
+  d.className="rec-ov";d.id="recOv";d.innerHTML='<div class="rec-box">'+h+'</div>';
+  d.onclick=function(e){if(e.target===d)closeRecords();};
+  document.body.appendChild(d);
+}
+function closeRecords(){var d=document.getElementById("recOv");if(d)d.remove();}
 
 /* 사진 확대 */
 function zoom(src){
