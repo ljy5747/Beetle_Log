@@ -506,9 +506,9 @@ function render(B){
 
   /* ── 참가자별 상세 (왼쪽 열) ── */
   var dh='';
-  window.__REC=ranked; window.__ROUNDS=rounds; window.__UNIT=unit;
+  window.__REC=rows; window.__ROUNDS=rounds; window.__UNIT=unit;   /* rows = 관리자 입력 순서 그대로 */
   dh+='<div class="sec-t"><span>참가자별 상세</span></div>';
-  ranked.forEach(function(r,bi){
+  rows.forEach(function(r,bi){
     var br=r.br,L=br.line;
     dh+='<details><summary>'+avatarHTML(br,34)
       +'<span class="sm-name"><i style="background:'+bcolor(br)+'"></i>'+esc(br.name)+'</span>'
