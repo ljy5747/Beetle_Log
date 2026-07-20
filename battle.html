@@ -61,6 +61,14 @@ padding:0 15px;font-size:13.5px;font-weight:800;cursor:pointer;font-family:inher
 .gb-empty{text-align:center;color:var(--dim);font-size:12.5px;padding:14px 0}
 .gb-more{width:100%;background:none;border:1px solid var(--line);color:var(--dim);border-radius:9px;
 padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px}
+.gb-pager{display:flex;gap:4px;justify-content:center;align-items:center;margin-top:10px;flex-wrap:wrap}
+.gb-pg{min-width:30px;height:30px;padding:0 6px;background:var(--surf);border:1px solid var(--line);
+color:var(--dim);border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;
+font-variant-numeric:tabular-nums}
+.gb-pg.on{background:var(--gold);border-color:var(--gold);color:#1A1206}
+.gb-pg.nav{color:var(--gold-l)}
+.gb-pg:disabled{opacity:.35;cursor:default}
+.gb-el{color:#6E6559;font-size:12px;padding:0 2px}
 
 /* 좋아요 */
 .likebtn{width:100%;margin-top:9px;background:var(--surf2);border:1px solid var(--line);color:var(--dim);
@@ -687,7 +695,9 @@ function toggleLike(bi){
 }
 
 /* ── 방명록 ── */
-var GB_SHOW=5;
+var GB_ROWS=[];       /* 전체 (최신순) */
+var GB_PAGE=0;        /* 0 = 첫 화면(5개), 1+ = 페이지 (10개씩) */
+var GB_FIRST=5, GB_PER=10;
 function initGB(){renderGB();}
 function renderGB(){
   var el=document.getElementById("gb");
@@ -704,22 +714,51 @@ function renderGB(){
   document.getElementById("gb-msg").addEventListener("keydown",function(e){if(e.key==="Enter")sendGB();});
   loadGB();
 }
-function loadGB(){
-  fetch(SUPA_URL+"/rest/v1/battle_guestbook?select=name,msg,created_at&order=created_at.desc&limit=50",{headers:SB})
+function loadGB(resetPage){
+  if(resetPage)GB_PAGE=0;
+  fetch(SUPA_URL+"/rest/v1/battle_guestbook?select=name,msg,created_at&order=created_at.desc&limit=500",{headers:SB})
     .then(function(r){return r.ok?r.json():[];})
-    .then(function(rows){
+    .then(function(rows){GB_ROWS=rows||[];paintGB();})
+    .catch(function(){
       var box=document.getElementById("gb-list");
-      if(!rows||!rows.length){box.innerHTML='<div class="gb-empty">첫 응원을 남겨보세요! 🪲</div>';return;}
-      var shown=rows.slice(0,GB_SHOW);
-      box.innerHTML=shown.map(function(g){
-        return '<div class="gb-item"><div class="gb-h"><span class="gb-nm">'+esc(g.name)+'</span>'
-          +'<span class="gb-dt">'+relTime(g.created_at)+'</span></div>'
-          +'<div class="gb-m">'+esc(g.msg)+'</div></div>';
-      }).join("")
-      +(rows.length>GB_SHOW?'<button class="gb-more" onclick="GB_SHOW=999;loadGB()">응원 '+rows.length+'개 모두 보기</button>':"");
-    }).catch(function(){
-      document.getElementById("gb-list").innerHTML='<div class="gb-empty">방명록을 불러오지 못했어요</div>';
+      if(box)box.innerHTML='<div class="gb-empty">방명록을 불러오지 못했어요</div>';
     });
+}
+function paintGB(){
+  var box=document.getElementById("gb-list"); if(!box)return;
+  var rows=GB_ROWS;
+  if(!rows.length){box.innerHTML='<div class="gb-empty">첫 응원을 남겨보세요! 🪲</div>';return;}
+  var start,end;
+  if(GB_PAGE===0){start=0;end=Math.min(GB_FIRST,rows.length);}
+  else{start=GB_FIRST+(GB_PAGE-1)*GB_PER;end=Math.min(start+GB_PER,rows.length);}
+  var slice=rows.slice(start,end);
+  var html=slice.map(function(g){
+    return '<div class="gb-item"><div class="gb-h"><span class="gb-nm">'+esc(g.name)+'</span>'
+      +'<span class="gb-dt">'+relTime(g.created_at)+'</span></div>'
+      +'<div class="gb-m">'+esc(g.msg)+'</div></div>';
+  }).join("");
+  /* 첫 화면: 5개 넘으면 "더보기" */
+  if(GB_PAGE===0){
+    if(rows.length>GB_FIRST)
+      html+='<button class="gb-more" onclick="GB_PAGE=1;paintGB()">응원 '+rows.length+'개 더보기 ›</button>';
+  }else{
+    /* 페이지 모드: 번호 페이저 */
+    var totalPages=Math.ceil((rows.length-GB_FIRST)/GB_PER);
+    html+='<div class="gb-pager">';
+    html+='<button class="gb-pg nav" '+(GB_PAGE<=1?"disabled":"")+' onclick="GB_PAGE='+(GB_PAGE-1)+';paintGB()">‹</button>';
+    var maxShow=5,from=Math.max(1,GB_PAGE-2),to=Math.min(totalPages,from+maxShow-1);
+    from=Math.max(1,Math.min(from,to-maxShow+1));
+    if(from>1)html+='<button class="gb-pg" onclick="GB_PAGE=1;paintGB()">1</button>'+(from>2?'<span class="gb-el">…</span>':"");
+    for(var pp=from;pp<=to;pp++)
+      html+='<button class="gb-pg'+(pp===GB_PAGE?" on":"")+'" onclick="GB_PAGE='+pp+';paintGB()">'+pp+'</button>';
+    if(to<totalPages)html+=(to<totalPages-1?'<span class="gb-el">…</span>':"")+'<button class="gb-pg" onclick="GB_PAGE='+totalPages+';paintGB()">'+totalPages+'</button>';
+    html+='<button class="gb-pg nav" '+(GB_PAGE>=totalPages?"disabled":"")+' onclick="GB_PAGE='+(GB_PAGE+1)+';paintGB()">›</button>';
+    html+='</div>';
+    html+='<button class="gb-more" onclick="GB_PAGE=0;paintGB()">↑ 접기</button>';
+  }
+  box.innerHTML=html;
+  /* 페이지 넘기면 방명록 상단으로 */
+  if(GB_PAGE>0){var t=document.getElementById("gb");if(t&&t.scrollIntoView)t.scrollIntoView({block:"start"});}
 }
 function relTime(iso){
   var d=new Date(iso),diff=(Date.now()-d.getTime())/1000;
@@ -744,7 +783,7 @@ function sendGB(){
     btn.disabled=false;btn.textContent="등록";
     if(!r.ok)return r.text().then(function(){alert("등록에 실패했어요. 잠시 후 다시 시도해주세요.");});
     lsSet("bl-gb-name",name);lsSet("bl-gb-t",String(Date.now()));
-    ms.value="";loadGB();
+    ms.value="";loadGB(true);
   }).catch(function(){
     btn.disabled=false;btn.textContent="등록";alert("네트워크 오류예요. 다시 시도해주세요.");
   });
