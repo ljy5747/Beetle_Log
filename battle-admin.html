@@ -125,6 +125,30 @@ color:#fff;border-radius:999px;padding:10px 18px;font-size:13.5px;font-weight:60
 box-shadow:0 8px 24px rgba(28,26,23,.25);max-width:92vw;text-align:center}
 .guide{background:#FCFAF5;border:1px solid #A8884F44;border-radius:12px;padding:11px 13px;font-size:12.5px;line-height:1.75;color:#6B5A38;margin-bottom:12px}
 .guide b{font-weight:800}
+
+/* 방명록 관리 */
+.gbadmin-ov{position:fixed;inset:0;background:rgba(28,26,23,.5);z-index:80;display:flex;
+align-items:flex-end;justify-content:center;backdrop-filter:blur(2px)}
+.gbadmin-box{background:var(--bg);border-top-left-radius:18px;border-top-right-radius:18px;
+width:100%;max-width:560px;max-height:86vh;display:flex;flex-direction:column;
+box-shadow:0 -8px 40px rgba(0,0,0,.25)}
+.gbadmin-head{display:flex;align-items:center;padding:15px 16px 13px;border-bottom:1px solid var(--line);flex:none}
+.gbadmin-t{font-size:16px;font-weight:800;flex:1}
+.gbadmin-x{background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;padding:0 4px}
+.gbadmin-body{overflow:auto;padding:10px 14px 22px}
+.gbadmin-cnt{font-size:11.5px;color:var(--dim);font-weight:700;margin:2px 2px 9px}
+.gbadmin-item{display:flex;gap:10px;align-items:flex-start;background:var(--surf);
+border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:8px}
+.gbadmin-i-b{flex:1;min-width:0}
+.gbadmin-i-h{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
+.gbadmin-nm{font-size:13px;font-weight:800;color:var(--gold-d)}
+.gbadmin-dt{font-size:10.5px;color:var(--dim)}
+.gbadmin-msg{font-size:13.5px;color:var(--text);word-break:break-word;white-space:pre-wrap;line-height:1.5}
+.gbadmin-del{flex:none;background:var(--surf2);border:1px solid var(--line);color:var(--dim);
+border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.gbadmin-del.arm{background:#F7E9E6;border-color:#B4503F;color:var(--red)}
+.gbadmin-del:disabled{opacity:.5}
+.gbadmin-empty{text-align:center;color:var(--dim);font-size:13px;padding:30px 0}
 </style>
 </head>
 <body>
@@ -267,6 +291,76 @@ function pickPhoto(kind,i){
   inp.click();
 }
 
+/* ══ 방명록 관리 ══ */
+function gbRelTime(iso){
+  var d=new Date(iso),diff=(Date.now()-d.getTime())/1000;
+  if(diff<60)return "방금";
+  if(diff<3600)return Math.floor(diff/60)+"분 전";
+  if(diff<86400)return Math.floor(diff/3600)+"시간 전";
+  if(diff<604800)return Math.floor(diff/86400)+"일 전";
+  return String(iso).slice(2,10).replace(/-/g,".");
+}
+function openGBAdmin(){
+  var ov=document.createElement("div");
+  ov.className="gbadmin-ov";ov.id="gbAdminOv";
+  ov.innerHTML='<div class="gbadmin-box"><div class="gbadmin-head">'
+    +'<div class="gbadmin-t">응원 방명록 관리</div>'
+    +'<button class="gbadmin-x" id="gbAdminClose">✕</button></div>'
+    +'<div class="gbadmin-body" id="gbAdminList"><div class="gbadmin-empty">불러오는 중…</div></div></div>';
+  ov.addEventListener("click",function(e){if(e.target===ov)closeGBAdmin();});
+  document.body.appendChild(ov);
+  document.getElementById("gbAdminClose").addEventListener("click",closeGBAdmin);
+  loadGBAdmin();
+}
+function closeGBAdmin(){var o=document.getElementById("gbAdminOv");if(o)o.remove();}
+function loadGBAdmin(){
+  var box=document.getElementById("gbAdminList");
+  if(!box)return;
+  fetch(SUPA_URL+"/rest/v1/battle_guestbook?select=id,name,msg,created_at&order=created_at.desc&limit=200",
+    {headers:{apikey:SUPA_ANON,Authorization:"Bearer "+SUPA_ANON}})
+    .then(function(r){return r.ok?r.json():[];})
+    .then(function(rows){
+      if(!rows||!rows.length){box.innerHTML='<div class="gbadmin-empty">아직 응원 글이 없어요</div>';return;}
+      box.innerHTML='<div class="gbadmin-cnt">전체 '+rows.length+'개</div>'+rows.map(function(g){
+        return '<div class="gbadmin-item" id="gba-'+g.id+'">'
+          +'<div class="gbadmin-i-b"><div class="gbadmin-i-h">'
+          +'<span class="gbadmin-nm">'+esc(g.name)+'</span>'
+          +'<span class="gbadmin-dt">'+gbRelTime(g.created_at)+'</span></div>'
+          +'<div class="gbadmin-msg">'+esc(g.msg)+'</div></div>'
+          +'<button class="gbadmin-del" data-id="'+g.id+'" data-nm="'+esc(g.name)+'">삭제</button></div>';
+      }).join("");
+      Array.prototype.forEach.call(box.querySelectorAll(".gbadmin-del"),function(btn){
+        btn.addEventListener("click",function(){deleteGB(btn.dataset.id,btn.dataset.nm,btn);});
+      });
+    }).catch(function(){
+      box.innerHTML='<div class="gbadmin-empty">불러오지 못했어요</div>';
+    });
+}
+var gbArmed={id:"",t:0};
+function deleteGB(id,name,btn){
+  if(gbArmed.id!==id||Date.now()-gbArmed.t>2600){
+    gbArmed={id:id,t:Date.now()};
+    btn.textContent="한번 더";btn.classList.add("arm");
+    setTimeout(function(){if(btn){btn.textContent="삭제";btn.classList.remove("arm");}},2600);
+    return;
+  }
+  gbArmed={id:"",t:0};
+  var tok=getToken();
+  if(!tok){say("로그인이 만료됐어요");return;}
+  btn.textContent="…";btn.disabled=true;
+  fetch(SUPA_URL+"/rest/v1/battle_guestbook?id=eq."+encodeURIComponent(id),{
+    method:"DELETE",
+    headers:{apikey:SUPA_ANON,Authorization:"Bearer "+tok.access_token,Prefer:"return=minimal"}
+  }).then(function(r){
+    if(r.ok||r.status===204){
+      var row=document.getElementById("gba-"+id);if(row)row.remove();
+      say("✓ '"+name+"' 글을 삭제했어요");
+    }else if(r.status===401){say("로그인이 만료됐어요 — 다시 로그인해주세요");}
+    else if(r.status===403){btn.textContent="삭제";btn.disabled=false;say("⚠️ 삭제 권한이 없어요 — SQL의 관리자 이메일 확인");}
+    else{btn.textContent="삭제";btn.disabled=false;say("⚠️ 삭제 실패 ("+r.status+")");}
+  }).catch(function(){btn.textContent="삭제";btn.disabled=false;say("⚠️ 네트워크 오류");});
+}
+
 /* ══ 상태 ══ */
 var S=null,userEmail="",MODE="larva",CUR=0;
 
@@ -327,6 +421,7 @@ function renderForm(){
   var isL=MODE==="larva";
   var h='<div class="topbar"><div class="brand">Battle <span style="font-style:italic">admin</span>'
     +'<small>'+esc(userEmail||"로그인됨")+'</small></div>'
+    +'<button class="hbtn" id="gbAdminBtn" style="margin-right:4px">방명록</button>'
     +'<button class="hbtn" id="logoutBtn">로그아웃</button></div>';
 
   h+='<div class="guide">'
@@ -447,6 +542,7 @@ function renderForm(){
 
   /* 이벤트 */
   $("logoutBtn").addEventListener("click",logout);
+  $("gbAdminBtn").addEventListener("click",openGBAdmin);
   $("previewBtn").addEventListener("click",function(){window.open("battle.html","_blank");});
   $("saveBtn").addEventListener("click",save);
   $("m-larva").addEventListener("click",function(){if(MODE!=="larva"){readForm();MODE="larva";renderForm();}});
