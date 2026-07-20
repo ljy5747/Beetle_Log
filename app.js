@@ -220,6 +220,99 @@ function Spark({ ind, w = 96, h = 30, big }) {
   );
 }
 
+/* ════════════════════ 라인 암수 통계 ════════════════════ */
+function LineSexStats({ kids }) {
+  const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+  const rows = [
+    { key: "수", label: "♂ 수컷", color: "#5A7A9A" },
+    { key: "암", label: "♀ 암컷", color: "#A8884F" },
+  ].map((r) => {
+    const mine = kids.filter((i) => (i.sex || "").includes(r.key));
+    const ws = mine.filter((i) => i.status === "유충").map((i) => num(latestRec(i)?.weight)).filter(Boolean);
+    const pw = mine.map((i) => num(i.pupation?.pupaWeight)).filter(Boolean);
+    const tl = mine.map((i) => num(i.eclosion?.totalLength)).filter(Boolean);
+    return { ...r, n: mine.length, w: avg(ws), wN: ws.length, p: avg(pw), pN: pw.length, t: avg(tl), tN: tl.length };
+  }).filter((r) => r.n > 0);
+  if (!rows.length) return null;
+  const cell = { flex: 1, textAlign: "right" };
+  const cnt = (n) => n > 0 ? <small style={{ color: "var(--dim)", fontWeight: 600 }}> ({n})</small> : null;
+  return (
+    <div className="panel">
+      <div className="p-t">암수 통계 <small style={{ fontWeight: 600, textTransform: "none", letterSpacing: 0 }}>· 괄호 = 마릿수</small></div>
+      <div style={{ display: "flex", fontSize: 11, color: "var(--dim)", fontWeight: 700, marginBottom: 6 }}>
+        <span style={{ flex: 1.1 }}></span>
+        <span style={cell}>유충무게</span><span style={cell}>번데기</span><span style={cell}>성충길이</span>
+      </div>
+      {rows.map((r) => (
+        <div key={r.key} className="mono" style={{ display: "flex", alignItems: "baseline", padding: "4px 0", fontSize: 14 }}>
+          <span style={{ flex: 1.1, color: r.color, fontWeight: 800, fontSize: 13 }}>{r.label} <small style={{ color: "var(--dim)", fontWeight: 600 }}>{r.n}</small></span>
+          <span style={cell}>{r.w ? <><b>{n1(r.w)}</b><small style={{ color: "var(--dim)" }}>g</small>{cnt(r.wN)}</> : <span className="dim">—</span>}</span>
+          <span style={cell}>{r.p ? <><b>{n1(r.p)}</b><small style={{ color: "var(--dim)" }}>g</small>{cnt(r.pN)}</> : <span className="dim">—</span>}</span>
+          <span style={cell}>{r.t ? <><b>{n1(r.t)}</b><small style={{ color: "var(--dim)" }}>mm</small>{cnt(r.tN)}</> : <span className="dim">—</span>}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ════════════════════ 라인 무게 그래프 (꺾은선) ════════════════════ */
+function LineWeightChart({ kids }) {
+  const series = kids.map((ind) => ({
+    ind,
+    pts: sortedRecs(ind).filter((r) => num(r.weight) && r.date).map((r) => ({ t: new Date(r.date + "T00:00:00").getTime(), w: num(r.weight) })),
+  })).filter((s) => s.pts.length >= 1);
+  const all = series.flatMap((s) => s.pts);
+  if (all.length < 2) return null;
+  const minT = Math.min(...all.map((p) => p.t)), maxT = Math.max(...all.map((p) => p.t));
+  const minW = Math.min(...all.map((p) => p.w)), maxW = Math.max(...all.map((p) => p.w));
+  const W = 340, H = 180, pl = 34, pr = 12, pt = 12, pb = 24;
+  const spanT = maxT - minT || 1, spanW = maxW - minW || 1;
+  const X = (t) => pl + ((t - minT) / spanT) * (W - pl - pr);
+  const Y = (w) => pt + (1 - (w - minW) / spanW) * (H - pt - pb);
+  const colorOf = (ind) => (ind.sex || "").includes("수") ? "#5A7A9A" : (ind.sex || "").includes("암") ? "#A8884F" : "#B8B2A6";
+  const fmtD = (t) => { const d = new Date(t); return `${String(d.getFullYear()).slice(2)}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`; };
+  const nM = series.filter((s) => (s.ind.sex || "").includes("수")).length;
+  const nF = series.filter((s) => (s.ind.sex || "").includes("암")).length;
+  const nU = series.length - nM - nF;
+  const midW = (minW + maxW) / 2;
+  return (
+    <div className="panel">
+      <div className="p-t">무게 그래프
+        <small style={{ fontWeight: 700, textTransform: "none", letterSpacing: 0, marginLeft: 8 }}>
+          {nM > 0 && <span style={{ color: "#5A7A9A" }}>♂{nM} </span>}
+          {nF > 0 && <span style={{ color: "#A8884F" }}>♀{nF} </span>}
+          {nU > 0 && <span style={{ color: "#B8B2A6" }}>미구분{nU}</span>}
+        </small>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {/* 가로 눈금선 + Y축 라벨 */}
+        {[minW, midW, maxW].map((w, i) => (
+          <g key={i}>
+            <line x1={pl} y1={Y(w)} x2={W - pr} y2={Y(w)} stroke="#E7E3DC" strokeWidth="1" />
+            <text x={pl - 5} y={Y(w) + 3.5} fontSize="9.5" fill="#8A8378" textAnchor="end" fontFamily="ui-monospace,monospace">{n1(w)}</text>
+          </g>
+        ))}
+        {/* X축 날짜 (처음/끝) */}
+        <text x={pl} y={H - 8} fontSize="9.5" fill="#8A8378" fontFamily="ui-monospace,monospace">{fmtD(minT)}</text>
+        <text x={W - pr} y={H - 8} fontSize="9.5" fill="#8A8378" textAnchor="end" fontFamily="ui-monospace,monospace">{fmtD(maxT)}</text>
+        {/* 각 유충 꺾은선 */}
+        {series.map((s) => (
+          <g key={s.ind.id}>
+            {s.pts.length >= 2 && (
+              <polyline points={s.pts.map((p) => `${X(p.t)},${Y(p.w)}`).join(" ")}
+                fill="none" stroke={colorOf(s.ind)} strokeWidth="1.6" strokeLinejoin="round" opacity="0.75" />
+            )}
+            {s.pts.map((p, i) => (
+              <circle key={i} cx={X(p.t)} cy={Y(p.w)} r={i === s.pts.length - 1 ? 3 : 1.8} fill={colorOf(s.ind)} opacity={i === s.pts.length - 1 ? 1 : 0.75} />
+            ))}
+          </g>
+        ))}
+      </svg>
+      <div className="hint" style={{ marginTop: 6 }}>선 하나 = 유충 한 마리 · 끝의 큰 점이 최근 무게</div>
+    </div>
+  );
+}
+
 /* ════════════════════ 공용 UI ════════════════════ */
 const F = ({ label, children, half }) => (
   <div className={"field" + (half ? " half" : "")}>
@@ -2080,6 +2173,9 @@ function App() {
                 <button className="btn" onClick={() => setModal({ type: "bulkBottle", lineId: L.id })}>+ 일괄 병갈이</button>
               )}
             </div>
+
+            <LineSexStats kids={kids} />
+            <LineWeightChart kids={kids} />
 
             {kids.length > 0 && (
               <div className="filters">
