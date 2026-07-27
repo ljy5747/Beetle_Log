@@ -255,26 +255,33 @@ function LineSexStats({ kids }) {
   );
 }
 
-/* ════════════════════ 라인 무게 그래프 (꺾은선) ════════════════════ */
+/* ════════════════════ 라인 무게 그래프 (병갈이 회차 기준 꺾은선) ════════════════════ */
 function LineWeightChart({ kids }) {
-  const series = kids.map((ind) => ({
-    ind,
-    pts: sortedRecs(ind).filter((r) => num(r.weight) && r.date).map((r) => ({ t: new Date(r.date + "T00:00:00").getTime(), w: num(r.weight) })),
-  })).filter((s) => s.pts.length >= 1);
-  const all = series.flatMap((s) => s.pts);
-  if (all.length < 2) return null;
-  const minT = Math.min(...all.map((p) => p.t)), maxT = Math.max(...all.map((p) => p.t));
-  const minW = Math.min(...all.map((p) => p.w)), maxW = Math.max(...all.map((p) => p.w));
-  const W = 340, H = 180, pl = 34, pr = 12, pt = 12, pb = 24;
-  const spanT = maxT - minT || 1, spanW = maxW - minW || 1;
-  const X = (t) => pl + ((t - minT) / spanT) * (W - pl - pr);
-  const Y = (w) => pt + (1 - (w - minW) / spanW) * (H - pt - pb);
+  /* 각 유충: 원점(0회차, 0g)에서 출발 → 1회차부터 실제 무게 */
+  const series = kids.map((ind) => {
+    const ws = sortedRecs(ind).map((r) => num(r.weight)).filter(Boolean);
+    return { ind, pts: [{ n: 0, w: 0 }, ...ws.map((w, i) => ({ n: i + 1, w }))], recN: ws.length };
+  }).filter((s) => s.recN >= 1);
+  if (!series.length) return null;
+  const maxN = Math.max(...series.map((s) => s.recN));
+  const maxW = Math.max(...series.flatMap((s) => s.pts.map((p) => p.w)));
+  if (!maxN || !maxW) return null;
+  const W = 340, H = 190, pl = 30, pr = 34, pt = 12, pb = 24;
+  const X = (n) => pl + (n / maxN) * (W - pl - pr);
+  const Y = (w) => pt + (1 - w / maxW) * (H - pt - pb);
   const colorOf = (ind) => (ind.sex || "").includes("수") ? "#5A7A9A" : (ind.sex || "").includes("암") ? "#A8884F" : "#B8B2A6";
-  const fmtD = (t) => { const d = new Date(t); return `${String(d.getFullYear()).slice(2)}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`; };
+  /* 유충 번호 끝자리 (예: 26SA01 → 01) */
+  const tail = (code) => { const m = String(code).match(/(\d+)\s*$/); return m ? m[1] : String(code).slice(-3); };
+  /* 암수 평균 (살아있는 유충의 최근 무게) — 가로 점선 */
+  const avgOf = (sexKey) => {
+    const ws = kids.filter((i) => (i.sex || "").includes(sexKey) && i.status === "유충")
+      .map((i) => num(latestRec(i)?.weight)).filter(Boolean);
+    return ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null;
+  };
+  const avgM = avgOf("수"), avgF = avgOf("암");
   const nM = series.filter((s) => (s.ind.sex || "").includes("수")).length;
   const nF = series.filter((s) => (s.ind.sex || "").includes("암")).length;
   const nU = series.length - nM - nF;
-  const midW = (minW + maxW) / 2;
   return (
     <div className="panel">
       <div className="p-t">무게 그래프
@@ -285,30 +292,46 @@ function LineWeightChart({ kids }) {
         </small>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
-        {/* 가로 눈금선 + Y축 라벨 */}
-        {[minW, midW, maxW].map((w, i) => (
+        {/* 가로 눈금선 + Y축 라벨 (0 / 중간 / 최대) */}
+        {[0, maxW / 2, maxW].map((w, i) => (
           <g key={i}>
             <line x1={pl} y1={Y(w)} x2={W - pr} y2={Y(w)} stroke="#E7E3DC" strokeWidth="1" />
-            <text x={pl - 5} y={Y(w) + 3.5} fontSize="9.5" fill="#8A8378" textAnchor="end" fontFamily="ui-monospace,monospace">{n1(w)}</text>
+            <text x={pl - 4} y={Y(w) + 3.5} fontSize="9.5" fill="#8A8378" textAnchor="end" fontFamily="ui-monospace,monospace">{n1(w)}</text>
           </g>
         ))}
-        {/* X축 날짜 (처음/끝) */}
-        <text x={pl} y={H - 8} fontSize="9.5" fill="#8A8378" fontFamily="ui-monospace,monospace">{fmtD(minT)}</text>
-        <text x={W - pr} y={H - 8} fontSize="9.5" fill="#8A8378" textAnchor="end" fontFamily="ui-monospace,monospace">{fmtD(maxT)}</text>
-        {/* 각 유충 꺾은선 */}
-        {series.map((s) => (
-          <g key={s.ind.id}>
-            {s.pts.length >= 2 && (
-              <polyline points={s.pts.map((p) => `${X(p.t)},${Y(p.w)}`).join(" ")}
-                fill="none" stroke={colorOf(s.ind)} strokeWidth="1.6" strokeLinejoin="round" opacity="0.75" />
-            )}
-            {s.pts.map((p, i) => (
-              <circle key={i} cx={X(p.t)} cy={Y(p.w)} r={i === s.pts.length - 1 ? 3 : 1.8} fill={colorOf(s.ind)} opacity={i === s.pts.length - 1 ? 1 : 0.75} />
-            ))}
-          </g>
+        {/* X축 회차 라벨 (0 ~ maxN) */}
+        {Array.from({ length: maxN + 1 }, (_, n) => (
+          <text key={n} x={X(n)} y={H - 8} fontSize="9.5" fill="#8A8378" textAnchor="middle" fontFamily="ui-monospace,monospace">{n === 0 ? "투입" : n + "병"}</text>
         ))}
+        {/* 암수 평균 가로 점선 */}
+        {avgM && (
+          <g>
+            <line x1={pl} y1={Y(avgM)} x2={W - pr} y2={Y(avgM)} stroke="#5A7A9A" strokeWidth="1.3" strokeDasharray="5 4" opacity="0.85" />
+            <text x={W - pr + 3} y={Y(avgM) + 3} fontSize="8.5" fill="#5A7A9A" fontWeight="700" fontFamily="ui-monospace,monospace">♂{n1(avgM)}</text>
+          </g>
+        )}
+        {avgF && (
+          <g>
+            <line x1={pl} y1={Y(avgF)} x2={W - pr} y2={Y(avgF)} stroke="#A8884F" strokeWidth="1.3" strokeDasharray="5 4" opacity="0.85" />
+            <text x={W - pr + 3} y={Y(avgF) + 3} fontSize="8.5" fill="#A8884F" fontWeight="700" fontFamily="ui-monospace,monospace">♀{n1(avgF)}</text>
+          </g>
+        )}
+        {/* 각 유충 꺾은선 + 끝 번호 */}
+        {series.map((s) => {
+          const last = s.pts[s.pts.length - 1];
+          return (
+            <g key={s.ind.id}>
+              <polyline points={s.pts.map((p) => `${X(p.n)},${Y(p.w)}`).join(" ")}
+                fill="none" stroke={colorOf(s.ind)} strokeWidth="1.6" strokeLinejoin="round" opacity="0.7" />
+              {s.pts.slice(1).map((p, i) => (
+                <circle key={i} cx={X(p.n)} cy={Y(p.w)} r={p.n === last.n ? 2.6 : 1.7} fill={colorOf(s.ind)} opacity={p.n === last.n ? 1 : 0.7} />
+              ))}
+              <text x={X(last.n) + 4} y={Y(last.w) + 3} fontSize="8.5" fill={colorOf(s.ind)} fontWeight="700" fontFamily="ui-monospace,monospace">{tail(s.ind.code)}</text>
+            </g>
+          );
+        })}
       </svg>
-      <div className="hint" style={{ marginTop: 6 }}>선 하나 = 유충 한 마리 · 끝의 큰 점이 최근 무게</div>
+      <div className="hint" style={{ marginTop: 6 }}>선 끝 숫자 = 유충 번호 · 점선 = 암수 평균(최근 무게) · 가로축 = 병갈이 회차</div>
     </div>
   );
 }
