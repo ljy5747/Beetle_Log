@@ -1607,6 +1607,13 @@ function App() {
     /* 아이폰 홈화면 앱(standalone)은 좌측 엣지 스와이프 제스처가 없어서 직접 감지 */
     let sx = null, sy = null;
     const ts = (e) => { const t = e.touches[0]; if (t.clientX < 28) { sx = t.clientX; sy = t.clientY; } else { sx = null; } };
+    /* 손을 떼기 전이라도 기준 넘는 순간 바로 실행 (빠른 반응) */
+    const tm = (e) => {
+      if (sx == null) return;
+      const t = e.touches[0];
+      if (Math.abs(t.clientY - sy) > 60) { sx = null; return; } /* 세로로 새면 취소 */
+      if (t.clientX - sx > 70) { sx = null; doBack(); }
+    };
     const te = (e) => {
       if (sx == null) return;
       const t = e.changedTouches[0];
@@ -1616,11 +1623,12 @@ function App() {
     const standalone = !!window.navigator.standalone;
     if (standalone) {
       document.addEventListener("touchstart", ts, { passive: true });
+      document.addEventListener("touchmove", tm, { passive: true });
       document.addEventListener("touchend", te, { passive: true });
     }
     return () => {
       window.removeEventListener("popstate", onPop);
-      if (standalone) { document.removeEventListener("touchstart", ts); document.removeEventListener("touchend", te); }
+      if (standalone) { document.removeEventListener("touchstart", ts); document.removeEventListener("touchmove", tm); document.removeEventListener("touchend", te); }
     };
   }, []);
 
