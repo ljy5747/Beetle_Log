@@ -339,11 +339,14 @@ function LineWeightChart({ kids }) {
             </g>
           );
         })}
-        {/* 번호 라벨 — 암수 1등만 */}
+        {/* 번호 라벨 — 암수 1등만 (오른쪽 끝이면 점 왼쪽에 표시) */}
         {[topM, topF].filter(Boolean).map((s) => {
           const last = s.pts[s.pts.length - 1];
+          const nearRight = X(last.n) > W - 92;
           return (
-            <text key={s.ind.id} x={X(last.n) + 7} y={Y(last.w) + 3.5} fontSize="10" fill={colorOf(s.ind)} fontWeight="800" fontFamily="ui-monospace,monospace">👑{tail(s.ind.code)}</text>
+            <text key={s.ind.id} x={nearRight ? X(last.n) - 7 : X(last.n) + 7} y={Y(last.w) + 3.5}
+              fontSize="10" fill={colorOf(s.ind)} fontWeight="800" fontFamily="ui-monospace,monospace"
+              textAnchor={nearRight ? "end" : "start"}>👑{tail(s.ind.code)} ({n1(last.w)}g)</text>
           );
         })}
       </svg>
