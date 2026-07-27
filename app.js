@@ -266,7 +266,7 @@ function LineWeightChart({ kids }) {
   const maxN = Math.max(...series.map((s) => s.recN));
   const maxW = Math.max(...series.flatMap((s) => s.pts.map((p) => p.w)));
   if (!maxN || !maxW) return null;
-  const W = 340, H = 190, pl = 30, pr = 34, pt = 12, pb = 24;
+  const W = 340, H = 230, pl = 30, pr = 34, pt = 14, pb = 24;
   const X = (n) => pl + (n / maxN) * (W - pl - pr);
   const Y = (w) => pt + (1 - w / maxW) * (H - pt - pb);
   const colorOf = (ind) => (ind.sex || "").includes("수") ? "#5A7A9A" : (ind.sex || "").includes("암") ? "#A8884F" : "#B8B2A6";
@@ -282,8 +282,27 @@ function LineWeightChart({ kids }) {
   const nM = series.filter((s) => (s.ind.sex || "").includes("수")).length;
   const nF = series.filter((s) => (s.ind.sex || "").includes("암")).length;
   const nU = series.length - nM - nF;
+  /* 선 끝 번호 라벨 — 같은 회차에서 겹치면 위아래로 벌리기 */
+  const GAP = 10.5;
+  const labels = series.map((s) => {
+    const last = s.pts[s.pts.length - 1];
+    return { id: s.ind.id, code: tail(s.ind.code), color: colorOf(s.ind), n: last.n, x: X(last.n), dotY: Y(last.w), y: Y(last.w) };
+  });
+  /* 회차(n)별로 묶어서 그 안에서만 간격 조정 */
+  const byN = {};
+  labels.forEach((l) => { (byN[l.n] = byN[l.n] || []).push(l); });
+  Object.values(byN).forEach((grp) => {
+    grp.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < grp.length; i++) if (grp[i].y < grp[i - 1].y + GAP) grp[i].y = grp[i - 1].y + GAP;
+    const maxY = H - pb - 3;
+    if (grp.length && grp[grp.length - 1].y > maxY) {
+      grp[grp.length - 1].y = maxY;
+      for (let i = grp.length - 2; i >= 0; i--) if (grp[i].y > grp[i + 1].y - GAP) grp[i].y = grp[i + 1].y - GAP;
+    }
+  });
   return (
-    <div className="panel">
+    <>
+    <div className="panel" style={{ marginBottom: 6 }}>
       <div className="p-t">무게 그래프
         <small style={{ fontWeight: 700, textTransform: "none", letterSpacing: 0, marginLeft: 8 }}>
           {nM > 0 && <span style={{ color: "#5A7A9A" }}>♂{nM} </span>}
@@ -303,36 +322,45 @@ function LineWeightChart({ kids }) {
         {Array.from({ length: maxN + 1 }, (_, n) => (
           <text key={n} x={X(n)} y={H - 8} fontSize="9.5" fill="#8A8378" textAnchor="middle" fontFamily="ui-monospace,monospace">{n === 0 ? "투입" : n + "병"}</text>
         ))}
-        {/* 암수 평균 가로 점선 */}
+        {/* 암수 평균 가로 점선 (라벨은 왼쪽에) */}
         {avgM && (
           <g>
-            <line x1={pl} y1={Y(avgM)} x2={W - pr} y2={Y(avgM)} stroke="#5A7A9A" strokeWidth="1.3" strokeDasharray="5 4" opacity="0.85" />
-            <text x={W - pr + 3} y={Y(avgM) + 3} fontSize="8.5" fill="#5A7A9A" fontWeight="700" fontFamily="ui-monospace,monospace">♂{n1(avgM)}</text>
+            <line x1={pl} y1={Y(avgM)} x2={W - pr} y2={Y(avgM)} stroke="#5A7A9A" strokeWidth="1.3" strokeDasharray="5 4" opacity="0.8" />
+            <text x={pl + 3} y={Y(avgM) - 4} fontSize="9" fill="#5A7A9A" fontWeight="700" fontFamily="ui-monospace,monospace">♂평균 {n1(avgM)}</text>
           </g>
         )}
         {avgF && (
           <g>
-            <line x1={pl} y1={Y(avgF)} x2={W - pr} y2={Y(avgF)} stroke="#A8884F" strokeWidth="1.3" strokeDasharray="5 4" opacity="0.85" />
-            <text x={W - pr + 3} y={Y(avgF) + 3} fontSize="8.5" fill="#A8884F" fontWeight="700" fontFamily="ui-monospace,monospace">♀{n1(avgF)}</text>
+            <line x1={pl} y1={Y(avgF)} x2={W - pr} y2={Y(avgF)} stroke="#A8884F" strokeWidth="1.3" strokeDasharray="5 4" opacity="0.8" />
+            <text x={pl + 3} y={Y(avgF) - 4} fontSize="9" fill="#A8884F" fontWeight="700" fontFamily="ui-monospace,monospace">♀평균 {n1(avgF)}</text>
           </g>
         )}
-        {/* 각 유충 꺾은선 + 끝 번호 */}
+        {/* 각 유충 꺾은선 */}
         {series.map((s) => {
           const last = s.pts[s.pts.length - 1];
           return (
             <g key={s.ind.id}>
               <polyline points={s.pts.map((p) => `${X(p.n)},${Y(p.w)}`).join(" ")}
-                fill="none" stroke={colorOf(s.ind)} strokeWidth="1.6" strokeLinejoin="round" opacity="0.7" />
+                fill="none" stroke={colorOf(s.ind)} strokeWidth="1.5" strokeLinejoin="round" opacity="0.55" />
               {s.pts.slice(1).map((p, i) => (
-                <circle key={i} cx={X(p.n)} cy={Y(p.w)} r={p.n === last.n ? 2.6 : 1.7} fill={colorOf(s.ind)} opacity={p.n === last.n ? 1 : 0.7} />
+                <circle key={i} cx={X(p.n)} cy={Y(p.w)} r={p.n === last.n ? 2.6 : 1.7} fill={colorOf(s.ind)} opacity={p.n === last.n ? 0.95 : 0.6} />
               ))}
-              <text x={X(last.n) + 4} y={Y(last.w) + 3} fontSize="8.5" fill={colorOf(s.ind)} fontWeight="700" fontFamily="ui-monospace,monospace">{tail(s.ind.code)}</text>
             </g>
           );
         })}
+        {/* 번호 라벨 (겹침 벌린 위치) + 점-라벨 연결선 */}
+        {labels.map((l) => (
+          <g key={l.id}>
+            {Math.abs(l.y - l.dotY) > 5 && (
+              <line x1={l.x + 3} y1={l.dotY} x2={l.x + 7} y2={l.y - 2.5} stroke={l.color} strokeWidth="0.8" opacity="0.5" />
+            )}
+            <text x={l.x + 8} y={l.y + 3} fontSize="9" fill={l.color} fontWeight="700" fontFamily="ui-monospace,monospace">{l.code}</text>
+          </g>
+        ))}
       </svg>
-      <div className="hint" style={{ marginTop: 6 }}>선 끝 숫자 = 유충 번호 · 점선 = 암수 평균(최근 무게) · 가로축 = 병갈이 회차</div>
     </div>
+    <div className="hint" style={{ margin: "0 4px 14px" }}>선 끝 숫자 = 유충 번호 · 점선 = 암수 평균(최근 무게) · 가로축 = 병갈이 회차</div>
+    </>
   );
 }
 
