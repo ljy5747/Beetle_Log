@@ -1576,6 +1576,48 @@ function App() {
   const xlsxRef = useRef(null);
   const toastT = useRef(null);
 
+  /* ── 뒤로가기 (갤럭시 시스템 뒤로가기 + 아이폰 엣지 스와이프) ── */
+  const backRef = useRef({});
+  backRef.current = { modal, view, settingsOpen, data };
+  const goBackStep = () => {
+    const b = backRef.current;
+    if (b.modal) { setModal(null); return true; }
+    if (b.settingsOpen) { setSettingsOpen(false); return true; }
+    if (b.view.name === "detail") {
+      const ind = b.data && b.data.individuals.find((i) => i.id === b.view.id);
+      setView(ind && ind.lineId ? { name: "lineDetail", id: ind.lineId } : { name: "list" });
+      return true;
+    }
+    if (b.view.name === "lineDetail" || b.view.name === "parentDetail") {
+      setFilter("전체"); setView({ name: "list" }); return true;
+    }
+    return false; /* 이미 맨 처음 화면 */
+  };
+  useEffect(() => {
+    /* 히스토리에 '트랩' 한 칸을 깔아두고, 뒤로가기가 눌리면 앱 안에서 한 단계 back */
+    try { history.pushState({ bl: 1 }, ""); } catch (e) {}
+    const onPop = () => { goBackStep(); try { history.pushState({ bl: 1 }, ""); } catch (e) {} };
+    window.addEventListener("popstate", onPop);
+    /* 아이폰 홈화면 앱(standalone)은 좌측 엣지 스와이프 제스처가 없어서 직접 감지 */
+    let sx = null, sy = null;
+    const ts = (e) => { const t = e.touches[0]; if (t.clientX < 28) { sx = t.clientX; sy = t.clientY; } else { sx = null; } };
+    const te = (e) => {
+      if (sx == null) return;
+      const t = e.changedTouches[0];
+      if (t.clientX - sx > 70 && Math.abs(t.clientY - sy) < 60) goBackStep();
+      sx = null;
+    };
+    const standalone = !!window.navigator.standalone;
+    if (standalone) {
+      document.addEventListener("touchstart", ts, { passive: true });
+      document.addEventListener("touchend", te, { passive: true });
+    }
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      if (standalone) { document.removeEventListener("touchstart", ts); document.removeEventListener("touchend", te); }
+    };
+  }, []);
+
   useEffect(() => {
     (async () => {
       let d = null;
