@@ -1599,7 +1599,10 @@ function App() {
   useEffect(() => {
     /* 히스토리에 '트랩' 한 칸을 깔아두고, 뒤로가기가 눌리면 앱 안에서 한 단계 back */
     try { history.pushState({ bl: 1 }, ""); } catch (e) {}
-    const onPop = () => { goBackStep(); try { history.pushState({ bl: 1 }, ""); } catch (e) {} };
+    /* 중복 방지: iOS가 자체 뒤로가기 + 우리 감지를 둘 다 실행해 두 번 가는 것 차단 */
+    const gate = { t: 0 };
+    const doBack = () => { const now = Date.now(); if (now - gate.t < 450) return; gate.t = now; goBackStep(); };
+    const onPop = () => { doBack(); try { history.pushState({ bl: 1 }, ""); } catch (e) {} };
     window.addEventListener("popstate", onPop);
     /* 아이폰 홈화면 앱(standalone)은 좌측 엣지 스와이프 제스처가 없어서 직접 감지 */
     let sx = null, sy = null;
@@ -1607,7 +1610,7 @@ function App() {
     const te = (e) => {
       if (sx == null) return;
       const t = e.changedTouches[0];
-      if (t.clientX - sx > 70 && Math.abs(t.clientY - sy) < 60) goBackStep();
+      if (t.clientX - sx > 70 && Math.abs(t.clientY - sy) < 60) doBack();
       sx = null;
     };
     const standalone = !!window.navigator.standalone;
