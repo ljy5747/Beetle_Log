@@ -384,7 +384,7 @@ function SpeciesPhoto({ photo, species, className }) {
 }
 
 /* ════════════════════ 자동 백업 스냅샷 (최근 5개 순환 보관) ════════════════════ */
-const SNAP_KEY = "beetle-snapshots", SNAP_MAX = 5;
+const SNAP_KEY = "beetle-snapshots", SNAP_MAX = 1;
 async function snapList() {
   try { const raw = await idbGet(SNAP_KEY); const a = raw ? JSON.parse(raw) : []; return Array.isArray(a) ? a : []; }
   catch (e) { return []; }
@@ -2821,26 +2821,20 @@ function App() {
               <input ref={xlsxRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={importXLSX} />
 
               <div className="sect" style={{ marginTop: 24 }}>자동 백업 · 되돌리기</div>
-              <div className="set-desc" style={{ marginBottom: 8 }}>앱을 켤 때와 동기화 직전에 이 기기 안에 자동으로 저장돼요 (최근 5개, 사진 제외라 용량이 작아요).
-                {snaps.length > 0 && <> 현재 <b>{(JSON.stringify(snaps).length / 1024 / 1024).toFixed(1)}MB</b> 사용 중.</>}
+              <button className="btn mt" style={{ width: "100%" }} onClick={async () => {
+                const list = await snapList();
+                const sn = list[list.length - 1];
+                if (!sn) return say("아직 저장된 백업이 없어요");
+                const curW = dataWeight(data);
+                if (!confirm(`직전 기록으로 되돌립니다.\n\n저장 시각: ${new Date(sn.at).toLocaleString()}\n${curW}건 → ${sn.weight}건\n\n진행할까요?`)) return;
+                await persist(snapMergePhotos(sn.data, data));
+                setSnaps(await snapList());
+                say(`✓ ${sn.weight}건으로 되돌렸어요`);
+              }}>⏪ 직전 기록으로 되돌리기</button>
+              <div className="set-desc" style={{ marginTop: 6 }}>
+                앱을 켤 때와 동기화 직전에 이 기기 안에 자동으로 저장돼요 (직전 1개, 사진 제외).
+                {snaps.length > 0 && <> 마지막 저장 <b>{new Date(snaps[snaps.length - 1].at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</b> · {snaps[snaps.length - 1].weight}건</>}
               </div>
-              {snaps.length === 0 && <div className="set-desc" style={{ color: "var(--dim)" }}>아직 저장된 백업이 없어요. 앱을 다시 켜면 생겨요.</div>}
-              {[...snaps].reverse().map((sn, i) => (
-                <div key={sn.at} className="snap-row">
-                  <div>
-                    <div className="snap-d">{new Date(sn.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
-                    <div className="snap-s">{sn.weight}건 · {sn.reason}</div>
-                  </div>
-                  <button className="btn tiny" onClick={async () => {
-                    const curW = dataWeight(data);
-                    if (!confirm(`${new Date(sn.at).toLocaleString()} 시점(${sn.weight}건)으로 되돌립니다.\n현재 ${curW}건 → ${sn.weight}건\n\n진행할까요?`)) return;
-                    await snapSave(data, "되돌리기 직전");
-                    await persist(snapMergePhotos(sn.data, data));
-                    setSnaps(await snapList());
-                    say(`✓ ${sn.weight}건으로 되돌렸어요`);
-                  }}>되돌리기</button>
-                </div>
-              ))}
 
               <div className="sect" style={{ marginTop: 24 }}>내보내기 / 백업</div>
               <button className="btn mt" style={{ width: "100%" }} onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>전체 기록 엑셀로 내보내기</button>
