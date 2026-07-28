@@ -2713,12 +2713,12 @@ function App() {
         </div>
       )}
 
-      {/* ───── 하단 탭바 (아이콘은 나중에 그림으로 교체 예정) ───── */}
+      {/* ───── 하단 탭바 (직접 그린 아이콘) ───── */}
       <div className="bnav">
-        {[["lines", "🐛", "라인"], ["parents", "🪲", "성충"], ["calendar", "📅", "캘린더"]].map(([k, ic, label]) => (
+        {[["lines", "라인"], ["parents", "성충"], ["calendar", "캘린더"]].map(([k, label]) => (
           <button key={k} className={"bnav-b" + (view.name === "list" && tab === k ? " on" : "")}
             onClick={() => { setFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
-            <span className="bnav-ic">{ic}</span>
+            <span className="bnav-ic"><img src={"icons/tab-" + k + ".png"} alt={label} /></span>
             <span className="bnav-l">{label}</span>
           </button>
         ))}
