@@ -1567,6 +1567,7 @@ function App() {
   const [filter, setFilter] = useState("전체");
   const [tab, setTab] = useState("lines");
   const [speciesFolder, setSpeciesFolder] = useState(null);
+  const [theme, setTheme] = useState("brown");
   const [folderBy, setFolderBy] = useState("species");
   const [lineView, setLineView] = useState("card");
   const [infoOpen, setInfoOpen] = useState(false);
@@ -1578,6 +1579,23 @@ function App() {
   const fileRef = useRef(null);
   const xlsxRef = useRef(null);
   const toastT = useRef(null);
+
+  /* ── 테마 (브라운/그린/블루) ── */
+  useEffect(() => {
+    (async () => {
+      try { const t = await idbGet("beetle-theme"); if (t === "green" || t === "blue" || t === "brown") setTheme(t); } catch (e) {}
+    })();
+  }, []);
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute("data-theme", theme);
+      const meta = document.querySelector('meta[name="theme-color"]');
+      const bg = { brown: "#F4F0E8", green: "#FBF8F3", blue: "#F5F3EE" }[theme];
+      if (meta && bg) meta.setAttribute("content", bg);
+      document.body.style.background = bg || "";
+    } catch (e) {}
+  }, [theme]);
+  const pickTheme = async (t) => { setTheme(t); try { await idbSet("beetle-theme", t); } catch (e) {} };
 
   /* ── 뒤로가기 (갤럭시 시스템 뒤로가기 + 아이폰 엣지 스와이프) ── */
   const backRef = useRef({});
@@ -2669,6 +2687,20 @@ function App() {
               <span style={{ width: 40 }} />
             </div>
             <div className="mbody">
+              <div className="sect">화면 색상</div>
+              <div className="thm-row">
+                {[
+                  { k: "brown", n: "브라운", c: ["#F4F0E8", "#B28C6A", "#382C2A"] },
+                  { k: "green", n: "그린", c: ["#FBF8F3", "#7D8B71", "#3E362E"] },
+                  { k: "blue", n: "블루", c: ["#F5F3EE", "#7A96AD", "#38352F"] },
+                ].map((t) => (
+                  <button key={t.k} className={"thm" + (theme === t.k ? " on" : "")} onClick={() => pickTheme(t.k)}>
+                    <span className="thm-dots">{t.c.map((c, i) => <i key={i} style={{ background: c }} />)}</span>
+                    <span className="thm-n">{t.n}{theme === t.k ? " ✓" : ""}</span>
+                  </button>
+                ))}
+              </div>
+
               <div className="sect">클라우드 동기화 (폰 ↔ PC)</div>
               {authUser ? (
                 <div className="auth-box">
@@ -2713,15 +2745,19 @@ function App() {
         </div>
       )}
 
-      {/* ───── 하단 탭바 (직접 그린 아이콘) ───── */}
+      {/* ───── 하단 탭바 (직접 그린 아이콘 + 설정) ───── */}
       <div className="bnav">
         {[["lines", "라인"], ["parents", "성충"], ["calendar", "캘린더"]].map(([k, label]) => (
-          <button key={k} className={"bnav-b" + (view.name === "list" && tab === k ? " on" : "")}
-            onClick={() => { setFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
+          <button key={k} className={"bnav-b" + (!settingsOpen && view.name === "list" && tab === k ? " on" : "")}
+            onClick={() => { setSettingsOpen(false); setFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
             <span className="bnav-ic"><img src={"icons/tab-" + k + ".png"} alt={label} /></span>
             <span className="bnav-l">{label}</span>
           </button>
         ))}
+        <button className={"bnav-b" + (settingsOpen ? " on" : "")} onClick={() => setSettingsOpen(true)}>
+          <span className="bnav-ic" style={{ fontSize: 24 }}>⚙️</span>
+          <span className="bnav-l">설정</span>
+        </button>
       </div>
 
       {toast && <div className="toast">{toast}</div>}
