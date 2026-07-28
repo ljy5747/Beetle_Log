@@ -1951,12 +1951,6 @@ function App() {
             <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="설정">⚙️</button>
           </div>
 
-          <div className="tabs">
-            <button className={"tab-b" + (tab === "lines" ? " on" : "")} onClick={() => setTab("lines")}>라인 {data.lines.length}</button>
-            <button className={"tab-b" + (tab === "parents" ? " on" : "")} onClick={() => { setTab("parents"); setSpeciesFolder(null); }}>성충 {data.parents.length}</button>
-            <button className={"tab-b" + (tab === "calendar" ? " on" : "")} onClick={() => setTab("calendar")}>캘린더</button>
-          </div>
-
           {tab === "calendar" && (
             <CalendarView data={data}
               onOpenLine={(id) => setView({ name: "lineDetail", id })}
@@ -2718,6 +2712,17 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* ───── 하단 탭바 (아이콘은 나중에 그림으로 교체 예정) ───── */}
+      <div className="bnav">
+        {[["lines", "🐛", "라인"], ["parents", "🪲", "성충"], ["calendar", "📅", "캘린더"]].map(([k, ic, label]) => (
+          <button key={k} className={"bnav-b" + (view.name === "list" && tab === k ? " on" : "")}
+            onClick={() => { setFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
+            <span className="bnav-ic">{ic}</span>
+            <span className="bnav-l">{label}</span>
+          </button>
+        ))}
+      </div>
 
       {toast && <div className="toast">{toast}</div>}
     </div>
