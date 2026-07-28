@@ -21,7 +21,7 @@ window.APP_CSS = `
 --serif:"Times New Roman","Nanum Myeongjo","Apple SD Gothic Neo",Georgia,serif;color-scheme:light}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
 .app{min-height:100vh;background:var(--bg);color:var(--text);max-width:520px;margin:0 auto;
-padding:14px 18px 90px;font-family:-apple-system,"Apple SD Gothic Neo","Pretendard","Malgun Gothic",sans-serif;font-size:15px;line-height:1.55}
+padding:14px 18px calc(140px + env(safe-area-inset-bottom));font-family:-apple-system,"Apple SD Gothic Neo","Pretendard","Malgun Gothic",sans-serif;font-size:15px;line-height:1.55}
 .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:-.01em}
 .serif{font-family:var(--serif)}
 .loading{padding:60px 0;text-align:center;color:var(--dim)}
@@ -217,13 +217,26 @@ padding:13px 15px;margin-bottom:14px;font-size:14px;cursor:pointer}
 .frow{display:flex;gap:8px;justify-content:center}
 
 /* ═══════════ [17] FAB(+버튼)·토스트 알림 ═══════════ */
-.fab{position:fixed;right:max(18px,calc(50% - 242px));bottom:24px;width:56px;height:56px;border-radius:7px;
+.fab{position:fixed;right:max(18px,calc(50% - 242px));bottom:calc(78px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:7px;
 background:var(--text);color:#fff;border:none;font-size:28px;font-weight:300;cursor:pointer;
 box-shadow:0 6px 22px rgba(23,21,19,.35)}
-.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:var(--text);border:none;
+.toast{position:fixed;bottom:calc(132px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--text);border:none;
 color:#fff;border-radius:999px;padding:11px 19px;font-size:13.5px;font-weight:600;z-index:99;
 box-shadow:0 8px 26px rgba(23,21,19,.3);white-space:nowrap;letter-spacing:.02em}
-.del-float{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:60}
+.del-float{position:fixed;bottom:calc(70px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:60}
+
+/* ═══════════ [17.5] 하단 탭바 ═══════════ */
+.bnav{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:520px;
+background:var(--surf);border-top:1px solid var(--line);display:flex;z-index:40;
+padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -2px 14px rgba(23,21,19,.06)}
+.bnav-b{flex:1;background:none;border:none;padding:8px 0 9px;cursor:pointer;font-family:inherit;
+display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--dim)}
+.bnav-b.on{color:var(--text)}
+.bnav-b.on .bnav-l{font-weight:800}
+.bnav-ic{font-size:22px;line-height:1;filter:grayscale(1) opacity(.55)}
+.bnav-b.on .bnav-ic{filter:none}
+.bnav-ic img{width:26px;height:26px;display:block;object-fit:contain}
+.bnav-l{font-size:11px;font-weight:700;letter-spacing:.02em}
 
 /* ═══════════ [18] 모달·입력 폼 ═══════════ */
 .overlay{position:fixed;inset:0;background:rgba(23,21,19,.4);display:flex;align-items:flex-end;justify-content:center;z-index:50;backdrop-filter:blur(3px)}
