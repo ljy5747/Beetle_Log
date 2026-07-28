@@ -15,13 +15,18 @@
    ════════════════════════════════════════════════════════════ */
 
 window.APP_CSS = `
+/* ═══════════ [00] 글씨체 — 제목 손글씨(카페24 써라운드에어) + 본문 프리텐다드 ═══════════ */
+@font-face{font-family:'Cafe24SsurroundAir';
+src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2105_2@1.0/Cafe24SsurroundAir.woff') format('woff');
+font-weight:normal;font-style:normal;font-display:swap}
+
 /* ═══════════ [01] 색·폰트 토큰 — 테마 3종 (기본: 브라운) ═══════════ */
 /* 테마는 <html data-theme="brown|green|blue"> 로 전환됩니다 */
 :root,[data-theme="brown"]{
 --bg:#F4F0E8;--surf:#FDFBF7;--surf2:#F1EADF;--line:#E5DBCC;--line2:#EFE8DC;
 --text:#382C2A;--dim:#9A8B7A;--gold:#B28C6A;--gold-d:#8A6A48;
 --green:#6B8E4E;--red:#B4503F;
---serif:"Times New Roman","Nanum Myeongjo","Apple SD Gothic Neo",Georgia,serif;color-scheme:light}
+--serif:"Cafe24SsurroundAir","Apple SD Gothic Neo",sans-serif;color-scheme:light}
 [data-theme="green"]{
 --bg:#FBF8F3;--surf:#FFFFFF;--surf2:#F2ECE2;--line:#E4DCCE;--line2:#EDE7DC;
 --text:#3E362E;--dim:#94897B;--gold:#7D8B71;--gold-d:#5F6E54}
@@ -30,7 +35,7 @@ window.APP_CSS = `
 --text:#38352F;--dim:#948E82;--gold:#7A96AD;--gold-d:#5D7E97}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
 .app{min-height:100vh;background:var(--bg);color:var(--text);max-width:520px;margin:0 auto;
-padding:14px 18px calc(140px + env(safe-area-inset-bottom));font-family:-apple-system,"Apple SD Gothic Neo","Pretendard","Malgun Gothic",sans-serif;font-size:15px;line-height:1.55}
+padding:14px 18px calc(140px + env(safe-area-inset-bottom));font-family:"Pretendard",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:15px;line-height:1.55}
 .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:-.01em}
 .serif{font-family:var(--serif)}
 .loading{padding:60px 0;text-align:center;color:var(--dim)}
@@ -256,6 +261,13 @@ padding:11px 8px 9px;cursor:pointer;font-family:inherit;color:var(--text);text-a
 .thm-dots i{width:15px;height:15px;border-radius:5px;border:1px solid rgba(0,0,0,.07)}
 .thm-n{font-size:12px;font-weight:700}
 .thm.on .thm-n{color:var(--gold-d);font-weight:800}
+
+/* ═══════════ [17.7] 종 사진 빈칸 (디폴트 사진 없을 때 종 이름 표시) ═══════════ */
+.sp-ph{display:flex;align-items:center;justify-content:center;background:var(--surf2);
+border:1.5px dashed var(--line);color:var(--dim);font-size:10.5px;font-weight:700;
+text-align:center;padding:4px;overflow:hidden;line-height:1.3;word-break:keep-all}
+.bc-photo.sp-ph{min-height:110px;font-size:14px}
+.lt-photo.sp-ph{font-size:10px}
 
 /* ═══════════ [18] 모달·입력 폼 ═══════════ */
 .overlay{position:fixed;inset:0;background:rgba(23,21,19,.4);display:flex;align-items:flex-end;justify-content:center;z-index:50;backdrop-filter:blur(3px)}
