@@ -389,13 +389,20 @@ async function snapList() {
   try { const raw = await idbGet(SNAP_KEY); const a = raw ? JSON.parse(raw) : []; return Array.isArray(a) ? a : []; }
   catch (e) { return []; }
 }
-/* 사진(base64)은 용량이 커서, 스냅샷이 너무 크면 사진만 빼고 보관 */
+/* 사진(base64)은 용량이 커서 스냅샷에는 항상 제외 — 되돌릴 때 현재 사진을 다시 붙여줍니다 */
 function snapShrink(data) {
-  const s = JSON.stringify(data);
-  if (s.length < 3000000) return { data, noPhoto: false };
-  const lite = JSON.parse(s);
-  (lite.parents || []).forEach((p) => { if (p.photo) p.photo = ""; });
-  return { data: lite, noPhoto: true };
+  const lite = JSON.parse(JSON.stringify(data));
+  let had = false;
+  (lite.parents || []).forEach((p) => { if (p.photo) { p.photo = ""; had = true; } });
+  return { data: lite, noPhoto: had };
+}
+/* 되돌릴 때: 스냅샷에 없는 사진을 현재 데이터에서 같은 개체끼리 복원 */
+function snapMergePhotos(snapData, current) {
+  const byId = {}, byCode = {};
+  (current.parents || []).forEach((p) => { if (p.photo) { byId[p.id] = p.photo; if (p.code) byCode[p.code] = p.photo; } });
+  const out = JSON.parse(JSON.stringify(snapData));
+  (out.parents || []).forEach((p) => { if (!p.photo) p.photo = byId[p.id] || byCode[p.code] || ""; });
+  return out;
 }
 async function snapSave(data, reason) {
   try {
@@ -2814,19 +2821,21 @@ function App() {
               <input ref={xlsxRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={importXLSX} />
 
               <div className="sect" style={{ marginTop: 24 }}>자동 백업 · 되돌리기</div>
-              <div className="set-desc" style={{ marginBottom: 8 }}>앱을 켤 때와 동기화 직전에 이 기기 안에 자동으로 저장돼요 (최근 5개). 기록이 사라졌다면 여기서 되돌리세요.</div>
+              <div className="set-desc" style={{ marginBottom: 8 }}>앱을 켤 때와 동기화 직전에 이 기기 안에 자동으로 저장돼요 (최근 5개, 사진 제외라 용량이 작아요).
+                {snaps.length > 0 && <> 현재 <b>{(JSON.stringify(snaps).length / 1024 / 1024).toFixed(1)}MB</b> 사용 중.</>}
+              </div>
               {snaps.length === 0 && <div className="set-desc" style={{ color: "var(--dim)" }}>아직 저장된 백업이 없어요. 앱을 다시 켜면 생겨요.</div>}
               {[...snaps].reverse().map((sn, i) => (
                 <div key={sn.at} className="snap-row">
                   <div>
                     <div className="snap-d">{new Date(sn.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
-                    <div className="snap-s">{sn.weight}건 · {sn.reason}{sn.noPhoto ? " · 사진 제외" : ""}</div>
+                    <div className="snap-s">{sn.weight}건 · {sn.reason}</div>
                   </div>
                   <button className="btn tiny" onClick={async () => {
                     const curW = dataWeight(data);
                     if (!confirm(`${new Date(sn.at).toLocaleString()} 시점(${sn.weight}건)으로 되돌립니다.\n현재 ${curW}건 → ${sn.weight}건\n\n진행할까요?`)) return;
                     await snapSave(data, "되돌리기 직전");
-                    await persist(sn.data);
+                    await persist(snapMergePhotos(sn.data, data));
                     setSnaps(await snapList());
                     say(`✓ ${sn.weight}건으로 되돌렸어요`);
                   }}>되돌리기</button>
