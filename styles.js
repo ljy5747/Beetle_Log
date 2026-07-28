@@ -235,7 +235,7 @@ display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--dim)}
 .bnav-b.on .bnav-l{font-weight:800}
 .bnav-ic{font-size:22px;line-height:1;filter:grayscale(1) opacity(.55)}
 .bnav-b.on .bnav-ic{filter:none}
-.bnav-ic img{width:26px;height:26px;display:block;object-fit:contain}
+.bnav-ic img{width:30px;height:30px;display:block;object-fit:contain;border-radius:8px}
 .bnav-l{font-size:11px;font-weight:700;letter-spacing:.02em}
 
 /* ═══════════ [18] 모달·입력 폼 ═══════════ */
