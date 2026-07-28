@@ -2753,7 +2753,7 @@ function App() {
       })()}
 
       {settingsOpen && (
-        <div className="overlay" onClick={() => setSettingsOpen(false)}>
+        <div className="overlay ov-set" onClick={() => setSettingsOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="mhead">
               <button className="hbtn" onClick={() => setSettingsOpen(false)}>닫기</button>
@@ -2863,7 +2863,7 @@ function App() {
           </button>
         ))}
         <button className={"bnav-b" + (settingsOpen ? " on" : "")} onClick={async () => { setSettingsOpen(true); setSnaps(await snapList()); }}>
-          <span className="bnav-ic" style={{ fontSize: 24 }}>⚙️</span>
+          <span className="bnav-ic"><img src="icons/tab-settings.png?v=2" alt="설정" /></span>
           <span className="bnav-l">설정</span>
         </button>
       </div>
