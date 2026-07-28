@@ -383,6 +383,36 @@ function SpeciesPhoto({ photo, species, className }) {
   return <img src={"icons/species/" + encodeURIComponent(species) + ".png"} alt={species} className={className} onError={() => setErr(true)} />;
 }
 
+/* ════════════════════ 자동 백업 스냅샷 (최근 5개 순환 보관) ════════════════════ */
+const SNAP_KEY = "beetle-snapshots", SNAP_MAX = 5;
+async function snapList() {
+  try { const raw = await idbGet(SNAP_KEY); const a = raw ? JSON.parse(raw) : []; return Array.isArray(a) ? a : []; }
+  catch (e) { return []; }
+}
+/* 사진(base64)은 용량이 커서, 스냅샷이 너무 크면 사진만 빼고 보관 */
+function snapShrink(data) {
+  const s = JSON.stringify(data);
+  if (s.length < 3000000) return { data, noPhoto: false };
+  const lite = JSON.parse(s);
+  (lite.parents || []).forEach((p) => { if (p.photo) p.photo = ""; });
+  return { data: lite, noPhoto: true };
+}
+async function snapSave(data, reason) {
+  try {
+    const w = dataWeight(data);
+    if (!w) return; /* 빈 데이터는 보관하지 않음 */
+    const list = await snapList();
+    const last = list[list.length - 1];
+    /* 같은 날 이미 있고 내용이 비슷하면 갱신, 아니면 새로 추가 */
+    const { data: body, noPhoto } = snapShrink(data);
+    const entry = { at: Date.now(), weight: w, reason: reason || "자동", noPhoto, data: body };
+    const sameDay = last && new Date(last.at).toDateString() === new Date().toDateString() && last.reason === entry.reason;
+    const next = sameDay ? [...list.slice(0, -1), entry] : [...list, entry];
+    while (next.length > SNAP_MAX) next.shift();
+    await idbSet(SNAP_KEY, JSON.stringify(next));
+  } catch (e) { /* 용량 초과 등은 조용히 무시 */ }
+}
+
 /* ════════════════════ 공용 UI ════════════════════ */
 const F = ({ label, children, half }) => (
   <div className={"field" + (half ? " half" : "")}>
@@ -1595,6 +1625,7 @@ function App() {
   const [tab, setTab] = useState("lines");
   const [speciesFolder, setSpeciesFolder] = useState(null);
   const [theme, setTheme] = useState("brown");
+  const [snaps, setSnaps] = useState([]);
   const [folderBy, setFolderBy] = useState("species");
   const [lineView, setLineView] = useState("card");
   const [infoOpen, setInfoOpen] = useState(false);
@@ -1696,6 +1727,8 @@ function App() {
         base.individuals = base.individuals.map((i) => (i.lineId ? i : { ...i, lineId: misc.id }));
       }
       setData(base);
+      /* 앱 켤 때 현재 상태를 자동 백업 (하루 1개, 최근 5개 보관) */
+      snapSave(base, "자동");
       try { const sk = await idbGet("beetle-sync-key"); if (sk) setSyncKey(sk); } catch (e) { /* 없으면 무시 */ }
       /* 구글 로그인 처리: 복귀(주소에 토큰) → 아니면 저장된 세션 */
       try {
@@ -1730,6 +1763,7 @@ function App() {
                 /* ⚠️ 덮어쓰기 전에 현재 로컬 데이터를 반드시 스냅샷으로 보관 (복구용) */
                 if (localW > 0) {
                   try { await idbSet("beetle-local-backup", JSON.stringify({ at: Date.now(), weight: localW, data: base })); } catch (e) {}
+                  await snapSave(base, "동기화 직전");
                 }
                 /* 서버가 로컬보다 적으면(사고 의심) 자동 덮어쓰기 안 함 — 기준 강화 */
                 if (serverW >= localW || localW === 0) {
@@ -2779,21 +2813,27 @@ function App() {
               <button className="btn primary mt" style={{ width: "100%" }} onClick={() => xlsxRef.current?.click()}>② 엑셀 불러오기</button>
               <input ref={xlsxRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={importXLSX} />
 
+              <div className="sect" style={{ marginTop: 24 }}>자동 백업 · 되돌리기</div>
+              <div className="set-desc" style={{ marginBottom: 8 }}>앱을 켤 때와 동기화 직전에 이 기기 안에 자동으로 저장돼요 (최근 5개). 기록이 사라졌다면 여기서 되돌리세요.</div>
+              {snaps.length === 0 && <div className="set-desc" style={{ color: "var(--dim)" }}>아직 저장된 백업이 없어요. 앱을 다시 켜면 생겨요.</div>}
+              {[...snaps].reverse().map((sn, i) => (
+                <div key={sn.at} className="snap-row">
+                  <div>
+                    <div className="snap-d">{new Date(sn.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                    <div className="snap-s">{sn.weight}건 · {sn.reason}{sn.noPhoto ? " · 사진 제외" : ""}</div>
+                  </div>
+                  <button className="btn tiny" onClick={async () => {
+                    const curW = dataWeight(data);
+                    if (!confirm(`${new Date(sn.at).toLocaleString()} 시점(${sn.weight}건)으로 되돌립니다.\n현재 ${curW}건 → ${sn.weight}건\n\n진행할까요?`)) return;
+                    await snapSave(data, "되돌리기 직전");
+                    await persist(sn.data);
+                    setSnaps(await snapList());
+                    say(`✓ ${sn.weight}건으로 되돌렸어요`);
+                  }}>되돌리기</button>
+                </div>
+              ))}
+
               <div className="sect" style={{ marginTop: 24 }}>내보내기 / 백업</div>
-              <button className="btn mt" style={{ width: "100%" }} onClick={async () => {
-                try {
-                  const raw = await idbGet("beetle-local-backup");
-                  if (!raw) return say("복구할 이전 데이터가 없어요");
-                  const bk = JSON.parse(raw);
-                  const curW = dataWeight(data), bkW = dataWeight(bk.data);
-                  if (!confirm(`동기화 직전에 이 기기에 있던 기록으로 되돌립니다.\n\n저장 시각: ${new Date(bk.at).toLocaleString()}\n되돌릴 기록량: ${bkW}건 (현재 ${curW}건)\n\n진행할까요?`)) return;
-                  /* 되돌리기 전에 현재 상태도 한 번 더 보관 */
-                  try { await idbSet("beetle-local-backup2", JSON.stringify({ at: Date.now(), weight: curW, data })); } catch (e) {}
-                  await persist(bk.data);
-                  say(`✓ ${bkW}건으로 되돌렸어요`);
-                } catch (e) { say("⚠️ 복구에 실패했어요"); }
-              }}>⏪ 동기화 직전 기록으로 되돌리기</button>
-              <div className="set-desc" style={{ marginTop: 6, marginBottom: 6 }}>클라우드에서 데이터를 받아오기 직전, 이 기기에 있던 기록을 자동으로 보관해둬요. 동기화 후 기록이 사라졌다면 이걸로 되돌리세요.</div>
               <button className="btn mt" style={{ width: "100%" }} onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>전체 기록 엑셀로 내보내기</button>
               <button className="btn mt" style={{ width: "100%" }} onClick={async () => { const how = await deliverFile(`사육기록_백업_${today()}.json`, JSON.stringify(data, null, 1), "application/json"); say(how === "fail" ? "⚠️ Safari에서 시도해주세요" : "백업 파일 저장됨"); }}>JSON 백업 (사진 포함)</button>
               <button className="btn mt" style={{ width: "100%" }} onClick={() => fileRef.current?.click()}>JSON 백업 복원</button>
@@ -2813,7 +2853,7 @@ function App() {
             <span className="bnav-l">{label}</span>
           </button>
         ))}
-        <button className={"bnav-b" + (settingsOpen ? " on" : "")} onClick={() => setSettingsOpen(true)}>
+        <button className={"bnav-b" + (settingsOpen ? " on" : "")} onClick={async () => { setSettingsOpen(true); setSnaps(await snapList()); }}>
           <span className="bnav-ic" style={{ fontSize: 24 }}>⚙️</span>
           <span className="bnav-l">설정</span>
         </button>
