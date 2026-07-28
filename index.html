@@ -33,22 +33,23 @@ async function idbSet(key,val){var db=await idbOpen();return new Promise(functio
 var XLSX = window.XLSX;
 </script>
 
-<!-- ① 설정값 (종 리스트·브랜드 등) — 자주 수정 -->
-<script src="data.js"></script>
-<!-- ② 디자인(CSS) — 가끔 수정 -->
-<script src="styles.js"></script>
-
-<!-- ③ 앱 본체 로더: app.js를 받아 Babel로 변환 후 실행 (외부 JSX 안정 로딩) -->
+<!-- ①②③ 설정값·디자인·앱 본체를 모두 캐시 없이 최신으로 로드 -->
 <script>
 (async function () {
+  function run(code) { var s = document.createElement("script"); s.text = code; document.body.appendChild(s); }
   try {
-    var res = await fetch("app.js?v=" + Date.now());
+    var v = Date.now();
+    /* ① 설정값 → ② 디자인 → ③ 앱 본체 순서로 (순서 중요) */
+    for (var i = 0; i < 2; i++) {
+      var f = ["data.js", "styles.js"][i];
+      var r = await fetch(f + "?v=" + v);
+      if (!r.ok) throw new Error(f + " 로드 실패 (" + r.status + ")");
+      run(await r.text());
+    }
+    var res = await fetch("app.js?v=" + v);
     if (!res.ok) throw new Error("app.js 로드 실패 (" + res.status + ")");
     var code = await res.text();
-    var out = Babel.transform(code, { presets: ["react"] }).code;
-    var s = document.createElement("script");
-    s.text = out;
-    document.body.appendChild(s);
+    run(Babel.transform(code, { presets: ["react"] }).code);
   } catch (e) {
     document.getElementById("root").innerHTML =
       '<div class="boot">앱을 불러오지 못했어요.<br>잠시 후 새로고침해 주세요.<br><br><small style="color:#B4503F">' + (e && e.message ? e.message : e) + '</small></div>';
