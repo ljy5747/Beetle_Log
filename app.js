@@ -2858,7 +2858,7 @@ function App() {
         {[["lines", "라인"], ["parents", "성충"], ["calendar", "캘린더"]].map(([k, label]) => (
           <button key={k} className={"bnav-b" + (!settingsOpen && view.name === "list" && tab === k ? " on" : "")}
             onClick={() => { setSettingsOpen(false); setFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
-            <span className="bnav-ic"><img src={"icons/tab-" + k + ".png"} alt={label} /></span>
+            <span className="bnav-ic"><img src={"icons/tab-" + k + ".png?v=2"} alt={label} /></span>
             <span className="bnav-l">{label}</span>
           </button>
         ))}
