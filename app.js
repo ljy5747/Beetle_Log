@@ -2204,15 +2204,6 @@ function App() {
             })()}
           </>}
 
-          <div className="footer">
-            <div className="note">데이터는 자동 저장됩니다. 엑셀·JSON으로 주기적으로 백업해두면 안전해요.</div>
-            <div className="frow">
-              <button className="btn ghost sm" onClick={async () => { const how = await deliverFile(`사육기록_백업_${today()}.json`, JSON.stringify(data, null, 1), "application/json"); say(how === "fail" ? "⚠️ Safari에서 시도해주세요" : "백업 파일 저장됨"); }}>JSON 백업</button>
-              <button className="btn ghost sm" onClick={() => fileRef.current?.click()}>백업 복원</button>
-              <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={importJSON} />
-            </div>
-          </div>
-
           {tab !== "calendar" && (
             <button className="fab" onClick={() => setModal(tab === "parents" ? { type: "parent" } : { type: "line" })}>＋</button>
           )}
@@ -2738,6 +2729,7 @@ function App() {
               <button className="btn mt" style={{ width: "100%" }} onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>전체 기록 엑셀로 내보내기</button>
               <button className="btn mt" style={{ width: "100%" }} onClick={async () => { const how = await deliverFile(`사육기록_백업_${today()}.json`, JSON.stringify(data, null, 1), "application/json"); say(how === "fail" ? "⚠️ Safari에서 시도해주세요" : "백업 파일 저장됨"); }}>JSON 백업 (사진 포함)</button>
               <button className="btn mt" style={{ width: "100%" }} onClick={() => fileRef.current?.click()}>JSON 백업 복원</button>
+              <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={importJSON} />
               <div className="set-desc" style={{ marginTop: 12 }}>데이터는 이 기기에만 저장돼요. 가끔 백업해두면 안전해요.</div>
             </div>
           </div>
