@@ -269,6 +269,12 @@ text-align:center;padding:4px;overflow:hidden;line-height:1.3;word-break:keep-al
 .bc-photo.sp-ph{min-height:110px;font-size:14px}
 .lt-photo.sp-ph{font-size:10px}
 
+/* ═══════════ [17.8] 자동 백업 스냅샷 목록 ═══════════ */
+.snap-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+background:var(--surf);border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:7px}
+.snap-d{font-size:13px;font-weight:700}
+.snap-s{font-size:11px;color:var(--dim);margin-top:2px}
+
 /* ═══════════ [18] 모달·입력 폼 ═══════════ */
 .overlay{position:fixed;inset:0;background:rgba(23,21,19,.4);display:flex;align-items:flex-end;justify-content:center;z-index:50;backdrop-filter:blur(3px)}
 .modal{background:var(--bg);border:none;border-radius:14px 14px 0 0;width:100%;max-width:520px;
