@@ -277,6 +277,9 @@ background:var(--surf);border:1px solid var(--line);border-radius:9px;padding:9p
 
 /* ═══════════ [18] 모달·입력 폼 ═══════════ */
 .overlay{position:fixed;inset:0;background:rgba(23,21,19,.4);display:flex;align-items:flex-end;justify-content:center;z-index:50;backdrop-filter:blur(3px)}
+/* 설정 창은 하단 탭바(z-index 40)보다 아래에 두어 탭바가 계속 보이게 */
+.overlay.ov-set{z-index:30}
+.overlay.ov-set .mbody{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 .modal{background:var(--bg);border:none;border-radius:14px 14px 0 0;width:100%;max-width:520px;
 max-height:92vh;display:flex;flex-direction:column;box-shadow:0 -8px 44px rgba(23,21,19,.22)}
 .mhead{display:flex;justify-content:space-between;align-items:center;padding:15px 16px;border-bottom:1px solid var(--line);flex:none}
