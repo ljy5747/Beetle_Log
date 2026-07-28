@@ -102,6 +102,22 @@ async function authHandleRedirect() {
 async function authLoadSession() {
   try { const s = await idbGet("beetle-auth"); return s ? JSON.parse(s) : null; } catch (e) { return null; }
 }
+/* 갱신 토큰으로 새 액세스 토큰 발급 (액세스 토큰은 1시간이면 만료되므로) */
+async function authRefresh(refreshToken) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "apikey": SUPABASE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    if (!j.access_token) return null;
+    const session = { access: j.access_token, refresh: j.refresh_token || refreshToken, at: Date.now() };
+    try { await idbSet("beetle-auth", JSON.stringify(session)); } catch (e) {}
+    return session;
+  } catch (e) { return null; }
+}
 /* 액세스 토큰으로 내 정보(이메일 등) 조회 */
 async function authGetUser(access) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
@@ -354,6 +370,17 @@ function LineWeightChart({ kids }) {
     <div className="hint" style={{ margin: "0 4px 14px" }}>👑번호 = 암수 1등(최근 무게) · 점선 = 암수 평균 · 가로축 = 병갈이 회차</div>
     </>
   );
+}
+
+/* ════════════════════ 사진 (본인 사진 → 종 디폴트 → 종 이름 빈칸) ════════════════════
+   종 디폴트 사진: icons/species/<종이름>.png 로 올리면 자동 표시됩니다 */
+function SpeciesPhoto({ photo, species, className }) {
+  const [err, setErr] = useState(false);
+  if (photo) return <img src={photo} alt="" className={className} />;
+  if (!species || err) return (
+    <div className={(className || "") + " sp-ph"}><span>{species || "종 미입력"}</span></div>
+  );
+  return <img src={"icons/species/" + encodeURIComponent(species) + ".png"} alt={species} className={className} onError={() => setErr(true)} />;
 }
 
 /* ════════════════════ 공용 UI ════════════════════ */
@@ -1673,9 +1700,20 @@ function App() {
       /* 구글 로그인 처리: 복귀(주소에 토큰) → 아니면 저장된 세션 */
       try {
         let session = await authHandleRedirect();
+        const fromRedirect = !!session;
         if (!session) session = await authLoadSession();
+        /* 저장된 세션은 액세스 토큰이 만료됐을 수 있으니, 갱신 토큰으로 새로 발급 */
+        if (session && session.refresh && !fromRedirect) {
+          const fresh = await authRefresh(session.refresh);
+          if (fresh) session = fresh;
+        }
         if (session && session.access) {
-          const u = await authGetUser(session.access);
+          let u = await authGetUser(session.access);
+          /* 그래도 실패하면(만료 등) 갱신 한 번 더 시도 */
+          if (!u && session.refresh) {
+            const fresh = await authRefresh(session.refresh);
+            if (fresh) { session = fresh; u = await authGetUser(session.access); }
+          }
           if (u && u.email) {
             const myKey = "user:" + u.email;
             setAuthUser(u);
@@ -2086,7 +2124,7 @@ function App() {
                           <div className="lt-pl">♂ 부</div>
                           {fa ? (
                             <>
-                              {fa.photo && <img src={fa.photo} alt="" className="lt-photo" />}
+                              <SpeciesPhoto photo={fa.photo} species={fa.species || L.species} className="lt-photo" />
                               <div className="lt-pcode mono">{fa.code}</div>
                               <div className="lt-pspec">{[num(fa.totalLength) ? n1(num(fa.totalLength)) + "mm" : null, fa.line].filter(Boolean).join(" · ")}</div>
                             </>
@@ -2097,7 +2135,7 @@ function App() {
                           <div className="lt-pl">♀ 모</div>
                           {mo ? (
                             <>
-                              {mo.photo && <img src={mo.photo} alt="" className="lt-photo" />}
+                              <SpeciesPhoto photo={mo.photo} species={mo.species || L.species} className="lt-photo" />
                               <div className="lt-pcode mono">{mo.code}</div>
                               <div className="lt-pspec">{[num(mo.totalLength) ? n1(num(mo.totalLength)) + "mm" : null, mo.line].filter(Boolean).join(" · ")}</div>
                             </>
@@ -2195,7 +2233,7 @@ function App() {
                             {myLines > 0 && <em> 라인 {myLines}</em>}
                           </div>
                         </div>
-                        {p.photo && <img src={p.photo} alt="" className="card-thumb" />}
+                        <SpeciesPhoto photo={p.photo} species={p.species} className="card-thumb" />
                       </div>
                     );
                   })}
@@ -2354,7 +2392,7 @@ function App() {
             </div>
 
             <div className="bcard">
-              {p.photo && <img src={p.photo} alt="" className="bc-photo" />}
+              <SpeciesPhoto photo={p.photo} species={p.species} className="bc-photo" />
               <div className="bc-head serif">BREEDING CARD</div>
               <div className="bc-species serif">{p.species || "종 미입력"}</div>
               <div className="bc-sub">{[p.line, p.origin, p.sex].filter(Boolean).join(" · ")}</div>
@@ -2702,6 +2740,17 @@ function App() {
                     </div>
                   </div>
                   <button className="btn ghost sm mt" onClick={async () => { await authSignOut(); setAuthUser(null); setSyncKey(""); autoSyncRef.current.on = false; autoSyncRef.current.key = ""; clearTimeout(autoSyncRef.current.timer); try { await idbSet("beetle-sync-key", ""); } catch (e) {} say("로그아웃됐어요"); }}>로그아웃</button>
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed var(--line)" }}>
+                    <ConfirmBtn className="btn danger sm" label="계정 삭제 (클라우드 데이터 포함)" onConfirm={async () => {
+                      /* 자동 동기화 먼저 끄기 (삭제 후 재업로드 방지) */
+                      autoSyncRef.current.on = false; autoSyncRef.current.key = ""; clearTimeout(autoSyncRef.current.timer);
+                      try { if (syncKey) await cloudUpload(syncKey, { parents: [], lines: [], individuals: [], customEvents: [], feedBrands: [] }); } catch (e) {}
+                      await authSignOut(); setAuthUser(null); setSyncKey("");
+                      try { await idbSet("beetle-sync-key", ""); } catch (e) {}
+                      say("계정 연결 해제 · 클라우드 데이터 삭제됨");
+                    }} />
+                    <div className="set-desc" style={{ marginTop: 8 }}>클라우드에 저장된 데이터가 삭제되고 로그아웃돼요. 이 기기 안의 기록은 남아있어요.</div>
+                  </div>
                 </div>
               ) : (
                 <>
