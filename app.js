@@ -1727,8 +1727,12 @@ function App() {
               const row = await cloudDownload(myKey);
               if (row && row.data && Array.isArray(row.data.individuals)) {
                 const serverW = dataWeight(row.data), localW = dataWeight(base);
-                /* 서버가 로컬보다 분량이 확 적으면(사고 의심) 자동 덮어쓰기 안 함 */
-                if (serverW >= localW * 0.5 || localW === 0) {
+                /* ⚠️ 덮어쓰기 전에 현재 로컬 데이터를 반드시 스냅샷으로 보관 (복구용) */
+                if (localW > 0) {
+                  try { await idbSet("beetle-local-backup", JSON.stringify({ at: Date.now(), weight: localW, data: base })); } catch (e) {}
+                }
+                /* 서버가 로컬보다 적으면(사고 의심) 자동 덮어쓰기 안 함 — 기준 강화 */
+                if (serverW >= localW || localW === 0) {
                   const merged = {
                     individuals: row.data.individuals,
                     lines: Array.isArray(row.data.lines) ? row.data.lines : [],
@@ -1738,9 +1742,10 @@ function App() {
                   };
                   setData(merged);
                   try { await idbSet(KEY, JSON.stringify(merged)); } catch (e) {}
-                } else if (serverW < localW * 0.5 && serverW > 0) {
-                  /* 의심스러우면 알림만 (자동 안 덮음) */
-                  setTimeout(() => say("☁︎ 서버 데이터가 로컬보다 적어요 — 설정에서 확인 후 불러오세요"), 1000);
+                } else {
+                  /* 서버가 로컬보다 적음 → 로컬(최신)을 지키고, 서버를 로컬로 덮어씀 */
+                  cloudUpload(myKey, base).catch(() => {});
+                  setTimeout(() => say("이 기기 기록이 더 최신이라 그대로 두고 서버에 올렸어요"), 1200);
                 }
               } else {
                 /* 서버에 아무것도 없으면 내 로컬을 올려둠 */
@@ -2775,6 +2780,20 @@ function App() {
               <input ref={xlsxRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={importXLSX} />
 
               <div className="sect" style={{ marginTop: 24 }}>내보내기 / 백업</div>
+              <button className="btn mt" style={{ width: "100%" }} onClick={async () => {
+                try {
+                  const raw = await idbGet("beetle-local-backup");
+                  if (!raw) return say("복구할 이전 데이터가 없어요");
+                  const bk = JSON.parse(raw);
+                  const curW = dataWeight(data), bkW = dataWeight(bk.data);
+                  if (!confirm(`동기화 직전에 이 기기에 있던 기록으로 되돌립니다.\n\n저장 시각: ${new Date(bk.at).toLocaleString()}\n되돌릴 기록량: ${bkW}건 (현재 ${curW}건)\n\n진행할까요?`)) return;
+                  /* 되돌리기 전에 현재 상태도 한 번 더 보관 */
+                  try { await idbSet("beetle-local-backup2", JSON.stringify({ at: Date.now(), weight: curW, data })); } catch (e) {}
+                  await persist(bk.data);
+                  say(`✓ ${bkW}건으로 되돌렸어요`);
+                } catch (e) { say("⚠️ 복구에 실패했어요"); }
+              }}>⏪ 동기화 직전 기록으로 되돌리기</button>
+              <div className="set-desc" style={{ marginTop: 6, marginBottom: 6 }}>클라우드에서 데이터를 받아오기 직전, 이 기기에 있던 기록을 자동으로 보관해둬요. 동기화 후 기록이 사라졌다면 이걸로 되돌리세요.</div>
               <button className="btn mt" style={{ width: "100%" }} onClick={() => (data.individuals.length || data.parents.length) ? exportXLSX(data) : say("내보낼 기록이 아직 없어요")}>전체 기록 엑셀로 내보내기</button>
               <button className="btn mt" style={{ width: "100%" }} onClick={async () => { const how = await deliverFile(`사육기록_백업_${today()}.json`, JSON.stringify(data, null, 1), "application/json"); say(how === "fail" ? "⚠️ Safari에서 시도해주세요" : "백업 파일 저장됨"); }}>JSON 백업 (사진 포함)</button>
               <button className="btn mt" style={{ width: "100%" }} onClick={() => fileRef.current?.click()}>JSON 백업 복원</button>
