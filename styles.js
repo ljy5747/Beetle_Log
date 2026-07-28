@@ -15,10 +15,19 @@
    ════════════════════════════════════════════════════════════ */
 
 window.APP_CSS = `
-/* ═══════════ [01] 색·폰트 토큰 (여기 값만 바꾸면 전체 색이 바뀜) ═══════════ */
-:root{--bg:#FAF9F7;--surf:#FFFFFF;--surf2:#F1EEE8;--line:#E4DFD6;--line2:#EEEBE4;
---text:#171513;--dim:#8C857A;--gold:#A8884F;--gold-d:#8C6F3C;--green:#6B8E4E;--red:#B4503F;
+/* ═══════════ [01] 색·폰트 토큰 — 테마 3종 (기본: 브라운) ═══════════ */
+/* 테마는 <html data-theme="brown|green|blue"> 로 전환됩니다 */
+:root,[data-theme="brown"]{
+--bg:#F4F0E8;--surf:#FDFBF7;--surf2:#F1EADF;--line:#E5DBCC;--line2:#EFE8DC;
+--text:#382C2A;--dim:#9A8B7A;--gold:#B28C6A;--gold-d:#8A6A48;
+--green:#6B8E4E;--red:#B4503F;
 --serif:"Times New Roman","Nanum Myeongjo","Apple SD Gothic Neo",Georgia,serif;color-scheme:light}
+[data-theme="green"]{
+--bg:#FBF8F3;--surf:#FFFFFF;--surf2:#F2ECE2;--line:#E4DCCE;--line2:#EDE7DC;
+--text:#3E362E;--dim:#94897B;--gold:#7D8B71;--gold-d:#5F6E54}
+[data-theme="blue"]{
+--bg:#F5F3EE;--surf:#FEFDFA;--surf2:#EFF2F5;--line:#E3DFD6;--line2:#EDEAE2;
+--text:#38352F;--dim:#948E82;--gold:#7A96AD;--gold-d:#5D7E97}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
 .app{min-height:100vh;background:var(--bg);color:var(--text);max-width:520px;margin:0 auto;
 padding:14px 18px calc(140px + env(safe-area-inset-bottom));font-family:-apple-system,"Apple SD Gothic Neo","Pretendard","Malgun Gothic",sans-serif;font-size:15px;line-height:1.55}
@@ -237,6 +246,16 @@ display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--dim)}
 .bnav-b.on .bnav-ic{filter:none}
 .bnav-ic img{width:30px;height:30px;display:block;object-fit:contain;border-radius:8px}
 .bnav-l{font-size:11px;font-weight:700;letter-spacing:.02em}
+
+/* ═══════════ [17.6] 테마 선택 ═══════════ */
+.thm-row{display:flex;gap:9px;margin-top:4px}
+.thm{flex:1;background:var(--surf);border:1.5px solid var(--line);border-radius:11px;
+padding:11px 8px 9px;cursor:pointer;font-family:inherit;color:var(--text);text-align:center}
+.thm.on{border-color:var(--gold);box-shadow:0 0 0 2.5px color-mix(in srgb,var(--gold) 18%,transparent)}
+.thm-dots{display:flex;justify-content:center;gap:4px;margin-bottom:7px}
+.thm-dots i{width:15px;height:15px;border-radius:5px;border:1px solid rgba(0,0,0,.07)}
+.thm-n{font-size:12px;font-weight:700}
+.thm.on .thm-n{color:var(--gold-d);font-weight:800}
 
 /* ═══════════ [18] 모달·입력 폼 ═══════════ */
 .overlay{position:fixed;inset:0;background:rgba(23,21,19,.4);display:flex;align-items:flex-end;justify-content:center;z-index:50;backdrop-filter:blur(3px)}
