@@ -1682,6 +1682,7 @@ function App() {
   useEffect(() => {
     /* 히스토리에 '트랩' 한 칸을 깔아두고, 뒤로가기가 눌리면 앱 안에서 한 단계 back */
     try { history.pushState({ bl: 1 }, ""); } catch (e) {}
+    window.__blAppReady = true; /* index.html의 조기 핸들러는 이제 물러남 */
     /* 중복 방지: iOS가 자체 뒤로가기 + 우리 감지를 둘 다 실행해 두 번 가는 것 차단 */
     const gate = { t: 0 };
     const doBack = () => { const now = Date.now(); if (now - gate.t < 450) return; gate.t = now; goBackStep(); };
