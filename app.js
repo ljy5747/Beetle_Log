@@ -1966,7 +1966,6 @@ function App() {
               <div className="brand">Beetle<span style={{ fontStyle: "italic" }}>Log</span></div>
               <div className="brand-sub">라인 {data.lines.length} · 유충 {data.individuals.length} · 성충 {data.parents.length}</div>
             </div>
-            <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="설정">⚙️</button>
           </div>
 
           {tab === "calendar" && (
