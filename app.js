@@ -2048,7 +2048,7 @@ function App() {
         <>
           <div className="topbar">
             <div>
-              <div className="brand">Beetle<span style={{ fontStyle: "italic" }}>Log</span></div>
+              <div className="brand">BeetleLog</div>
               <div className="brand-sub">라인 {data.lines.length} · 유충 {data.individuals.length} · 성충 {data.parents.length}</div>
             </div>
           </div>
@@ -2806,7 +2806,7 @@ function App() {
 
       {/* ───── 하단 탭바 (직접 그린 아이콘 + 설정) ───── */}
       <div className="bnav">
-        {[["lines", "라인"], ["parents", "성충"], ["calendar", "캘린더"]].map(([k, label]) => (
+        {[["lines", "라인"], ["parents", "종충"], ["calendar", "캘린더"]].map(([k, label]) => (
           <button key={k} className={"bnav-b" + (!settingsOpen && view.name === "list" && tab === k ? " on" : "")}
             onClick={() => { setSettingsOpen(false); setFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
             <span className="bnav-ic"><img src={"icons/tab-" + k + ".png?v=2"} alt={label} /></span>
