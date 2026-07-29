@@ -117,25 +117,6 @@ display:flex;align-items:center;justify-content:space-between;gap:12px}
 .grp-cnt{font-size:12px;color:var(--dim);font-weight:600;margin-left:auto}
 
 /* ═══════════ [08] 라인표 (부♂ × 모♀) ═══════════ */
-.view-toggle{display:flex;gap:6px;margin-bottom:12px}
-.vt-btn{flex:1;background:var(--surf);border:1px solid var(--line);color:var(--dim);border-radius:5px;
-padding:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em}
-.vt-btn.on{background:var(--text);color:#fff;border-color:var(--text)}
-.ltable{display:flex;flex-direction:column;gap:10px}
-.lt-row{background:var(--surf);border:1px solid var(--line);border-radius:6px;overflow:hidden;cursor:pointer;box-shadow:none}
-.lt-head{display:flex;align-items:center;gap:8px;padding:11px 13px;background:var(--surf2);border-bottom:1px solid var(--line)}
-.lt-sp{font-size:13px;font-weight:600;color:var(--text)}
-.lt-cnt{margin-left:auto;font-size:12px;color:var(--dim);font-weight:600}
-.lt-pair{display:flex;align-items:stretch}
-.lt-parent{flex:1;padding:11px 13px;min-width:0}
-.lt-parent.male{background:#EDF1F5}
-.lt-parent.female{background:#F7EEF1}
-.lt-pl{font-size:10px;font-weight:700;color:var(--dim);margin-bottom:6px;letter-spacing:.06em;text-transform:uppercase}
-.lt-photo{width:100%;height:74px;object-fit:cover;border-radius:5px;margin-bottom:6px;border:1px solid rgba(0,0,0,.06)}
-.lt-pcode{font-family:var(--serif);font-size:15px;font-weight:700}
-.lt-pspec{font-size:12px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lt-none{font-size:13px;color:#BCB5A9;padding:8px 0}
-.lt-x{display:flex;align-items:center;color:var(--dim);font-size:14px;font-weight:700;padding:0 2px}
 
 /* ═══════════ [09] 통계·패널·측정값 (유충/라인 상세) ═══════════ */
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
@@ -267,7 +248,6 @@ padding:11px 8px 9px;cursor:pointer;font-family:inherit;color:var(--text);text-a
 border:1.5px dashed var(--line);color:var(--dim);font-size:10.5px;font-weight:700;
 text-align:center;padding:4px;overflow:hidden;line-height:1.3;word-break:keep-all}
 .bc-photo.sp-ph{min-height:110px;font-size:14px}
-.lt-photo.sp-ph{font-size:10px}
 
 /* ═══════════ [17.8] 자동 백업 스냅샷 목록 ═══════════ */
 .snap-row{display:flex;align-items:center;justify-content:space-between;gap:10px;

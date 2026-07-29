@@ -1634,7 +1634,6 @@ function App() {
   const [theme, setTheme] = useState("brown");
   const [snaps, setSnaps] = useState([]);
   const [folderBy, setFolderBy] = useState("species");
-  const [lineView, setLineView] = useState("card");
   const [infoOpen, setInfoOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncKey, setSyncKey] = useState("");
@@ -2109,14 +2108,8 @@ function App() {
                 <div className="empty-d">라인 = 부♂ × 모♀ 조합 단위예요.<br />성충 탭에서 부모를 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
               </div>
             )}
-            {data.lines.length > 0 && (
-              <div className="view-toggle">
-                <button className={"vt-btn" + (lineView === "card" ? " on" : "")} onClick={() => setLineView("card")}>카드</button>
-                <button className={"vt-btn" + (lineView === "table" ? " on" : "")} onClick={() => setLineView("table")}>라인표</button>
-              </div>
-            )}
 
-            {lineView === "card" && [...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
+            {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
               const kids = larvaeOf(L.id);
               const cnt = STATUSES.map((s) => [s, kids.filter((i) => i.status === s).length]).filter(([, n]) => n > 0);
               const dd = lineDday(L.id);
@@ -2153,47 +2146,6 @@ function App() {
                 </div>
               );
             })}
-
-            {lineView === "table" && (
-              <div className="ltable">
-                {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
-                  const fa = parentById[L.fatherId], mo = parentById[L.motherId];
-                  const kids = larvaeOf(L.id);
-                  return (
-                    <div key={L.id} className="lt-row" onClick={() => setView({ name: "lineDetail", id: L.id })}>
-                      <div className="lt-head">
-                        <span className="tag mono">{L.code}</span>
-                        <span className="lt-sp">{L.species || ""}</span>
-                        <span className="lt-cnt">{kids.length}마리</span>
-                      </div>
-                      <div className="lt-pair">
-                        <div className="lt-parent male">
-                          <div className="lt-pl">♂ 부</div>
-                          {fa ? (
-                            <>
-                              <SpeciesPhoto photo={fa.photo} species={fa.species || L.species} className="lt-photo" />
-                              <div className="lt-pcode mono">{fa.code}</div>
-                              <div className="lt-pspec">{[num(fa.totalLength) ? n1(num(fa.totalLength)) + "mm" : null, fa.line].filter(Boolean).join(" · ")}</div>
-                            </>
-                          ) : <div className="lt-none">미지정</div>}
-                        </div>
-                        <div className="lt-x">×</div>
-                        <div className="lt-parent female">
-                          <div className="lt-pl">♀ 모</div>
-                          {mo ? (
-                            <>
-                              <SpeciesPhoto photo={mo.photo} species={mo.species || L.species} className="lt-photo" />
-                              <div className="lt-pcode mono">{mo.code}</div>
-                              <div className="lt-pspec">{[num(mo.totalLength) ? n1(num(mo.totalLength)) + "mm" : null, mo.line].filter(Boolean).join(" · ")}</div>
-                            </>
-                          ) : <div className="lt-none">미지정</div>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </>}
 
           {tab === "parents" && <>
