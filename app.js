@@ -2212,9 +2212,10 @@ function App() {
                   <div className="card-l">
                     <div className="tagrow">
                       <span className="tag mono">{L.code}</span>
+                      {L.gen && <span className="chip gen mono">{L.gen}</span>}
                       {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `병갈이 D+${-dd}` : `병갈이 D-${dd}`}</span>}
                     </div>
-                    <div className="card-sub">{[L.species, L.gen, pairLabel(L), L.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
+                    <div className="card-sub">{[L.species, pairLabel(L), L.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
                     <div className="card-val mono" style={{ fontSize: 17 }}>
                       {kids.length ? <>{kids.length}<small>마리</small></> : <span className="dim">유충 없음</span>}
                     </div>
@@ -2312,6 +2313,7 @@ function App() {
                           <div className="tagrow">
                             <span className={"tag mono" + (dead ? " strike" : "")}>{p.code}</span>
                             <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{p.sex}</span>
+                            {p.gen && <span className="chip gen mono">{p.gen}</span>}
                             {dead && <span className="chip" style={{ color: "#9A9088", borderColor: "#9A908855" }}>사망</span>}
                           </div>
                           <div className="card-sub">{[p.line, p.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
