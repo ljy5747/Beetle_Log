@@ -249,6 +249,12 @@ border:1.5px dashed var(--line);color:var(--dim);font-size:10.5px;font-weight:70
 text-align:center;padding:4px;overflow:hidden;line-height:1.3;word-break:keep-all}
 .bc-photo.sp-ph{min-height:110px;font-size:14px}
 
+/* ═══════════ [17.9] 보기 전환 버튼 (종별 / 혈통별) ═══════════ */
+.view-toggle{display:flex;gap:6px;margin-bottom:12px}
+.vt-btn{flex:1;background:var(--surf);border:1px solid var(--line);color:var(--dim);border-radius:5px;
+padding:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em}
+.vt-btn.on{background:var(--text);color:#fff;border-color:var(--text)}
+
 /* ═══════════ [17.8] 자동 백업 스냅샷 목록 ═══════════ */
 .snap-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
 background:var(--surf);border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:7px}

@@ -532,11 +532,12 @@ function SimplePicker({ options, value, onChange, placeholder }) {
 }
 
 /* ════════════════════ 성충 등록/수정 폼 ════════════════════ */
-function ParentForm({ initial, existingCodes, allParents, onSave, onClose }) {
+function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClose }) {
   const [f, setF] = useState(initial || {
     code: "", sex: "수컷 ♂", species: "", line: "", origin: "",
     totalLength: "", jawLength: "", jawWidth: "", jawThick: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
     sireId: "", damId: "",
+    ...(preset || {}), /* 종/혈통 폴더 안에서 추가하면 그 값이 미리 채워짐 */
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -2638,6 +2639,9 @@ function App() {
           initial={modal.editId ? data.parents.find((p) => p.id === modal.editId) : null}
           existingCodes={data.parents.map((p) => p.code)}
           allParents={data.parents}
+          preset={(!modal.editId && speciesFolder && !speciesFolder.endsWith("미지정"))
+            ? (folderBy === "line" ? { line: speciesFolder } : { species: speciesFolder })
+            : null}
           onSave={saveParent} onClose={() => setModal(null)} />
       )}
       {modal?.type === "growthRow" && (
