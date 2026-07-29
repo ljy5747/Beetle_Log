@@ -412,8 +412,10 @@ function calcGen(fa, mo) {
   /* 같은 혈통이면서 산지도 같아야 세대가 올라감 */
   if (sameLine && sameOrigin) {
     const next = Math.min(lf, lm) + 1;
-    const bothCB = gf.toUpperCase().startsWith("CB") && gm.toUpperCase().startsWith("CB");
-    return (bothCB ? "CBF" : "F") + next;
+    /* 접두어(WF/CBF/F)는 부모가 같은 계통일 때 그대로 이어감 — WF1×WF1 → WF2 */
+    const pre = (g) => (g.toUpperCase().match(/^(CBF|WF|F)/) || ["F"])[0];
+    const pf = pre(gf), pm = pre(gm);
+    return (pf === pm ? pf : "F") + next;
   }
   return "CBF1"; /* 혈통 또는 산지가 다름 */
 }
@@ -434,9 +436,10 @@ function snapShrink(data) {
 /* 되돌릴 때: 스냅샷에 없는 사진을 현재 데이터에서 같은 개체끼리 복원 */
 function snapMergePhotos(snapData, current) {
   const byId = {}, byCode = {};
-  (current.parents || []).forEach((p) => { if (p.photo) { byId[p.id] = p.photo; if (p.code) byCode[p.code] = p.photo; } });
+  const ck = (p) => (p.code || "") + "\u0000" + (p.species || ""); /* 종이 다르면 같은 번호도 별개 */
+  (current.parents || []).forEach((p) => { if (p.photo) { byId[p.id] = p.photo; if (p.code) byCode[ck(p)] = p.photo; } });
   const out = JSON.parse(JSON.stringify(snapData));
-  (out.parents || []).forEach((p) => { if (!p.photo) p.photo = byId[p.id] || byCode[p.code] || ""; });
+  (out.parents || []).forEach((p) => { if (!p.photo) p.photo = byId[p.id] || byCode[ck(p)] || ""; });
   return out;
 }
 async function snapSave(data, reason) {
@@ -596,7 +599,12 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
   useEffect(() => { if (isGeuktae) setMsOn((p) => (p.jawwt ? p : { ...p, jawwt: true })); }, [isGeuktae]);
   const save = () => {
     if (!f.code.trim()) return alert("관리번호는 필수입니다");
-    if (!isEdit && existingCodes.includes(f.code.trim())) return alert("이미 사용 중인 관리번호입니다");
+    /* 관리번호는 '같은 종' 안에서만 중복을 막음 (종이 다르면 같은 번호 사용 가능) */
+    const dup = (allParents || []).some((p) =>
+      p.id !== (initial && initial.id) &&
+      norm(p.code) === norm(f.code) &&
+      norm(p.species) === norm(f.species));
+    if (dup) return alert(`'${f.code.trim()}' 번호는 ${norm(f.species) || "종 미입력"}에 이미 있어요`);
     onSave({ ...f, code: f.code.trim() });
   };
   return (
