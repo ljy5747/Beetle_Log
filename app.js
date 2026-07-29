@@ -1,7 +1,7 @@
 /* ════════ 앱 본체 — 기능 추가/수정은 여기서 ════════ */
 const { useState, useEffect, useRef } = React;
 /* 설정값과 CSS는 data.js / styles.js 에서 불러옵니다 */
-const { KEY, SUPABASE_URL, SUPABASE_KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, FLAGS, FEED_PRODUCTS, STATUS_COLOR, STATUSES } = window.APP_DATA;
+const { KEY, SUPABASE_URL, SUPABASE_KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, FLAGS, GENS, FEED_PRODUCTS, STATUS_COLOR, STATUSES } = window.APP_DATA;
 const CSS = window.APP_CSS;
 
 
@@ -383,6 +383,41 @@ function SpeciesPhoto({ photo, species, className }) {
   return <img src={"icons/species/" + encodeURIComponent(species) + ".png"} alt={species} className={className} onError={() => setErr(true)} />;
 }
 
+/* ════════════════════ 누대수(세대) 계산 ════════════════════
+   WD(와일드) → WF1 → F2 → F3 …  /  혈통·산지가 다르면 CBF1
+   레벨: WD=0, WF1·F1·CBF1=1, F2·CBF2=2 … */
+function genLevel(g) {
+  const s = String(g || "").trim().toUpperCase();
+  if (!s) return null;
+  if (s === "WD") return 0;
+  const m = s.match(/(\d+)\s*$/);
+  return m ? parseInt(m[1]) : null;
+}
+const isWD = (g) => String(g || "").trim().toUpperCase() === "WD";
+const norm = (v) => String(v || "").trim();
+
+/* 부·모 성충을 받아 자식 라인의 누대수를 계산 */
+function calcGen(fa, mo) {
+  if (!fa || !mo) return "";
+  const gf = norm(fa.gen), gm = norm(mo.gen);
+  if (!gf || !gm) return "";
+  const sameOrigin = norm(fa.origin) !== "" && norm(fa.origin) === norm(mo.origin);
+  const sameLine = norm(fa.line) !== "" && norm(fa.line) === norm(mo.line);
+  /* 와일드끼리 */
+  if (isWD(gf) && isWD(gm)) return sameOrigin ? "WF1" : "CBF1";
+  /* 한쪽만 와일드 → 이종교배 */
+  if (isWD(gf) || isWD(gm)) return "CBF1";
+  const lf = genLevel(gf), lm = genLevel(gm);
+  if (lf == null || lm == null) return "";
+  /* 같은 혈통이면서 산지도 같아야 세대가 올라감 */
+  if (sameLine && sameOrigin) {
+    const next = Math.min(lf, lm) + 1;
+    const bothCB = gf.toUpperCase().startsWith("CB") && gm.toUpperCase().startsWith("CB");
+    return (bothCB ? "CBF" : "F") + next;
+  }
+  return "CBF1"; /* 혈통 또는 산지가 다름 */
+}
+
 /* ════════════════════ 자동 백업 스냅샷 (최근 5개 순환 보관) ════════════════════ */
 const SNAP_KEY = "beetle-snapshots", SNAP_MAX = 1;
 async function snapList() {
@@ -534,7 +569,7 @@ function SimplePicker({ options, value, onChange, placeholder }) {
 /* ════════════════════ 성충 등록/수정 폼 ════════════════════ */
 function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClose }) {
   const [f, setF] = useState(initial || {
-    code: "", sex: "수컷 ♂", species: "", line: "", origin: "",
+    code: "", sex: "수컷 ♂", species: "", line: "", origin: "", gen: "",
     totalLength: "", jawLength: "", jawWidth: "", jawThick: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
     sireId: "", damId: "",
     ...(preset || {}), /* 종/혈통 폴더 안에서 추가하면 그 값이 미리 채워짐 */
@@ -552,7 +587,13 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
   const isEdit = !!initial;
   const isGeuktae = (f.species || "").includes("극태");
   const isDanchi = (f.species || "").includes("단치");
-  const [showJaw, setShowJaw] = useState(!!(initial && (initial.jawWidth || initial.jawThick)));
+  /* 측정 항목은 필요한 것만 켜서 입력 (값이 이미 있거나 극태면 자동으로 켜짐) */
+  const [msOn, setMsOn] = useState({
+    jaw: !!(initial && initial.jawLength),
+    thorax: !!(initial && initial.thoraxWidth),
+    jawwt: !!(initial && (initial.jawWidth || initial.jawThick)) || (initial ? false : false),
+  });
+  useEffect(() => { if (isGeuktae) setMsOn((p) => (p.jawwt ? p : { ...p, jawwt: true })); }, [isGeuktae]);
   const save = () => {
     if (!f.code.trim()) return alert("관리번호는 필수입니다");
     if (!isEdit && existingCodes.includes(f.code.trim())) return alert("이미 사용 중인 관리번호입니다");
@@ -586,17 +627,33 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
         <F label="혈통 / 계보" half><input className="in" value={f.line} onChange={(e) => set("line", e.target.value)} /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
-      <div className="sect">측정값</div>
-      <div className="row">
-        <F label="총장(체장) mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
-        <F label="턱 길이 mm" half><input className="in mono" inputMode="decimal" value={f.jawLength} onChange={(e) => set("jawLength", e.target.value)} /></F>
-      </div>
-      {num(f.totalLength) && num(f.jawLength) && (
-        <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>
-          턱 비율 <b>{n1(num(f.jawLength) / num(f.totalLength) * 100)}%</b> (턱÷체장){isDanchi ? " · 단치 평가" : ""}
+      <F label="누대수">
+        <SimplePicker options={GENS} value={f.gen} onChange={(v) => set("gen", v)} placeholder="탭하여 선택 (WD=와일드)" />
+        <div className="hint" style={{ marginTop: 6 }}>
+          와일드는 <b>WD</b>. 이 값으로 라인의 누대수가 자동 계산돼요 —
+          같은 혈통·산지끼리면 세대가 올라가고(WF1→F2→F3), 다르면 <b>CBF1</b>이 돼요.
         </div>
+      </F>
+      <div className="sect">측정값</div>
+      <F label="총장(체장) mm"><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
+      {/* 필요한 항목만 켜서 입력 */}
+      <div className="chiprow" style={{ marginTop: -4, marginBottom: 12 }}>
+        {[["jaw", "턱 길이"], ["thorax", "흉폭"], ["jawwt", "악폭·악후"]].map(([k, label]) => (
+          <button key={k} className={"chipbtn" + (msOn[k] ? " on" : "")}
+            onClick={() => setMsOn((p) => ({ ...p, [k]: !p[k] }))}>{msOn[k] ? "− " : "+ "}{label}</button>
+        ))}
+      </div>
+      {msOn.jaw && (
+        <>
+          <F label="턱 길이 mm"><input className="in mono" inputMode="decimal" value={f.jawLength} onChange={(e) => set("jawLength", e.target.value)} /></F>
+          {num(f.totalLength) && num(f.jawLength) && (
+            <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>
+              턱 비율 <b>{n1(num(f.jawLength) / num(f.totalLength) * 100)}%</b> (턱÷체장){isDanchi ? " · 단치 평가" : ""}
+            </div>
+          )}
+        </>
       )}
-      {(isGeuktae || showJaw) ? (
+      {msOn.jawwt && (
         <>
           {isGeuktae && <div className="hint" style={{ marginTop: -4, marginBottom: 8, color: "#937640" }}>극태 종 — 악폭·악후를 기록하세요</div>}
           <div className="row">
@@ -604,10 +661,10 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
             <F label="악후 mm" half><input className="in mono" inputMode="decimal" value={f.jawThick} onChange={(e) => set("jawThick", e.target.value)} /></F>
           </div>
         </>
-      ) : (
-        <button className="btn tiny" style={{ marginBottom: 13 }} onClick={() => setShowJaw(true)}>+ 악폭·악후 입력</button>
       )}
-      <F label="흉폭 mm"><input className="in mono" inputMode="decimal" value={f.thoraxWidth} onChange={(e) => set("thoraxWidth", e.target.value)} /></F>
+      {msOn.thorax && (
+        <F label="흉폭 mm"><input className="in mono" inputMode="decimal" value={f.thoraxWidth} onChange={(e) => set("thoraxWidth", e.target.value)} /></F>
+      )}
       <div className="sect">부모 (혈통 연결)</div>
       {(!allParents || allParents.length === 0) && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>다른 성충을 등록하면 이 성충의 부모로 연결할 수 있어요</div>}
       <div className="row">
@@ -683,18 +740,26 @@ function GrowthRowForm({ initial, brands, onSave, onClose }) {
 /* ════════════════════ 라인 등록/수정 폼 ════════════════════ */
 function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber, hasLarvae }) {
   const [f, setF] = useState(initial || {
-    code: "", fatherId: "", motherId: "", species: "", origin: "",
+    code: "", fatherId: "", motherId: "", species: "", origin: "", gen: "",
     setDate: "", breakdownDate: "", hatchDate: "", temp: "", place: "", memo: "",
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const isEdit = !!initial;
   const pick = (role, pid) => {
     const p = parents.find((x) => x.id === pid);
-    setF((prev) => ({
-      ...prev, [role]: pid,
-      species: prev.species || p?.species || "",
-      origin: prev.origin || p?.origin || "",
-    }));
+    setF((prev) => {
+      const next = {
+        ...prev, [role]: pid,
+        species: prev.species || p?.species || "",
+        origin: prev.origin || p?.origin || "",
+      };
+      /* 부·모가 모두 정해지면 누대수 자동 계산 (직접 수정 가능) */
+      const fa = parents.find((x) => x.id === next.fatherId);
+      const mo = parents.find((x) => x.id === next.motherId);
+      const auto = calcGen(fa, mo);
+      if (auto) next.gen = auto;
+      return next;
+    });
   };
   const save = () => {
     if (!f.code.trim()) return alert("라인명은 필수입니다");
@@ -724,6 +789,20 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
         <F label="종" half><SimplePicker options={SPECIES} value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
+      <F label="누대수">
+        <SimplePicker options={GENS} value={f.gen} onChange={(v) => set("gen", v)} placeholder="부·모를 고르면 자동 계산돼요" />
+        {(() => {
+          const fa = parents.find((x) => x.id === f.fatherId), mo = parents.find((x) => x.id === f.motherId);
+          const auto = calcGen(fa, mo);
+          if (!auto) return <div className="hint" style={{ marginTop: 6 }}>부·모 성충에 누대수를 입력해두면 자동으로 계산돼요</div>;
+          return (
+            <div className="hint" style={{ marginTop: 6 }}>
+              자동 계산 <b className="mono">{auto}</b>
+              {f.gen !== auto && <button className="btn tiny" style={{ marginLeft: 8 }} onClick={() => set("gen", auto)}>적용</button>}
+            </div>
+          );
+        })()}
+      </F>
       <div className="sect">날짜</div>
       <F label="산란 셋팅일"><input type="date" className="in" value={f.setDate} onChange={(e) => set("setDate", e.target.value)} /></F>
       {f.setDate && (
@@ -1122,7 +1201,7 @@ function exportXLSX(data) {
     }));
   });
   const sheetP = data.parents.map((p) => ({
-    "관리번호": p.code, "성별": p.sex, "종": p.species, "혈통": p.line, "산지": p.origin,
+    "관리번호": p.code, "성별": p.sex, "종": p.species, "혈통": p.line, "누대수": p.gen, "산지": p.origin,
     "총장(mm)": p.totalLength, "턱 길이(mm)": p.jawLength, "악폭(mm)": p.jawWidth || "", "악후(mm)": p.jawThick || "", "흉폭(mm)": p.thoraxWidth,
     "우화일": p.eclosionDate, "입수처": p.source, "메모": p.memo,
   }));
@@ -1208,7 +1287,7 @@ async function downloadTemplate() {
   guide.getColumn(1).width = 80;
 
   /* 성충 */
-  const pHeaders = ["관리번호", "성별(수컷/암컷)", "종", "혈통", "산지", "총장(mm)", "턱길이(mm)", "악폭(mm)", "악후(mm)", "흉폭(mm)", "우화일(YYYY-MM-DD)", "입수처", "메모"];
+  const pHeaders = ["관리번호", "성별(수컷/암컷)", "종", "혈통", "누대수", "산지", "총장(mm)", "턱길이(mm)", "악폭(mm)", "악후(mm)", "흉폭(mm)", "우화일(YYYY-MM-DD)", "입수처", "메모"];
   const pWs = makeSheet("성충", pHeaders);
   pWs.addRow(["P-01", "수컷", "왕사슴벌레(극태)", "", "", 85.5, "", "", "", "", "", "샵명", ""]);
   pWs.addRow(["P-02", "암컷", "왕사슴벌레(극태)", "", "", 52.0, "", "", "", "", "", "", ""]);
@@ -1270,7 +1349,7 @@ function parseImportXLSX(arrayBuffer, data) {
     if (existing) {
       Object.assign(existing, {
         sex: keep(row["성별(수컷/암컷)"], existing.sex) || sexNorm(row["성별(수컷/암컷)"]),
-        line: keep(row["혈통"], existing.line), origin: keep(row["산지"], existing.origin),
+        line: keep(row["혈통"], existing.line), gen: keep(row["누대수"], existing.gen), origin: keep(row["산지"], existing.origin),
         totalLength: keep(row["총장(mm)"], existing.totalLength), jawLength: keep(row["턱길이(mm)"], existing.jawLength),
         thoraxWidth: keep(row["흉폭(mm)"], existing.thoraxWidth), eclosionDate: keep(row["우화일(YYYY-MM-DD)"], existing.eclosionDate),
         source: keep(row["입수처"], existing.source), memo: keep(row["메모"], existing.memo),
@@ -1280,7 +1359,7 @@ function parseImportXLSX(arrayBuffer, data) {
     } else {
       parents.push({
         id: uid(), code, sex: sexNorm(row["성별(수컷/암컷)"]), species,
-        line: str(row["혈통"]), origin: str(row["산지"]),
+        line: str(row["혈통"]), gen: str(row["누대수"]), origin: str(row["산지"]),
         totalLength: str(row["총장(mm)"]), jawLength: str(row["턱길이(mm)"]), thoraxWidth: str(row["흉폭(mm)"]),
         eclosionDate: str(row["우화일(YYYY-MM-DD)"]), source: str(row["입수처"]), memo: str(row["메모"]),
         status: "생존", photo: "", growthRecords: [],
@@ -2127,7 +2206,7 @@ function App() {
                       <span className="tag mono">{L.code}</span>
                       {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `병갈이 D+${-dd}` : `병갈이 D-${dd}`}</span>}
                     </div>
-                    <div className="card-sub">{[L.species, pairLabel(L), L.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
+                    <div className="card-sub">{[L.species, L.gen, pairLabel(L), L.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
                     <div className="card-val mono" style={{ fontSize: 17 }}>
                       {kids.length ? <>{kids.length}<small>마리</small></> : <span className="dim">유충 없음</span>}
                     </div>
@@ -2280,7 +2359,7 @@ function App() {
               <div className="tagrow"><span className="tag mono big">{L.code}</span></div>
               <button className="hbtn" onClick={() => setModal({ type: "line", editId: L.id })}>수정</button>
             </div>
-            <div className="d-sub">{[L.species, pairLabel(L), L.origin].filter(Boolean).join(" · ")}</div>
+            <div className="d-sub">{[L.species, L.gen, pairLabel(L), L.origin].filter(Boolean).join(" · ")}</div>
 
             <div className="panel">
               <div className="meas mono">
@@ -2395,7 +2474,7 @@ function App() {
               <SpeciesPhoto photo={p.photo} species={p.species} className="bc-photo" />
               <div className="bc-head serif">BREEDING CARD</div>
               <div className="bc-species serif">{p.species || "종 미입력"}</div>
-              <div className="bc-sub">{[p.line, p.origin, p.sex].filter(Boolean).join(" · ")}</div>
+              <div className="bc-sub">{[p.line, p.gen, p.origin, p.sex].filter(Boolean).join(" · ")}</div>
               {p.status === "사망" && <div className="bc-dead">사망 · 계보 보존</div>}
               {p.bornLineId && lineById[p.bornLineId] && (() => {
                 const bl = lineById[p.bornLineId];

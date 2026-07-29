@@ -285,6 +285,7 @@ background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:
 .chiprow{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}
 .chipbtn{background:var(--surf2);border:1px solid var(--line);color:var(--text);border-radius:999px;
 padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
+.chipbtn.on{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700}
 .hint{font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.6}
 .hint b{color:var(--text)}
 .toggle{background:var(--surf);border:1px solid var(--line);color:var(--dim);border-radius:5px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer}
