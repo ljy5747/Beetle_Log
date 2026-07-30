@@ -17,6 +17,8 @@ const num = (v) => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : 
 const n1 = (v) => (v == null ? "—" : (Math.round(v * 10) / 10).toLocaleString());
 const n2 = (v) => (v == null ? "—" : (Math.round(v * 100) / 100).toLocaleString());
 const shortDate = (iso) => (iso ? iso.slice(2).replace(/-/g, ".") : "");
+/* ♂︎♀︎ 는 폰트에 따라 이모지로 바뀌며 기준선이 내려가므로, 텍스트 표현(U+FE0E)을 강제 */
+const symTxt = (s) => String(s || "").replace(/([\u2642\u2640])/g, "$1︎");
 /* 병 용량: 저장은 숫자만, 표시할 때 cc 붙임. 기존에 'cc'가 들어간 값도 안전 처리 */
 const ccLabel = (v) => { const s = String(v || "").trim(); return s ? (/cc$/i.test(s) ? s : s + "cc") : ""; };
 /* 병갈이 D-day 색상 등급: 7일 이내 빨강 / 8~30일 노랑 / 그 이상 초록 */
@@ -236,12 +238,52 @@ function Spark({ ind, w = 96, h = 30, big }) {
   );
 }
 
+/* ════════════════════ 라인 부모(부·모) 정보 카드 ════════════════════ */
+function LineParentCard({ p, role, onOpen }) {
+  const male = role === "부";
+  if (!p) return (
+    <div className="pcard empty">
+      <div className="pcard-ph sp-ph"><span>{male ? "부 미지정" : "모 미지정"}</span></div>
+      <div className="pcard-r"><div className="pcard-role dim">{male ? "부 ♂︎" : "모 ♀︎"} 미지정</div>
+        <div className="pcard-sub">라인 수정에서 종충을 골라주세요</div></div>
+    </div>
+  );
+  const ratio = num(p.totalLength) && num(p.jawLength) ? num(p.jawLength) / num(p.totalLength) * 100 : null;
+  const meas = [
+    num(p.totalLength) && ["총장", n1(num(p.totalLength)) + "mm"],
+    num(p.jawLength) && ["턱", n1(num(p.jawLength)) + "mm"],
+    num(p.jawWidth) && ["악폭", n1(num(p.jawWidth)) + "mm"],
+    num(p.jawThick) && ["악후", n1(num(p.jawThick)) + "mm"],
+    num(p.thoraxWidth) && ["흉폭", n1(num(p.thoraxWidth)) + "mm"],
+    ratio && ["턱비율", n1(ratio) + "%"],
+  ].filter(Boolean);
+  return (
+    <div className={"pcard" + (male ? " male" : " female")} onClick={onOpen}>
+      <SpeciesPhoto photo={p.photo} species={p.species} className="pcard-ph" />
+      <div className="pcard-r">
+        <div className="pcard-top">
+          <span className="pcard-role">{male ? "부 ♂︎" : "모 ♀︎"}</span>
+          <span className="tag mono">{p.code}</span>
+          {p.gen && <span className="chip gen mono">{p.gen}</span>}
+          {p.status === "사망" && <span className="chip" style={{ color: "#9A9088", borderColor: "#9A908855" }}>사망</span>}
+        </div>
+        <div className="pcard-sub">{[p.species, p.line, p.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
+        {meas.length > 0 ? (
+          <div className="pcard-meas mono">
+            {meas.map(([k, v]) => <span key={k}><i>{k}</i> <b>{v}</b></span>)}
+          </div>
+        ) : <div className="pcard-sub dim">측정값 미입력</div>}
+      </div>
+    </div>
+  );
+}
+
 /* ════════════════════ 라인 암수 통계 ════════════════════ */
 function LineSexStats({ kids }) {
   const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
   const rows = [
-    { key: "수", label: "♂ 수컷", color: "#5A7A9A" },
-    { key: "암", label: "♀ 암컷", color: "#A8884F" },
+    { key: "수", label: "♂︎ 수컷", color: "#5A7A9A" },
+    { key: "암", label: "♀︎ 암컷", color: "#A8884F" },
   ].map((r) => {
     const mine = kids.filter((i) => (i.sex || "").includes(r.key));
     const ws = mine.filter((i) => i.status === "유충").map((i) => num(latestRec(i)?.weight)).filter(Boolean);
@@ -311,8 +353,8 @@ function LineWeightChart({ kids }) {
     <div className="panel" style={{ marginBottom: 6 }}>
       <div className="p-t">무게 그래프
         <small style={{ fontWeight: 700, textTransform: "none", letterSpacing: 0, marginLeft: 8 }}>
-          {nM > 0 && <span style={{ color: "#5A7A9A" }}>♂{nM} </span>}
-          {nF > 0 && <span style={{ color: "#A8884F" }}>♀{nF} </span>}
+          {nM > 0 && <span style={{ color: "#5A7A9A" }}>♂︎{nM} </span>}
+          {nF > 0 && <span style={{ color: "#A8884F" }}>♀︎{nF} </span>}
           {nU > 0 && <span style={{ color: "#B8B2A6" }}>미구분{nU}</span>}
         </small>
       </div>
@@ -332,13 +374,13 @@ function LineWeightChart({ kids }) {
         {avgM && (
           <g>
             <line x1={pl} y1={Y(avgM)} x2={W - pr} y2={Y(avgM)} stroke="#5A7A9A" strokeWidth="1.3" strokeDasharray="5 4" opacity="0.8" />
-            <text x={pl + 3} y={Y(avgM) - 4} fontSize="9" fill="#5A7A9A" fontWeight="700" fontFamily="ui-monospace,monospace">♂평균 {n1(avgM)}</text>
+            <text x={pl + 3} y={Y(avgM) - 4} fontSize="9" fill="#5A7A9A" fontWeight="700" fontFamily="ui-monospace,monospace">♂︎평균 {n1(avgM)}</text>
           </g>
         )}
         {avgF && (
           <g>
             <line x1={pl} y1={Y(avgF)} x2={W - pr} y2={Y(avgF)} stroke="#A8884F" strokeWidth="1.3" strokeDasharray="5 4" opacity="0.8" />
-            <text x={pl + 3} y={Y(avgF) - 4} fontSize="9" fill="#A8884F" fontWeight="700" fontFamily="ui-monospace,monospace">♀평균 {n1(avgF)}</text>
+            <text x={pl + 3} y={Y(avgF) - 4} fontSize="9" fill="#A8884F" fontWeight="700" fontFamily="ui-monospace,monospace">♀︎평균 {n1(avgF)}</text>
           </g>
         )}
         {/* 각 유충 꺾은선 (1등은 진하게) */}
@@ -676,7 +718,7 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
       <div className="sect">부모 (혈통 연결)</div>
       {(!allParents || allParents.length === 0) && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>다른 성충을 등록하면 이 성충의 부모로 연결할 수 있어요</div>}
       <div className="row">
-        <F label="부 성충 ♂" half>
+        <F label="부 성충 ♂︎" half>
           <select className="in" value={f.sireId || ""} onChange={(e) => set("sireId", e.target.value)}>
             <option value="">미지정</option>
             {(allParents || []).filter((p) => p.sex.includes("수") && p.id !== (initial && initial.id)).map((p) => (
@@ -684,7 +726,7 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
             ))}
           </select>
         </F>
-        <F label="모 성충 ♀" half>
+        <F label="모 성충 ♀︎" half>
           <select className="in" value={f.damId || ""} onChange={(e) => set("damId", e.target.value)}>
             <option value="">미지정</option>
             {(allParents || []).filter((p) => p.sex.includes("암") && p.id !== (initial && initial.id)).map((p) => (
@@ -780,13 +822,13 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
       <div className="sect">성충 조합</div>
       {parents.length === 0 && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>성충 탭에서 부모를 먼저 등록하면 여기서 선택할 수 있어요</div>}
       <div className="row">
-        <F label="부♂" half>
+        <F label="부♂︎" half>
           <select className="in" value={f.fatherId || ""} onChange={(e) => pick("fatherId", e.target.value)}>
             <option value="">미지정</option>
             {parents.filter((p) => p.sex.includes("수")).map((p) => <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line].filter(Boolean).join(" · ")}</option>)}
           </select>
         </F>
-        <F label="모♀" half>
+        <F label="모♀︎" half>
           <select className="in" value={f.motherId || ""} onChange={(e) => pick("motherId", e.target.value)}>
             <option value="">미지정</option>
             {parents.filter((p) => p.sex.includes("암")).map((p) => <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line].filter(Boolean).join(" · ")}</option>)}
@@ -2121,7 +2163,7 @@ function App() {
   const pairLabel = (L) => {
     const fa = parentById[L.fatherId], mo = parentById[L.motherId];
     if (!fa && !mo) return null;
-    return `${fa ? fa.code : "?"} ♂ × ${mo ? mo.code : "?"} ♀`;
+    return `${fa ? fa.code : "?"} ♂︎ × ${mo ? mo.code : "?"} ♀︎`;
   };
 
   /* ════════ 렌더 ════════ */
@@ -2193,7 +2235,7 @@ function App() {
               <div className="empty">
                 <div className="empty-icon">🪲</div>
                 <div className="empty-t">첫 라인을 만들어보세요</div>
-                <div className="empty-d">라인 = 부♂ × 모♀ 조합 단위예요.<br />성충 탭에서 부모를 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
+                <div className="empty-d">라인 = 부♂︎ × 모♀︎ 조합 단위예요.<br />성충 탭에서 부모를 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
               </div>
             )}
 
@@ -2221,8 +2263,8 @@ function App() {
                     </div>
                     {(avgM || avgF || avgU) && (
                       <div className="avg-row">
-                        {avgM && <span className="avg-m">♂ 평균 {n1(avgM)}g</span>}
-                        {avgF && <span className="avg-f">♀ 평균 {n1(avgF)}g</span>}
+                        {avgM && <span className="avg-m">♂︎ 평균 {n1(avgM)}g</span>}
+                        {avgF && <span className="avg-f">♀︎ 평균 {n1(avgF)}g</span>}
                         {avgU && <span className="avg-u">미구분 {n1(avgU)}g</span>}
                       </div>
                     )}
@@ -2278,7 +2320,7 @@ function App() {
                         <div key={gname} className="sp-card" onClick={() => setSpeciesFolder(gname)}>
                           <div className="sp-card-l">
                             <div className="sp-name serif">{gname}</div>
-                            <div className="sp-meta">{list.length}마리 · ♂{males} ♀{females}</div>
+                            <div className="sp-meta">{list.length}마리 · ♂︎{males} ♀︎{females}</div>
                           </div>
                           <div className="sp-go">보기 ›</div>
                         </div>
@@ -2302,7 +2344,7 @@ function App() {
                   <div className="sp-back" onClick={() => setSpeciesFolder(null)}>‹ {folderBy === "line" ? "혈통" : "종"} 목록</div>
                   <div className="grp-head">
                     <span className="grp-name serif">{speciesFolder}</span>
-                    <span className="grp-cnt">{list.length}마리 · ♂{males} ♀{females}</span>
+                    <span className="grp-cnt">{list.length}마리 · ♂︎{males} ♀︎{females}</span>
                   </div>
                   {list.map((p) => {
                     const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id).length;
@@ -2312,7 +2354,7 @@ function App() {
                         <div className="card-l">
                           <div className="tagrow">
                             <span className={"tag mono" + (dead ? " strike" : "")}>{p.code}</span>
-                            <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{p.sex}</span>
+                            <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{symTxt(p.sex)}</span>
                             {p.gen && <span className="chip gen mono">{p.gen}</span>}
                             {dead && <span className="chip" style={{ color: "#9A9088", borderColor: "#9A908855" }}>사망</span>}
                           </div>
@@ -2369,8 +2411,15 @@ function App() {
               <div className="tagrow"><span className="tag mono big">{L.code}</span></div>
               <button className="hbtn" onClick={() => setModal({ type: "line", editId: L.id })}>수정</button>
             </div>
-            <div className="d-sub">{[L.species, L.gen, pairLabel(L), L.origin].filter(Boolean).join(" · ")}</div>
+            <div className="d-sub">{[L.species, L.gen, L.origin].filter(Boolean).join(" · ")}</div>
 
+            {/* 부·모 종충 정보 카드 */}
+            <LineParentCard p={parentById[L.fatherId]} role="부"
+              onOpen={() => parentById[L.fatherId] && setView({ name: "parentDetail", id: L.fatherId })} />
+            <LineParentCard p={parentById[L.motherId]} role="모"
+              onOpen={() => parentById[L.motherId] && setView({ name: "parentDetail", id: L.motherId })} />
+
+            <div className="p-t lt">라인 정보</div>
             <div className="panel">
               <div className="meas mono">
                 {L.setDate && <span>셋팅 <b>{shortDate(L.setDate)}</b></span>}
@@ -2392,15 +2441,15 @@ function App() {
               {L.memo && <div className="r-memo">{L.memo}</div>}
             </div>
 
+            <LineSexStats kids={kids} />
+            <LineWeightChart kids={kids} />
+
             <div className="acts">
               <button className="btn primary" onClick={() => setModal({ type: "larvaAdd", lineId: L.id })}>+ 유충 추가</button>
               {kids.some((i) => i.status === "유충") && (
                 <button className="btn" onClick={() => setModal({ type: "bulkBottle", lineId: L.id })}>+ 일괄 병갈이</button>
               )}
             </div>
-
-            <LineSexStats kids={kids} />
-            <LineWeightChart kids={kids} />
 
             {kids.length > 0 && (
               <div className="filters">
@@ -2492,13 +2541,13 @@ function App() {
                 return (
                   <div className="bc-lineage">
                     출신 <b>{bl.code}</b>
-                    {(gf || gm) && <> · {gf ? gf.code : "?"}♂ × {gm ? gm.code : "?"}♀</>}
+                    {(gf || gm) && <> · {gf ? gf.code : "?"}♂︎ × {gm ? gm.code : "?"}♀︎</>}
                   </div>
                 );
               })()}
               {(p.sireId && parentById[p.sireId]) || (p.damId && parentById[p.damId]) ? (
                 <div className="bc-lineage">
-                  부모 {p.sireId && parentById[p.sireId] ? `${parentById[p.sireId].code}♂` : "?♂"} × {p.damId && parentById[p.damId] ? `${parentById[p.damId].code}♀` : "?♀"}
+                  부모 {p.sireId && parentById[p.sireId] ? `${parentById[p.sireId].code}♂︎` : "?♂︎"} × {p.damId && parentById[p.damId] ? `${parentById[p.damId].code}♀︎` : "?♀︎"}
                 </div>
               ) : null}
               <div className="bc-line" />
@@ -2705,8 +2754,8 @@ function App() {
               <div className="panel">
                 <div className="kv">
                   {[["라인", L.code], ["종", L.species], ["산지", L.origin],
-                    ["부♂", parentById[L.fatherId] ? `${parentById[L.fatherId].code}${num(parentById[L.fatherId].totalLength) ? ` / ${parentById[L.fatherId].totalLength}mm` : ""}` : ""],
-                    ["모♀", parentById[L.motherId] ? `${parentById[L.motherId].code}${num(parentById[L.motherId].totalLength) ? ` / ${parentById[L.motherId].totalLength}mm` : ""}` : ""],
+                    ["부♂︎", parentById[L.fatherId] ? `${parentById[L.fatherId].code}${num(parentById[L.fatherId].totalLength) ? ` / ${parentById[L.fatherId].totalLength}mm` : ""}` : ""],
+                    ["모♀︎", parentById[L.motherId] ? `${parentById[L.motherId].code}${num(parentById[L.motherId].totalLength) ? ` / ${parentById[L.motherId].totalLength}mm` : ""}` : ""],
                     ["해체일", L.breakdownDate], ["부화일", L.hatchDate],
                     ["온도", L.temp && L.temp + "℃"], ["장소", L.place], ["메모", cur.memo],
                   ].filter(([, v]) => v).map(([k, v]) => <div key={k} className="kv-row"><span className="kv-k">{k}</span><span className="kv-v">{v}</span></div>)}

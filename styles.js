@@ -188,6 +188,26 @@ padding:2px 9px;font-size:11px;font-weight:700}
 .chip.flag-mini{color:#9A4A3A;border-color:#EBD3CC;background:#FBF1EE}
 .chip.gen{color:var(--gold-d);border-color:var(--gold);background:var(--surf2);letter-spacing:.02em}
 
+/* ═══════════ [17.10] 라인 부·모 정보 카드 ═══════════ */
+.pcard{display:flex;gap:12px;background:var(--surf);border:1px solid var(--line);border-left:3px solid var(--line);
+border-radius:9px;padding:11px 12px;margin-bottom:8px;cursor:pointer;align-items:flex-start}
+.pcard.male{border-left-color:#5A7A9A}
+.pcard.female{border-left-color:var(--gold)}
+.pcard.empty{cursor:default;background:transparent;border-style:dashed}
+.pcard-ph{width:74px;height:74px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:none}
+.pcard-r{min-width:0;flex:1}
+.pcard-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pcard-role{font-size:12px;font-weight:800;color:var(--dim);letter-spacing:.02em}
+.pcard.male .pcard-role{color:#5A7A9A}
+.pcard.female .pcard-role{color:var(--gold-d)}
+.pcard-sub{font-size:12px;color:var(--dim);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcard-meas{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:6px;font-size:12.5px}
+.pcard-meas i{font-style:normal;color:var(--dim);font-size:11px}
+.pcard-meas b{font-weight:700}
+
+/* ♂♀ 기호가 이모지로 치환되며 기준선이 내려가는 것 방지 */
+.app,.pcard-role,.chip,.tag,.card-sub,.d-sub,.meas{font-variant-emoji:text}
+
 /* ═══════════ [14] 기본정보 (키-값 줄) ═══════════ */
 .kv-row{display:flex;gap:12px;padding:7px 0;font-size:13.5px;border-bottom:1px solid var(--line2)}
 .kv-row:last-child{border-bottom:none}
