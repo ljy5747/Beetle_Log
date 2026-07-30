@@ -1247,13 +1247,13 @@ function exportXLSX(data) {
     sortedRecs(ind).forEach((r) => sheet2.push({
       "라인": L.code || "", "관리번호": ind.code, "종": L.species || "", "날짜": r.date, "령": r.instar,
       "유충무게(g)": r.weight, "두폭(mm)": r.headWidth, "먹이종류": r.feedType, "브랜드": r.feedBrand,
-      "병용량": ccLabel(r.bottleSize), "다음 예정일": r.nextDate, "메모": r.memo,
+      "병용량": ccLabel(r.bottleSize), "다음 예정일": r.nextDate, "특이사항": (r.flags || []).join(", "), "메모": r.memo,
     }));
   });
   const sheetP = data.parents.map((p) => ({
     "관리번호": p.code, "성별": p.sex, "종": p.species, "혈통": p.line, "누대수": p.gen, "산지": p.origin,
     "총장(mm)": p.totalLength, "턱 길이(mm)": p.jawLength, "악폭(mm)": p.jawWidth || "", "악후(mm)": p.jawThick || "", "흉폭(mm)": p.thoraxWidth,
-    "우화일": p.eclosionDate, "입수처": p.source, "메모": p.memo,
+    "우화일": p.eclosionDate, "입수처": p.source, "상태": p.status || "생존", "메모": p.memo,
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet1), "개체정보");
@@ -1289,6 +1289,7 @@ async function downloadTemplate() {
   const lists = {
     종: speciesOpts, 성별P: sexParent, 성별L: sexLarva, 상태: statusOpts,
     령: instarOpts, 먹이종류: feedTypeOpts, 병용량: bottleOpts, 브랜드: brandOpts,
+    누대수: GENS, 생존: ["생존", "사망"],
   };
   const colNames = Object.keys(lists);
   colNames.forEach((name, ci) => {
@@ -1322,6 +1323,8 @@ async function downloadTemplate() {
     return ws;
   };
   const colL = (i) => String.fromCharCode(65 + i); /* 0→A */
+  /* 헤더 이름 → 값 매핑으로 예시행 생성 (열 개수 자동 정렬) */
+  const rowFor = (headers, obj) => headers.map((h) => (obj[h] !== undefined ? obj[h] : ""));
 
   /* 사용법 */
   const guide = wb.addWorksheet("사용법");
@@ -1333,38 +1336,43 @@ async function downloadTemplate() {
     ["병갈이기록: 한 유충이 여러 번 병갈이했으면 줄을 여러 개 적으세요(관리번호+소속라인으로 찾음)."],
     ["같은 항목은 최신 정보로 갱신됩니다. 병갈이는 같은 날짜면 건너뜁니다."],
     ["날짜는 2026-03-15 형식으로 적어주세요."],
+    ["누대수: 와일드는 WD. 라인 누대수는 앱에서 부·모를 고르면 자동 계산되니 비워둬도 됩니다."],
+    ["병갈이 '특이사항'은 거식, 원더링, 조기용화, 전용 중에서 쉼표로 구분해 적어주세요."],
   ].forEach((r) => guide.addRow(r));
   guide.getColumn(1).width = 80;
 
   /* 성충 */
-  const pHeaders = ["관리번호", "성별(수컷/암컷)", "종", "혈통", "누대수", "산지", "총장(mm)", "턱길이(mm)", "악폭(mm)", "악후(mm)", "흉폭(mm)", "우화일(YYYY-MM-DD)", "입수처", "메모"];
+  const pHeaders = ["관리번호", "성별(수컷/암컷)", "종", "혈통", "누대수", "산지", "총장(mm)", "턱길이(mm)", "악폭(mm)", "악후(mm)", "흉폭(mm)", "우화일(YYYY-MM-DD)", "입수처", "상태(생존/사망)", "메모"];
   const pWs = makeSheet("성충", pHeaders);
-  pWs.addRow(["P-01", "수컷", "왕사슴벌레(극태)", "", "", 85.5, "", "", "", "", "", "샵명", ""]);
-  pWs.addRow(["P-02", "암컷", "왕사슴벌레(극태)", "", "", 52.0, "", "", "", "", "", "", ""]);
+  pWs.addRow(rowFor(pHeaders, { "관리번호": "P-01", "성별(수컷/암컷)": "수컷", "종": "왕사슴벌레(극태)", "누대수": "WD", "총장(mm)": 85.5, "입수처": "샵명", "상태(생존/사망)": "생존" }));
+  pWs.addRow(rowFor(pHeaders, { "관리번호": "P-02", "성별(수컷/암컷)": "암컷", "종": "왕사슴벌레(극태)", "누대수": "WD", "총장(mm)": 52.0, "상태(생존/사망)": "생존" }));
   applyDV(pWs, colL(pHeaders.indexOf("성별(수컷/암컷)")), "성별P");
   applyDV(pWs, colL(pHeaders.indexOf("종")), "종");
+  applyDV(pWs, colL(pHeaders.indexOf("누대수")), "누대수");
+  applyDV(pWs, colL(pHeaders.indexOf("상태(생존/사망)")), "생존");
 
   /* 라인 */
-  const lHeaders = ["라인명", "부 관리번호", "모 관리번호", "종", "산지", "산란셋팅일(YYYY-MM-DD)", "산란해체일(YYYY-MM-DD)", "부화일(YYYY-MM-DD)", "온도", "장소", "메모"];
+  const lHeaders = ["라인명", "부 관리번호", "모 관리번호", "종", "누대수", "산지", "산란셋팅일(YYYY-MM-DD)", "산란해체일(YYYY-MM-DD)", "부화일(YYYY-MM-DD)", "온도", "장소", "메모"];
   const lWs = makeSheet("라인", lHeaders);
-  lWs.addRow(["26-A", "P-01", "P-02", "왕사슴벌레(극태)", "", "", "", "", "23~25", "", ""]);
+  lWs.addRow(rowFor(lHeaders, { "라인명": "26-A", "부 관리번호": "P-01", "모 관리번호": "P-02", "종": "왕사슴벌레(극태)", "누대수": "WF1", "온도": "23~25" }));
   applyDV(lWs, colL(lHeaders.indexOf("종")), "종");
+  applyDV(lWs, colL(lHeaders.indexOf("누대수")), "누대수");
 
   /* 유충 */
   const gHeaders = ["관리번호", "소속 라인명", "성별(수컷/암컷/미구분)", "상태(유충/용화/우화/사망/분양)", "메모",
     "전용일(YYYY-MM-DD)", "용화일(YYYY-MM-DD)", "번데기무게(g)",
     "우화일(YYYY-MM-DD)", "성충총장(mm)", "턱길이(mm)", "악폭(mm)", "악후(mm)", "두폭(mm)", "흉폭(mm)", "배길이(mm)", "우화부전(O/X)"];
   const gWs = makeSheet("유충", gHeaders);
-  gWs.addRow(["A-01", "26-A", "미구분", "유충", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
-  gWs.addRow(["A-02", "26-A", "미구분", "유충", "", "", "", "", "", "", "", "", "", "", "", "", ""]);
+  gWs.addRow(rowFor(gHeaders, { "관리번호": "A-01", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "상태(유충/용화/우화/사망/분양)": "유충" }));
+  gWs.addRow(rowFor(gHeaders, { "관리번호": "A-02", "소속 라인명": "26-A", "성별(수컷/암컷/미구분)": "미구분", "상태(유충/용화/우화/사망/분양)": "유충" }));
   applyDV(gWs, colL(gHeaders.indexOf("성별(수컷/암컷/미구분)")), "성별L");
   applyDV(gWs, colL(gHeaders.indexOf("상태(유충/용화/우화/사망/분양)")), "상태");
 
   /* 병갈이기록 */
-  const bHeaders = ["관리번호", "소속 라인명", "병갈이날짜(YYYY-MM-DD)", "령", "유충무게(g)", "두폭(mm)", "먹이종류(균사/발효톱밥)", "브랜드", "병용량(cc)", "다음예정일(YYYY-MM-DD)", "메모"];
+  const bHeaders = ["관리번호", "소속 라인명", "병갈이날짜(YYYY-MM-DD)", "령", "유충무게(g)", "두폭(mm)", "먹이종류(균사/발효톱밥)", "브랜드", "병용량(cc)", "다음예정일(YYYY-MM-DD)", "특이사항(쉼표로 구분)", "메모"];
   const bWs = makeSheet("병갈이기록", bHeaders);
-  bWs.addRow(["A-01", "26-A", "2026-03-15", "3령 초기", 18.5, "", "균사", "뿔샵 오오히라", "1400", "", ""]);
-  bWs.addRow(["A-01", "26-A", "2026-05-20", "3령 중기", 28.0, "", "균사", "뿔샵 오오히라", "2000", "", ""]);
+  bWs.addRow(rowFor(bHeaders, { "관리번호": "A-01", "소속 라인명": "26-A", "병갈이날짜(YYYY-MM-DD)": "2026-03-15", "령": "3령 초기", "유충무게(g)": 18.5, "먹이종류(균사/발효톱밥)": "균사", "브랜드": "뿔샵 오오히라", "병용량(cc)": "1400" }));
+  bWs.addRow(rowFor(bHeaders, { "관리번호": "A-01", "소속 라인명": "26-A", "병갈이날짜(YYYY-MM-DD)": "2026-05-20", "령": "3령 중기", "유충무게(g)": 28.0, "먹이종류(균사/발효톱밥)": "균사", "브랜드": "뿔샵 오오히라", "병용량(cc)": "2000", "특이사항(쉼표로 구분)": "거식" }));
   applyDV(bWs, colL(bHeaders.indexOf("령")), "령");
   applyDV(bWs, colL(bHeaders.indexOf("먹이종류(균사/발효톱밥)")), "먹이종류");
   applyDV(bWs, colL(bHeaders.indexOf("브랜드")), "브랜드");
@@ -1401,7 +1409,9 @@ function parseImportXLSX(arrayBuffer, data) {
         sex: keep(row["성별(수컷/암컷)"], existing.sex) || sexNorm(row["성별(수컷/암컷)"]),
         line: keep(row["혈통"], existing.line), gen: keep(row["누대수"], existing.gen), origin: keep(row["산지"], existing.origin),
         totalLength: keep(row["총장(mm)"], existing.totalLength), jawLength: keep(row["턱길이(mm)"], existing.jawLength),
+        jawWidth: keep(row["악폭(mm)"], existing.jawWidth), jawThick: keep(row["악후(mm)"], existing.jawThick),
         thoraxWidth: keep(row["흉폭(mm)"], existing.thoraxWidth), eclosionDate: keep(row["우화일(YYYY-MM-DD)"], existing.eclosionDate),
+        status: str(row["상태(생존/사망)"]) === "사망" ? "사망" : str(row["상태(생존/사망)"]) === "생존" ? "생존" : existing.status,
         source: keep(row["입수처"], existing.source), memo: keep(row["메모"], existing.memo),
       });
       if (str(row["성별(수컷/암컷)"])) existing.sex = sexNorm(row["성별(수컷/암컷)"]);
@@ -1410,9 +1420,10 @@ function parseImportXLSX(arrayBuffer, data) {
       parents.push({
         id: uid(), code, sex: sexNorm(row["성별(수컷/암컷)"]), species,
         line: str(row["혈통"]), gen: str(row["누대수"]), origin: str(row["산지"]),
-        totalLength: str(row["총장(mm)"]), jawLength: str(row["턱길이(mm)"]), thoraxWidth: str(row["흉폭(mm)"]),
+        totalLength: str(row["총장(mm)"]), jawLength: str(row["턱길이(mm)"]),
+        jawWidth: str(row["악폭(mm)"]), jawThick: str(row["악후(mm)"]), thoraxWidth: str(row["흉폭(mm)"]),
         eclosionDate: str(row["우화일(YYYY-MM-DD)"]), source: str(row["입수처"]), memo: str(row["메모"]),
-        status: "생존", photo: "", growthRecords: [],
+        status: str(row["상태(생존/사망)"]) === "사망" ? "사망" : "생존", photo: "", growthRecords: [],
       });
       report.parentsNew++;
     }
@@ -1433,7 +1444,7 @@ function parseImportXLSX(arrayBuffer, data) {
     if (existing) {
       Object.assign(existing, {
         fatherId: fid || existing.fatherId, motherId: mid || existing.motherId,
-        origin: keep(row["산지"], existing.origin),
+        gen: keep(row["누대수"], existing.gen), origin: keep(row["산지"], existing.origin),
         setDate: keep(row["산란셋팅일(YYYY-MM-DD)"], existing.setDate), breakdownDate: keep(row["산란해체일(YYYY-MM-DD)"], existing.breakdownDate),
         hatchDate: keep(row["부화일(YYYY-MM-DD)"], existing.hatchDate), temp: keep(row["온도"], existing.temp),
         place: keep(row["장소"], existing.place), memo: keep(row["메모"], existing.memo),
@@ -1441,7 +1452,7 @@ function parseImportXLSX(arrayBuffer, data) {
       report.linesUpd++;
     } else {
       lines.push({
-        id: uid(), code, fatherId: fid, motherId: mid, species, origin: str(row["산지"]),
+        id: uid(), code, fatherId: fid, motherId: mid, species, gen: str(row["누대수"]), origin: str(row["산지"]),
         setDate: str(row["산란셋팅일(YYYY-MM-DD)"]), breakdownDate: str(row["산란해체일(YYYY-MM-DD)"]),
         hatchDate: str(row["부화일(YYYY-MM-DD)"]), temp: str(row["온도"]), place: str(row["장소"]), memo: str(row["메모"]),
       });
@@ -1513,7 +1524,8 @@ function parseImportXLSX(arrayBuffer, data) {
     ind.bottleRecords.push({
       id: uid(), date, instar: str(row["령"]), weight: str(row["유충무게(g)"]), headWidth: str(row["두폭(mm)"]),
       feedType: str(row["먹이종류(균사/발효톱밥)"]) || "균사", feedBrand: str(row["브랜드"]),
-      bottleSize: str(row["병용량(cc)"]), nextDate: str(row["다음예정일(YYYY-MM-DD)"]), memo: str(row["메모"]), flags: [],
+      bottleSize: str(row["병용량(cc)"]), nextDate: str(row["다음예정일(YYYY-MM-DD)"]), memo: str(row["메모"]),
+      flags: str(row["특이사항(쉼표로 구분)"]).split(/[,·]/).map((x) => x.trim()).filter((x) => FLAGS.includes(x)),
     });
     report.bottleNew++;
   });
