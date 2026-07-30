@@ -1826,6 +1826,33 @@ function App() {
   }, [theme]);
   const pickTheme = async (t) => { setTheme(t); try { await idbSet("beetle-theme", t); } catch (e) {} };
 
+  /* 로그아웃: 이 기기의 기록도 비워 초기 화면으로 (다른 계정으로 로그인해도 섞이지 않게) */
+  const doLogout = async () => {
+    const w = dataWeight(data);
+    const msg = w > 0
+      ? `로그아웃하면 이 기기의 기록(${w}건)을 비우고 처음 상태로 돌아갑니다.\n\n클라우드에 먼저 저장한 뒤 비우므로, 같은 계정으로 다시 로그인하면 그대로 복구됩니다.\n\n계속할까요?`
+      : "로그아웃할까요?";
+    if (!confirm(msg)) return;
+    /* 1) 마지막 상태를 클라우드에 저장 (실패해도 아래 스냅샷으로 복구 가능) */
+    const key = autoSyncRef.current.key || syncKey;
+    clearTimeout(autoSyncRef.current.timer);
+    if (w > 0 && key) { try { await cloudUpload(key, data); } catch (e) { say("⚠️ 클라우드 저장 실패 — 되돌리기로 복구할 수 있어요"); } }
+    /* 2) 기기 안 백업 스냅샷 (되돌리기용) */
+    if (w > 0) await snapSave(data, "로그아웃 직전");
+    /* 3) 로그아웃 + 로컬 비우기 */
+    await authSignOut();
+    autoSyncRef.current.on = false; autoSyncRef.current.key = "";
+    setAuthUser(null); setSyncKey("");
+    try { await idbSet("beetle-sync-key", ""); await idbSet("beetle-owner", ""); } catch (e) {}
+    const empty = { individuals: [], lines: [], parents: [], customEvents: [], feedBrands: [] };
+    setData(empty);
+    try { await idbSet(KEY, JSON.stringify(empty)); } catch (e) {}
+    /* 4) 화면도 처음 상태로 */
+    setSettingsOpen(false); setModal(null); setFilter("전체");
+    setTab("lines"); setSpeciesFolder(null); setView({ name: "list" });
+    say("로그아웃됨 · 기기 기록을 비웠어요");
+  };
+
   /* ── 뒤로가기 (갤럭시 시스템 뒤로가기 + 아이폰 엣지 스와이프) ── */
   const backRef = useRef({});
   backRef.current = { modal, view, settingsOpen, data };
@@ -1924,6 +1951,15 @@ function App() {
             setAuthUser(u);
             setSyncKey(myKey);
             try { await idbSet("beetle-sync-key", myKey); } catch (e) {}
+            /* 이 기기에 남아있는 기록의 '주인'이 다른 계정이면 절대 올리지 않음 (데이터 섞임 방지) */
+            let owner = "";
+            try { owner = (await idbGet("beetle-owner")) || ""; } catch (e) {}
+            const foreign = !!owner && owner !== u.email && dataWeight(base) > 0;
+            if (foreign) {
+              await snapSave(base, "다른 계정 기록");
+              setTimeout(() => say("다른 계정의 기록이 남아있어 이 계정 데이터로 교체했어요"), 1200);
+            }
+            try { await idbSet("beetle-owner", u.email); } catch (e) {}
             /* 자동 동기화 켜기 */
             autoSyncRef.current.on = true;
             autoSyncRef.current.key = myKey;
@@ -1931,7 +1967,8 @@ function App() {
             try {
               const row = await cloudDownload(myKey);
               if (row && row.data && Array.isArray(row.data.individuals)) {
-                const serverW = dataWeight(row.data), localW = dataWeight(base);
+                /* 남의 기록이면 로컬 분량을 0으로 취급 → 서버 것으로 무조건 교체 */
+                const serverW = dataWeight(row.data), localW = foreign ? 0 : dataWeight(base);
                 /* ⚠️ 덮어쓰기 전에 현재 로컬 데이터를 반드시 스냅샷으로 보관 (복구용) */
                 if (localW > 0) {
                   try { await idbSet("beetle-local-backup", JSON.stringify({ at: Date.now(), weight: localW, data: base })); } catch (e) {}
@@ -1953,6 +1990,11 @@ function App() {
                   cloudUpload(myKey, base).catch(() => {});
                   setTimeout(() => say("이 기기 기록이 더 최신이라 그대로 두고 서버에 올렸어요"), 1200);
                 }
+              } else if (foreign) {
+                /* 서버도 비어있고 로컬은 남의 기록 → 올리지 말고 비움 */
+                const empty = { individuals: [], lines: [], parents: [], customEvents: [], feedBrands: [] };
+                setData(empty);
+                try { await idbSet(KEY, JSON.stringify(empty)); } catch (e) {}
               } else {
                 /* 서버에 아무것도 없으면 내 로컬을 올려둠 */
                 if (dataWeight(base) > 0) cloudUpload(myKey, base).catch(() => {});
@@ -2915,7 +2957,7 @@ function App() {
                       <div className="auth-stat">구글 로그인됨 · 자동 동기화 켜짐 ✓</div>
                     </div>
                   </div>
-                  <button className="btn ghost sm mt" onClick={async () => { await authSignOut(); setAuthUser(null); setSyncKey(""); autoSyncRef.current.on = false; autoSyncRef.current.key = ""; clearTimeout(autoSyncRef.current.timer); try { await idbSet("beetle-sync-key", ""); } catch (e) {} say("로그아웃됐어요"); }}>로그아웃</button>
+                  <button className="btn ghost sm mt" onClick={doLogout}>로그아웃</button>
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed var(--line)" }}>
                     <ConfirmBtn className="btn danger sm" label="계정 삭제 (클라우드 데이터 포함)" onConfirm={async () => {
                       /* 자동 동기화 먼저 끄기 (삭제 후 재업로드 방지) */
