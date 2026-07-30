@@ -1385,12 +1385,35 @@ async function downloadTemplate() {
 
 /* 엑셀 파일 → 데이터 객체로 파싱 (성충/라인/유충 추가) */
 function parseImportXLSX(arrayBuffer, data) {
-  const wb = XLSX.read(arrayBuffer, { type: "array" });
+  const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
   const sheet = (name) => { const ws = wb.Sheets[name]; return ws ? XLSX.utils.sheet_to_json(ws, { defval: "" }) : []; };
   const str = (v) => String(v == null ? "" : v).trim();
+  /* 엑셀은 날짜를 숫자(일련번호)로 저장하므로 YYYY-MM-DD로 변환.
+     Date 객체 · 45860 같은 숫자 · 2025.07.22 / 2025/7/2 표기까지 모두 처리 */
+  const dstr = (v) => {
+    if (v == null || v === "") return "";
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const fromDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    if (v instanceof Date && !isNaN(v)) return fromDate(v);
+    const s = String(v).trim();
+    /* 엑셀 일련번호(1900 체계)는 20000~60000 범위(1954~2064)일 때만 날짜로 간주.
+       "2025"처럼 연도만 적은 값을 엉뚱한 날짜로 바꾸지 않도록 함 */
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      const n = parseFloat(s);
+      if (n >= 20000 && n <= 60000) {
+        const d = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000);
+        if (!isNaN(d)) return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+      }
+      return s;
+    }
+    const m = s.match(/^(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/);
+    if (m) return `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
+    return s;
+  };
   const sexNorm = (v) => { const s = str(v); if (s.includes("수")) return "수컷 ♂"; if (s.includes("암")) return "암컷 ♀"; return "미구분"; };
   /* 엑셀 칸이 비어있으면 기존 값 유지, 값이 있으면 새 값으로 (빈칸이 기존 데이터를 지우지 않게) */
   const keep = (newV, oldV) => { const s = str(newV); return s !== "" ? s : (oldV || ""); };
+  const keepD = (newV, oldV) => { const s = dstr(newV); return s !== "" ? s : (oldV || ""); };
 
   let parents = [...data.parents];
   let lines = [...data.lines];
@@ -1410,7 +1433,7 @@ function parseImportXLSX(arrayBuffer, data) {
         line: keep(row["혈통"], existing.line), gen: keep(row["누대수"], existing.gen), origin: keep(row["산지"], existing.origin),
         totalLength: keep(row["총장(mm)"], existing.totalLength), jawLength: keep(row["턱길이(mm)"], existing.jawLength),
         jawWidth: keep(row["악폭(mm)"], existing.jawWidth), jawThick: keep(row["악후(mm)"], existing.jawThick),
-        thoraxWidth: keep(row["흉폭(mm)"], existing.thoraxWidth), eclosionDate: keep(row["우화일(YYYY-MM-DD)"], existing.eclosionDate),
+        thoraxWidth: keep(row["흉폭(mm)"], existing.thoraxWidth), eclosionDate: keepD(row["우화일(YYYY-MM-DD)"], existing.eclosionDate),
         status: str(row["상태(생존/사망)"]) === "사망" ? "사망" : str(row["상태(생존/사망)"]) === "생존" ? "생존" : existing.status,
         source: keep(row["입수처"], existing.source), memo: keep(row["메모"], existing.memo),
       });
@@ -1422,7 +1445,7 @@ function parseImportXLSX(arrayBuffer, data) {
         line: str(row["혈통"]), gen: str(row["누대수"]), origin: str(row["산지"]),
         totalLength: str(row["총장(mm)"]), jawLength: str(row["턱길이(mm)"]),
         jawWidth: str(row["악폭(mm)"]), jawThick: str(row["악후(mm)"]), thoraxWidth: str(row["흉폭(mm)"]),
-        eclosionDate: str(row["우화일(YYYY-MM-DD)"]), source: str(row["입수처"]), memo: str(row["메모"]),
+        eclosionDate: dstr(row["우화일(YYYY-MM-DD)"]), source: str(row["입수처"]), memo: str(row["메모"]),
         status: str(row["상태(생존/사망)"]) === "사망" ? "사망" : "생존", photo: "", growthRecords: [],
       });
       report.parentsNew++;
@@ -1445,16 +1468,16 @@ function parseImportXLSX(arrayBuffer, data) {
       Object.assign(existing, {
         fatherId: fid || existing.fatherId, motherId: mid || existing.motherId,
         gen: keep(row["누대수"], existing.gen), origin: keep(row["산지"], existing.origin),
-        setDate: keep(row["산란셋팅일(YYYY-MM-DD)"], existing.setDate), breakdownDate: keep(row["산란해체일(YYYY-MM-DD)"], existing.breakdownDate),
-        hatchDate: keep(row["부화일(YYYY-MM-DD)"], existing.hatchDate), temp: keep(row["온도"], existing.temp),
+        setDate: keepD(row["산란셋팅일(YYYY-MM-DD)"], existing.setDate), breakdownDate: keepD(row["산란해체일(YYYY-MM-DD)"], existing.breakdownDate),
+        hatchDate: keepD(row["부화일(YYYY-MM-DD)"], existing.hatchDate), temp: keep(row["온도"], existing.temp),
         place: keep(row["장소"], existing.place), memo: keep(row["메모"], existing.memo),
       });
       report.linesUpd++;
     } else {
       lines.push({
         id: uid(), code, fatherId: fid, motherId: mid, species, gen: str(row["누대수"]), origin: str(row["산지"]),
-        setDate: str(row["산란셋팅일(YYYY-MM-DD)"]), breakdownDate: str(row["산란해체일(YYYY-MM-DD)"]),
-        hatchDate: str(row["부화일(YYYY-MM-DD)"]), temp: str(row["온도"]), place: str(row["장소"]), memo: str(row["메모"]),
+        setDate: dstr(row["산란셋팅일(YYYY-MM-DD)"]), breakdownDate: dstr(row["산란해체일(YYYY-MM-DD)"]),
+        hatchDate: dstr(row["부화일(YYYY-MM-DD)"]), temp: str(row["온도"]), place: str(row["장소"]), memo: str(row["메모"]),
       });
       report.linesNew++;
     }
@@ -1466,12 +1489,12 @@ function parseImportXLSX(arrayBuffer, data) {
   const VALID_STATUS = ["유충", "용화", "우화", "사망", "분양"];
   /* 용화/우화 정보를 행에서 뽑아오기 (값 있는 것만) */
   const readPupation = (row, old) => {
-    const pre = str(row["전용일(YYYY-MM-DD)"]), pup = str(row["용화일(YYYY-MM-DD)"]), pw = str(row["번데기무게(g)"]);
+    const pre = dstr(row["전용일(YYYY-MM-DD)"]), pup = dstr(row["용화일(YYYY-MM-DD)"]), pw = str(row["번데기무게(g)"]);
     if (!pre && !pup && !pw) return old || null;
     return { prepupaDate: pre || (old && old.prepupaDate) || "", pupaDate: pup || (old && old.pupaDate) || "", pupaWeight: pw || (old && old.pupaWeight) || "", memo: (old && old.memo) || "" };
   };
   const readEclosion = (row, old) => {
-    const d = str(row["우화일(YYYY-MM-DD)"]), tl = str(row["성충총장(mm)"]);
+    const d = dstr(row["우화일(YYYY-MM-DD)"]), tl = str(row["성충총장(mm)"]);
     const jl = str(row["턱길이(mm)"]), jw = str(row["악폭(mm)"]), jt = str(row["악후(mm)"]);
     const hw = str(row["두폭(mm)"]), tw = str(row["흉폭(mm)"]), ab = str(row["배길이(mm)"]), df = str(row["우화부전(O/X)"]);
     if (!d && !tl && !jl && !jw && !jt && !hw && !tw && !ab) return old || null;
@@ -1513,7 +1536,7 @@ function parseImportXLSX(arrayBuffer, data) {
   sheet("병갈이기록").forEach((row) => {
     const code = str(row["관리번호"]);
     const lineCode = str(row["소속 라인명"]);
-    const date = str(row["병갈이날짜(YYYY-MM-DD)"]);
+    const date = dstr(row["병갈이날짜(YYYY-MM-DD)"]);
     if (!code || !date) return;
     const lineId = codeToLineId[lineCode];
     if (!lineId) { report.skipped++; return; }
@@ -1524,7 +1547,7 @@ function parseImportXLSX(arrayBuffer, data) {
     ind.bottleRecords.push({
       id: uid(), date, instar: str(row["령"]), weight: str(row["유충무게(g)"]), headWidth: str(row["두폭(mm)"]),
       feedType: str(row["먹이종류(균사/발효톱밥)"]) || "균사", feedBrand: str(row["브랜드"]),
-      bottleSize: str(row["병용량(cc)"]), nextDate: str(row["다음예정일(YYYY-MM-DD)"]), memo: str(row["메모"]),
+      bottleSize: str(row["병용량(cc)"]), nextDate: dstr(row["다음예정일(YYYY-MM-DD)"]), memo: str(row["메모"]),
       flags: str(row["특이사항(쉼표로 구분)"]).split(/[,·]/).map((x) => x.trim()).filter((x) => FLAGS.includes(x)),
     });
     report.bottleNew++;
