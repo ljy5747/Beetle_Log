@@ -21,8 +21,8 @@ const shortDate = (iso) => (iso ? iso.slice(2).replace(/-/g, ".") : "");
 const symTxt = (s) => String(s || "").replace(/([\u2642\u2640])/g, "$1︎");
 /* 병 용량: 저장은 숫자만, 표시할 때 cc 붙임. 기존에 'cc'가 들어간 값도 안전 처리 */
 const ccLabel = (v) => { const s = String(v || "").trim(); if (!s) return ""; return /^\d+(\.\d+)?$/.test(s) ? s + "cc" : s; };
-/* 푸딩컵은 병 번호에서 제외 (푸딩 다음에 넣은 병이 1병) */
-const isPudding = (v) => /푸딩/.test(String(v || ""));
+/* 푸딩컵 기록은 병 번호에서 제외 (푸딩 다음에 넣은 병이 1병) */
+const isPudding = (r) => !!(r && (r.pudding || /푸딩/.test(String(r.bottleSize || ""))));
 /* 병갈이 D-day 색상 등급: 7일 이내 빨강 / 8~30일 노랑 / 그 이상 초록 */
 const ddClass = (dd) => (dd <= 7 ? " dd-red" : dd <= 30 ? " dd-yellow" : " dd-green");
 /* 데이터 '분량' 점수 — 자동 동기화에서 데이터가 확 줄어드는 사고를 감지하는 용도 */
@@ -323,12 +323,10 @@ function LineSexStats({ kids }) {
 
 /* ════════════════════ 라인 무게 그래프 (병갈이 회차 기준 꺾은선) ════════════════════ */
 function LineWeightChart({ kids }) {
-  /* 투입한 병이 1번 병. 푸딩컵은 병 번호에서 제외하고, 푸딩에서 잰 무게는 1병 시작 무게로 사용 */
+  /* 투입한 병이 1번 병. 푸딩컵 기록은 병 번호에서 제외 (푸딩 다음 병이 1병) */
   const series = kids.map((ind) => {
-    const recs = sortedRecs(ind);
-    const pudW = recs.filter((r) => isPudding(r.bottleSize) && num(r.weight)).map((r) => num(r.weight)).pop() || 0;
-    const ws = recs.filter((r) => !isPudding(r.bottleSize)).map((r) => num(r.weight)).filter(Boolean);
-    return { ind, pts: [{ n: 1, w: pudW }, ...ws.map((w, i) => ({ n: i + 2, w }))], recN: ws.length };
+    const ws = sortedRecs(ind).filter((r) => !isPudding(r)).map((r) => num(r.weight)).filter(Boolean);
+    return { ind, pts: [{ n: 1, w: 0 }, ...ws.map((w, i) => ({ n: i + 2, w }))], recN: ws.length };
   }).filter((s) => s.recN >= 1);
   if (!series.length) return null;
   const maxN = Math.max(...series.map((s) => s.recN + 1)); /* 마지막 병 번호 */
@@ -1020,7 +1018,7 @@ function LarvaEditForm({ initial, lines, onSave, onClose }) {
 function BottleForm({ initial, brands, onSave, onClose }) {
   const [f, setF] = useState(initial || {
     date: today(), instar: "", weight: "", headWidth: "",
-    feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "", flags: [],
+    feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "", flags: [], pudding: false,
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const toggleFlag = (flag) => setF((p) => {
@@ -1059,6 +1057,12 @@ function BottleForm({ initial, brands, onSave, onClose }) {
           </div>
         </F>
       </div>
+      <F label="푸딩컵">
+        <button className={"chipbtn" + (f.pudding ? " on" : "")} onClick={() => set("pudding", !f.pudding)}>
+          {f.pudding ? "✓ 푸딩컵" : "+ 푸딩컵"}
+        </button>
+        <div className="hint" style={{ marginTop: 6 }}>푸딩컵으로 먹인 기록이면 켜주세요. 그래프에서 <b>푸딩 다음에 넣은 병이 1병</b>으로 잡혀요.</div>
+      </F>
       <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
       <F label="다음 병갈이 예정일">
         <input type="date" className="in" value={f.nextDate} onChange={(e) => set("nextDate", e.target.value)} />
@@ -1257,7 +1261,7 @@ function exportXLSX(data) {
     sortedRecs(ind).forEach((r) => sheet2.push({
       "라인": L.code || "", "관리번호": ind.code, "종": L.species || "", "날짜": r.date, "령": r.instar,
       "유충무게(g)": r.weight, "두폭(mm)": r.headWidth, "먹이종류": r.feedType, "브랜드": r.feedBrand,
-      "병용량": ccLabel(r.bottleSize), "다음 예정일": r.nextDate, "특이사항": (r.flags || []).join(", "), "메모": r.memo,
+      "병용량": ccLabel(r.bottleSize), "푸딩컵": r.pudding ? "O" : "", "다음 예정일": r.nextDate, "특이사항": (r.flags || []).join(", "), "메모": r.memo,
     }));
   });
   const sheetP = data.parents.map((p) => ({
@@ -1379,7 +1383,7 @@ async function downloadTemplate() {
   applyDV(gWs, colL(gHeaders.indexOf("상태(유충/용화/우화/사망/분양)")), "상태");
 
   /* 병갈이기록 */
-  const bHeaders = ["관리번호", "소속 라인명", "병갈이날짜(YYYY-MM-DD)", "령", "유충무게(g)", "두폭(mm)", "먹이종류(균사/발효톱밥)", "브랜드", "병용량(cc)", "다음예정일(YYYY-MM-DD)", "특이사항(쉼표로 구분)", "메모"];
+  const bHeaders = ["관리번호", "소속 라인명", "병갈이날짜(YYYY-MM-DD)", "령", "유충무게(g)", "두폭(mm)", "먹이종류(균사/발효톱밥)", "브랜드", "병용량(cc)", "푸딩컵(O/X)", "다음예정일(YYYY-MM-DD)", "특이사항(쉼표로 구분)", "메모"];
   const bWs = makeSheet("병갈이기록", bHeaders);
   bWs.addRow(rowFor(bHeaders, { "관리번호": "A-01", "소속 라인명": "26-A", "병갈이날짜(YYYY-MM-DD)": "2026-03-15", "령": "3령 초기", "유충무게(g)": 18.5, "먹이종류(균사/발효톱밥)": "균사", "브랜드": "뿔샵 오오히라", "병용량(cc)": "1400" }));
   bWs.addRow(rowFor(bHeaders, { "관리번호": "A-01", "소속 라인명": "26-A", "병갈이날짜(YYYY-MM-DD)": "2026-05-20", "령": "3령 중기", "유충무게(g)": 28.0, "먹이종류(균사/발효톱밥)": "균사", "브랜드": "뿔샵 오오히라", "병용량(cc)": "2000", "특이사항(쉼표로 구분)": "거식" }));
@@ -1557,7 +1561,7 @@ function parseImportXLSX(arrayBuffer, data) {
     ind.bottleRecords.push({
       id: uid(), date, instar: str(row["령"]), weight: str(row["유충무게(g)"]), headWidth: str(row["두폭(mm)"]),
       feedType: str(row["먹이종류(균사/발효톱밥)"]) || "균사", feedBrand: str(row["브랜드"]),
-      bottleSize: str(row["병용량(cc)"]), nextDate: dstr(row["다음예정일(YYYY-MM-DD)"]), memo: str(row["메모"]),
+      bottleSize: str(row["병용량(cc)"]), pudding: /^O$/i.test(str(row["푸딩컵(O/X)"])), nextDate: dstr(row["다음예정일(YYYY-MM-DD)"]), memo: str(row["메모"]),
       flags: str(row["특이사항(쉼표로 구분)"]).split(/[,·]/).map((x) => x.trim()).filter((x) => FLAGS.includes(x)),
     });
     report.bottleNew++;
@@ -2674,7 +2678,7 @@ function App() {
                 {[...p.growthRecords].sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => (
                   <div key={r.id} className="dt-row" onClick={() => setModal({ type: "growthRow", parentId: p.id, editId: r.id, initial: r })}>
                     <span className="dt-date mono">{shortDate(r.date)}{r.instar && <em className="dt-ins">{r.instar}</em>}</span>
-                    <span className="dt-feed">{[r.feedBrand || r.feedType, ccLabel(r.bottleSize)].filter(Boolean).join(" · ")}</span>
+                    <span className="dt-feed">{[r.feedBrand || r.feedType, ccLabel(r.bottleSize), r.pudding ? "푸딩컵" : ""].filter(Boolean).join(" · ")}</span>
                     <span className="dt-w mono">{num(r.weight) ? n1(num(r.weight)) + "g" : "—"}</span>
                   </div>
                 ))}
