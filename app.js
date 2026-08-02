@@ -207,7 +207,13 @@ const lossRate = (ind) => { const mw = maxWeight(ind), pw = num(ind.pupation?.pu
 /* 가장 최근 병갈이의 두폭 (없으면 그 이전 기록에서) */
 const lastHeadWidth = (ind) => { const s = sortedRecs(ind).map((r) => num(r.headWidth)).filter(Boolean); return s.length ? s[s.length - 1] : null; };
 /* 병갈이 기록 중 한 번이라도 해당 플래그가 있었는지 */
-const hasFlag = (ind, flag) => (ind.bottleRecords || []).some((r) => (r.flags || []).includes(flag));
+const hasFlag = (ind, flag) => (ind.flags || []).includes(flag) || (ind.bottleRecords || []).some((r) => (r.flags || []).includes(flag));
+/* 개체에 표시된 특이사항 전체 (개체 표식 + 병갈이 기록) */
+const allFlags = (ind) => {
+  const set = [...(ind.flags || [])];
+  (ind.bottleRecords || []).forEach((r) => (r.flags || []).forEach((f) => { if (!set.includes(f)) set.push(f); }));
+  return set;
+};
 const larvaDays = (ind, line) => {
   const s = line?.hatchDate || line?.breakdownDate;
   const e = ind.pupation?.prepupaDate || ind.pupation?.pupaDate;
@@ -2557,8 +2563,7 @@ function App() {
                       <span className={"tag mono" + (dead ? " strike" : "")}>{ind.code}</span>
                       <span className="chip" style={{ color: STATUS_COLOR[ind.status], borderColor: STATUS_COLOR[ind.status] + "55" }}>{ind.status}</span>
                       {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
-                      {hasFlag(ind, "거식") && <span className="chip flag-mini">거식</span>}
-                      {hasFlag(ind, "원더링") && <span className="chip flag-mini">원더링</span>}
+                      {allFlags(ind).map((fl) => <span key={fl} className="chip flag-mini">{fl}</span>)}
                     </div>
                     <div className="card-sub">{[ind.sex !== "미구분" ? ind.sex : null, lr ? `최근 ${shortDate(lr.date)}` : null].filter(Boolean).join(" · ") || "기록 전"}</div>
                     <div className="card-val mono">
@@ -2747,6 +2752,22 @@ function App() {
               <button className="btn" onClick={() => setModal({ type: "eclosion", indId: cur.id })}>{cur.eclosion ? "우화 수정" : "우화 기록"}</button>
             </div>
 
+            {/* 개체 특이사항 — 눌러서 켜고 끄기 */}
+            <div className="chiprow" style={{ marginBottom: 16 }}>
+              {["원더링", "성장불량"].map((fl) => {
+                const on = (cur.flags || []).includes(fl);
+                return (
+                  <button key={fl} className={"chipbtn" + (on ? " on" : "")}
+                    onClick={() => {
+                      const now = cur.flags || [];
+                      const next = on ? now.filter((x) => x !== fl) : [...now, fl];
+                      updateInd(cur.id, { flags: next });
+                      say(on ? `${fl} 해제` : `${fl} 표시됨`);
+                    }}>{on ? "✓ " : "+ "}{fl}</button>
+                );
+              })}
+            </div>
+
             {cur.eclosion && (
               cur.promotedToParentId && data.parents.find((p) => p.id === cur.promotedToParentId) ? (
                 <button className="btn sm" style={{ width: "100%", marginBottom: 16, borderColor: "#A8884F66", color: "#937640" }}
@@ -2761,15 +2782,17 @@ function App() {
               )
             )}
 
-            {cur.status === "사망" ? (
+            {(cur.status === "사망" || cur.status === "분양") ? (
               <button className="btn ghost sm" style={{ width: "100%", marginBottom: 16 }}
-                onClick={() => { updateInd(cur.id, { status: "유충" }); say("사망 처리를 해제했어요"); }}>
-                ↩ 사망 처리 해제 (유충으로 되돌리기)
+                onClick={() => { updateInd(cur.id, { status: "유충" }); say(`${cur.status} 처리를 해제했어요`); }}>
+                ↩ {cur.status} 처리 해제 (유충으로 되돌리기)
               </button>
             ) : (
-              <div style={{ marginBottom: 16 }}>
+              <div className="row" style={{ marginBottom: 16 }}>
                 <ConfirmBtn className="btn danger sm" label="✕ 사망 처리"
                   onConfirm={() => { updateInd(cur.id, { status: "사망" }); say("사망 처리됐어요"); }} />
+                <ConfirmBtn className="btn sm" label="→ 분양 처리"
+                  onConfirm={() => { updateInd(cur.id, { status: "분양" }); say("분양 처리됐어요"); }} />
               </div>
             )}
 
