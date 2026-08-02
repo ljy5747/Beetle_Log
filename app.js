@@ -20,7 +20,9 @@ const shortDate = (iso) => (iso ? iso.slice(2).replace(/-/g, ".") : "");
 /* ♂︎♀︎ 는 폰트에 따라 이모지로 바뀌며 기준선이 내려가므로, 텍스트 표현(U+FE0E)을 강제 */
 const symTxt = (s) => String(s || "").replace(/([\u2642\u2640])/g, "$1︎");
 /* 병 용량: 저장은 숫자만, 표시할 때 cc 붙임. 기존에 'cc'가 들어간 값도 안전 처리 */
-const ccLabel = (v) => { const s = String(v || "").trim(); return s ? (/cc$/i.test(s) ? s : s + "cc") : ""; };
+const ccLabel = (v) => { const s = String(v || "").trim(); if (!s) return ""; return /^\d+(\.\d+)?$/.test(s) ? s + "cc" : s; };
+/* 푸딩컵은 병 번호에서 제외 (푸딩 다음에 넣은 병이 1병) */
+const isPudding = (v) => /푸딩/.test(String(v || ""));
 /* 병갈이 D-day 색상 등급: 7일 이내 빨강 / 8~30일 노랑 / 그 이상 초록 */
 const ddClass = (dd) => (dd <= 7 ? " dd-red" : dd <= 30 ? " dd-yellow" : " dd-green");
 /* 데이터 '분량' 점수 — 자동 동기화에서 데이터가 확 줄어드는 사고를 감지하는 용도 */
@@ -321,10 +323,12 @@ function LineSexStats({ kids }) {
 
 /* ════════════════════ 라인 무게 그래프 (병갈이 회차 기준 꺾은선) ════════════════════ */
 function LineWeightChart({ kids }) {
-  /* 투입한 병이 1번 병. 원점(1번병, 0g)에서 출발해 병갈이할 때마다 다음 병 번호로 */
+  /* 투입한 병이 1번 병. 푸딩컵은 병 번호에서 제외하고, 푸딩에서 잰 무게는 1병 시작 무게로 사용 */
   const series = kids.map((ind) => {
-    const ws = sortedRecs(ind).map((r) => num(r.weight)).filter(Boolean);
-    return { ind, pts: [{ n: 1, w: 0 }, ...ws.map((w, i) => ({ n: i + 2, w }))], recN: ws.length };
+    const recs = sortedRecs(ind);
+    const pudW = recs.filter((r) => isPudding(r.bottleSize) && num(r.weight)).map((r) => num(r.weight)).pop() || 0;
+    const ws = recs.filter((r) => !isPudding(r.bottleSize)).map((r) => num(r.weight)).filter(Boolean);
+    return { ind, pts: [{ n: 1, w: pudW }, ...ws.map((w, i) => ({ n: i + 2, w }))], recN: ws.length };
   }).filter((s) => s.recN >= 1);
   if (!series.length) return null;
   const maxN = Math.max(...series.map((s) => s.recN + 1)); /* 마지막 병 번호 */
