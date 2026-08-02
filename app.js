@@ -2841,7 +2841,7 @@ function App() {
                     {gap != null && <span className="r-gap">먹은 기간 {gap}일</span>}
                     {num(r.weight) && <span className="mono r-w">{n1(num(r.weight))}g{d != null && <em className={d >= 0 ? "up" : "down"}> {d >= 0 ? "▲" : "▼"}{n1(Math.abs(d))}</em>}</span>}
                   </div>
-                  <div className="r-mid">{[r.feedType, r.feedBrand, ccLabel(r.bottleSize), num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
+                  <div className="r-mid">{[r.feedType, r.feedBrand, ccLabel(r.bottleSize), r.pudding ? "푸딩컵" : null, num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
                   {(r.flags || []).length > 0 && (
                     <div className="flag-show">
                       {r.flags.map((fl) => <span key={fl} className="flag-tag">{fl}</span>)}
