@@ -2574,6 +2574,9 @@ function App() {
                       {allFlags(ind).map((fl) => <span key={fl} className="chip flag-mini">{fl}</span>)}
                     </div>
                     <div className="card-sub">{[ind.sex !== "미구분" ? ind.sex : null, lr ? `최근 ${shortDate(lr.date)}` : null].filter(Boolean).join(" · ") || "기록 전"}</div>
+                    {lr && (lr.feedBrand || lr.feedType || lr.bottleSize) && (
+                      <div className="card-feed">{[lr.feedBrand || lr.feedType, ccLabel(lr.bottleSize), lr.pudding ? "푸딩컵" : null].filter(Boolean).join(" · ")}</div>
+                    )}
                     <div className="card-val mono">
                       {ind.status === "우화" && num(ind.eclosion?.totalLength) ? (
                         <>{n1(num(ind.eclosion.totalLength))}<small>mm</small>{red && <em> 환원율 {n2(red)}</em>}</>
