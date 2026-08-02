@@ -321,17 +321,17 @@ function LineSexStats({ kids }) {
 
 /* ════════════════════ 라인 무게 그래프 (병갈이 회차 기준 꺾은선) ════════════════════ */
 function LineWeightChart({ kids }) {
-  /* 각 유충: 원점(0회차, 0g)에서 출발 → 1회차부터 실제 무게 */
+  /* 투입한 병이 1번 병. 원점(1번병, 0g)에서 출발해 병갈이할 때마다 다음 병 번호로 */
   const series = kids.map((ind) => {
     const ws = sortedRecs(ind).map((r) => num(r.weight)).filter(Boolean);
-    return { ind, pts: [{ n: 0, w: 0 }, ...ws.map((w, i) => ({ n: i + 1, w }))], recN: ws.length };
+    return { ind, pts: [{ n: 1, w: 0 }, ...ws.map((w, i) => ({ n: i + 2, w }))], recN: ws.length };
   }).filter((s) => s.recN >= 1);
   if (!series.length) return null;
-  const maxN = Math.max(...series.map((s) => s.recN));
+  const maxN = Math.max(...series.map((s) => s.recN + 1)); /* 마지막 병 번호 */
   const maxW = Math.max(...series.flatMap((s) => s.pts.map((p) => p.w)));
   if (!maxN || !maxW) return null;
   const W = 340, H = 230, pl = 30, pr = 34, pt = 14, pb = 24;
-  const X = (n) => pl + (n / maxN) * (W - pl - pr);
+  const X = (n) => pl + ((n - 1) / Math.max(1, maxN - 1)) * (W - pl - pr);
   const Y = (w) => pt + (1 - w / maxW) * (H - pt - pb);
   const colorOf = (ind) => (ind.sex || "").includes("수") ? "#5A7A9A" : (ind.sex || "").includes("암") ? "#A8884F" : "#B8B2A6";
   /* 유충 번호 끝자리 (예: 26SA01 → 01) */
@@ -373,8 +373,8 @@ function LineWeightChart({ kids }) {
           </g>
         ))}
         {/* X축 회차 라벨 (0 ~ maxN) */}
-        {Array.from({ length: maxN + 1 }, (_, n) => (
-          <text key={n} x={X(n)} y={H - 8} fontSize="9.5" fill="#8A8378" textAnchor="middle" fontFamily="ui-monospace,monospace">{n === 0 ? "투입" : n + "병"}</text>
+        {Array.from({ length: maxN }, (_, i) => i + 1).map((n) => (
+          <text key={n} x={X(n)} y={H - 8} fontSize="9.5" fill="#8A8378" textAnchor="middle" fontFamily="ui-monospace,monospace">{n}병</text>
         ))}
         {/* 암수 평균 가로 점선 (라벨은 왼쪽에) */}
         {avgM && (
@@ -415,7 +415,7 @@ function LineWeightChart({ kids }) {
         })}
       </svg>
     </div>
-    <div className="hint" style={{ margin: "0 4px 14px" }}>👑번호 = 암수 1등(최근 무게) · 점선 = 암수 평균 · 가로축 = 병갈이 회차</div>
+    <div className="hint" style={{ margin: "0 4px 14px" }}>👑번호 = 암수 1등(최근 무게) · 점선 = 암수 평균 · 가로축 = 병 번호(투입한 병이 1병)</div>
     </>
   );
 }
