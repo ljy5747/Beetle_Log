@@ -216,8 +216,10 @@ const allFlags = (ind) => {
   (ind.bottleRecords || []).forEach((r) => (r.flags || []).forEach((f) => { if (!set.includes(f)) set.push(f); }));
   return set;
 };
-const larvaDays = (ind, line) => {
-  const s = line?.hatchDate || line?.breakdownDate;
+/* 유충 기간 = 첫 병 투입일 ~ 전용(또는 용화)일 */
+const larvaDays = (ind) => {
+  const recs = sortedRecs(ind);
+  const s = recs.length ? recs[0].date : null;
   const e = ind.pupation?.prepupaDate || ind.pupation?.pupaDate;
   return s && e ? daysBetween(s, e) : null;
 };
@@ -801,7 +803,7 @@ function GrowthRowForm({ initial, brands, onSave, onClose }) {
 function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber, hasLarvae }) {
   const [f, setF] = useState({
     code: "", fatherId: "", motherId: "", species: "", origin: "", gen: "",
-    pairDate: "", setDate: "", breakdownDate: "", hatchDate: "", temp: "", place: "", memo: "",
+    pairDate: "", setDate: "", breakdownDate: "", memo: "",
     ...(initial || {}),
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
@@ -1249,7 +1251,7 @@ function exportXLSX(data) {
       "우화부전": ind.eclosion ? (ind.eclosion.defect ? "O" : "X") : "",
       "환원율(mm/g)": reduction(ind) != null ? Math.round(reduction(ind) * 100) / 100 : "",
       "로스율(%)": lossRate(ind) != null ? Math.round(lossRate(ind) * 10) / 10 : "",
-      "유충기간(일)": larvaDays(ind, L) ?? "", "메모": ind.memo || "",
+      "유충기간(일)": larvaDays(ind) ?? "", "메모": ind.memo || "",
     };
   });
   const sheet2 = [];
@@ -1928,7 +1930,7 @@ function App() {
       if (legacy.length) {
         let misc = base.lines.find((l) => l.code === "미분류");
         if (!misc) {
-          misc = { id: uid(), code: "미분류", fatherId: "", motherId: "", species: legacy[0].species || "", origin: legacy[0].origin || "", breakdownDate: "", hatchDate: legacy[0].hatchDate || "", temp: legacy[0].temp || "", place: legacy[0].place || "", memo: "기존 기록 자동 이동" };
+          misc = { id: uid(), code: "미분류", fatherId: "", motherId: "", species: legacy[0].species || "", origin: legacy[0].origin || "", breakdownDate: "", memo: "기존 기록 자동 이동" };
           base.lines.push(misc);
         }
         base.individuals = base.individuals.map((i) => (i.lineId ? i : { ...i, lineId: misc.id }));
@@ -2724,7 +2726,7 @@ function App() {
       {view.name === "detail" && cur && (() => {
         const L = lineById[cur.lineId] || {};
         const recs = sortedRecs(cur);
-        const mw = maxWeight(cur), red = reduction(cur), ld = larvaDays(cur, L);
+        const mw = maxWeight(cur), red = reduction(cur), ld = larvaDays(cur);
         return (
           <>
             <div className="topbar">
