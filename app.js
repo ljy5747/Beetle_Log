@@ -2257,7 +2257,7 @@ function App() {
     if (!fa && !mo) return null;
     const one = (p, male) => (
       <span className="pl-one">
-        <b className={male ? "sx-m" : "sx-f"}>{male ? "♂" : "♀"}</b>
+        <b className={male ? "sx-m" : "sx-f"}>{male ? "♂︎" : "♀︎"}</b>
         {p ? <>{num(p.totalLength) ? <span className="pl-sz mono">{n1(num(p.totalLength))}</span> : null} <span className="pl-code mono">{p.code}</span></> : <span className="dim"> 미지정</span>}
       </span>
     );
@@ -2453,7 +2453,7 @@ function App() {
                         <div className="card-l">
                           <div className="tagrow">
                             <span className={"tag mono" + (dead ? " strike" : "")}>{p.code}</span>
-                            <span className={p.sex.includes("수") ? "sx-m" : "sx-f"}>{p.sex.includes("수") ? "♂" : "♀"}</span>
+                            <span className={p.sex.includes("수") ? "sx-m" : "sx-f"}>{p.sex.includes("수") ? "♂︎" : "♀︎"}</span>
                             {p.gen && <span className="chip gen mono">{p.gen}</span>}
                             {dead && <span className="chip" style={{ color: "#9A9088", borderColor: "#9A908855" }}>사망</span>}
                           </div>
