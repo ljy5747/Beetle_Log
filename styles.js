@@ -86,6 +86,10 @@ display:flex;justify-content:space-between;gap:10px;cursor:pointer;box-shadow:no
 .card-l{min-width:0;flex:1}
 .card-r{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:8px}
 .tagrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+/* 유충 카드 태그줄은 배지가 늘어도 줄바꿈 대신 가로 스크롤 (D-day가 밀려 내려가지 않게) */
+.card .tagrow{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.card .tagrow::-webkit-scrollbar{display:none}
+.card .tagrow>*{flex:none}
 .card-sub{font-size:12.5px;color:var(--dim);margin:7px 0 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
 .card-feed{font-size:11.5px;color:var(--gold-d);margin:-5px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;letter-spacing:.01em}
 

@@ -260,13 +260,13 @@ function LarvaCard({ ind, crownM, crownF, lineCode, onOpen, onBottle }) {
       <div className="card-l">
         <div className="tagrow">
           {isCrown && <span className="crown-ic" title="기대주">👑</span>}
-          {lineCode && <span className="chip" style={{ color: "var(--dim)", borderColor: "var(--line)" }}>{lineCode}</span>}
           <span className={"tag mono" + (dead ? " strike" : "")}>{ind.code}</span>
           <span className="chip" style={{ color: STATUS_COLOR[ind.status], borderColor: STATUS_COLOR[ind.status] + "55" }}>{ind.status}</span>
           {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
           {allFlags(ind).map((fl) => <span key={fl} className="chip flag-mini">{fl}</span>)}
         </div>
         <div className="card-sub">
+          {lineCode && <><b style={{ color: "var(--dim)", fontWeight: 700 }}>{lineCode}</b> · </>}
           {ind.sex !== "미구분" && (
             <><span className={ind.sex.includes("수") ? "sx-m" : "sx-f"}>{ind.sex.includes("수") ? "♂︎" : "♀︎"}</span>
             <b style={{ color: "var(--text)", fontWeight: 700, marginLeft: 3 }}>{ind.sex.includes("수") ? "수컷" : "암컷"}</b>
