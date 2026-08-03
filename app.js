@@ -621,11 +621,12 @@ function SimplePicker({ options, value, onChange, placeholder }) {
 
 /* ════════════════════ 성충 등록/수정 폼 ════════════════════ */
 function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClose }) {
-  const [f, setF] = useState(initial || {
+  const [f, setF] = useState({
     code: "", sex: "수컷 ♂", species: "", line: "", origin: "", gen: "",
     totalLength: "", jawLength: "", jawWidth: "", jawThick: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
     sireId: "", damId: "",
     ...(preset || {}), /* 종/혈통 폴더 안에서 추가하면 그 값이 미리 채워짐 */
+    ...(initial || {}),
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -756,8 +757,9 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
 
 /* ════════════════════ 성충 사육이력 행 입력 폼 ════════════════════ */
 function GrowthRowForm({ initial, brands, onSave, onClose }) {
-  const [f, setF] = useState(initial || {
+  const [f, setF] = useState({
     date: today(), instar: "", feedType: "균사", feedBrand: "", bottleSize: "", weight: "", memo: "",
+    ...(initial || {}),
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const save = () => { if (!f.date) return alert("날짜는 필수입니다"); onSave(f); };
@@ -797,9 +799,10 @@ function GrowthRowForm({ initial, brands, onSave, onClose }) {
 
 /* ════════════════════ 라인 등록/수정 폼 ════════════════════ */
 function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber, hasLarvae }) {
-  const [f, setF] = useState(initial || {
+  const [f, setF] = useState({
     code: "", fatherId: "", motherId: "", species: "", origin: "", gen: "",
     pairDate: "", setDate: "", breakdownDate: "", hatchDate: "", temp: "", place: "", memo: "",
+    ...(initial || {}),
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const isEdit = !!initial;
@@ -1012,9 +1015,10 @@ function LarvaEditForm({ initial, lines, onSave, onClose }) {
 
 /* ════════════════════ 병갈이 폼 ════════════════════ */
 function BottleForm({ initial, brands, onSave, onClose }) {
-  const [f, setF] = useState(initial || {
+  const [f, setF] = useState({
     date: today(), instar: "", weight: "", headWidth: "",
     feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "", flags: [], pudding: false,
+    ...(initial || {}),
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const toggleFlag = (flag) => setF((p) => {
@@ -1165,7 +1169,7 @@ function BulkBottleForm({ larvae, brands, onSave, onClose }) {
 
 /* ════════════════════ 용화 폼 ════════════════════ */
 function PupationForm({ initial, onSave, onClose }) {
-  const [f, setF] = useState(initial || { prepupaDate: "", pupaDate: "", pupaWeight: "", memo: "" });
+  const [f, setF] = useState({ prepupaDate: "", pupaDate: "", pupaWeight: "", memo: "", ...(initial || {}) });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   return (
     <Modal title="용화 기록" onClose={onClose} onSave={() => onSave(f)}>
@@ -1181,7 +1185,7 @@ function PupationForm({ initial, onSave, onClose }) {
 
 /* ════════════════════ 우화 폼 ════════════════════ */
 function EclosionForm({ initial, species, onSave, onClose }) {
-  const [f, setF] = useState(initial || { date: today(), totalLength: "", jawLength: "", jawWidth: "", jawThick: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "" });
+  const [f, setF] = useState({ date: today(), totalLength: "", jawLength: "", jawWidth: "", jawThick: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "", ...(initial || {}) });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const sp = species || "";
   const isGeuktae = sp.includes("극태");
