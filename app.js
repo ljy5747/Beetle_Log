@@ -2251,10 +2251,17 @@ function App() {
     const ds = larvaeOf(lineId).filter((i) => i.status === "유충").map((i) => latestRec(i)?.nextDate).filter(Boolean).map(dday);
     return ds.length ? Math.min(...ds) : null;
   };
+  /* 부·모 표기: "수 74.5 관리번호" 형식, 성별 기호를 앞에 색으로 강조 */
   const pairLabel = (L) => {
     const fa = parentById[L.fatherId], mo = parentById[L.motherId];
     if (!fa && !mo) return null;
-    return `${fa ? fa.code : "?"} ♂︎ × ${mo ? mo.code : "?"} ♀︎`;
+    const one = (p, male) => (
+      <span className="pl-one">
+        <b className={male ? "sx-m" : "sx-f"}>{male ? "♂" : "♀"}</b>
+        {p ? <>{num(p.totalLength) ? <span className="pl-sz mono">{n1(num(p.totalLength))}</span> : null} <span className="pl-code mono">{p.code}</span></> : <span className="dim"> 미지정</span>}
+      </span>
+    );
+    return <span className="pl-wrap">{one(fa, true)}<i className="pl-x">×</i>{one(mo, false)}</span>;
   };
 
   /* ════════ 렌더 ════════ */
@@ -2348,7 +2355,8 @@ function App() {
                       {L.gen && <span className="chip gen mono">{L.gen}</span>}
                       {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `병갈이 D+${-dd}` : `병갈이 D-${dd}`}</span>}
                     </div>
-                    <div className="card-sub">{[L.species, pairLabel(L), L.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
+                    <div className="card-sub">{[L.species, L.origin].filter(Boolean).join(" · ") || "정보 미입력"}</div>
+                    {pairLabel(L) && <div className="card-pair">{pairLabel(L)}</div>}
                     <div className="card-val mono" style={{ fontSize: 17 }}>
                       {kids.length ? <>{kids.length}<small>마리</small></> : <span className="dim">유충 없음</span>}
                     </div>
@@ -2445,7 +2453,7 @@ function App() {
                         <div className="card-l">
                           <div className="tagrow">
                             <span className={"tag mono" + (dead ? " strike" : "")}>{p.code}</span>
-                            <span className="chip" style={{ color: p.sex.includes("수") ? "#5A7A9A" : "#A8884F", borderColor: "#E0DAD0" }}>{symTxt(p.sex)}</span>
+                            <span className={p.sex.includes("수") ? "sx-m" : "sx-f"}>{p.sex.includes("수") ? "♂" : "♀"}</span>
                             {p.gen && <span className="chip gen mono">{p.gen}</span>}
                             {dead && <span className="chip" style={{ color: "#9A9088", borderColor: "#9A908855" }}>사망</span>}
                           </div>
@@ -2698,7 +2706,8 @@ function App() {
                 <div key={L.id} className="card" onClick={() => setView({ name: "lineDetail", id: L.id })}>
                   <div className="card-l">
                     <div className="tagrow"><span className="tag mono">{L.code}</span></div>
-                    <div className="card-sub">{[L.species, pairLabel(L)].filter(Boolean).join(" · ")}</div>
+                    <div className="card-sub">{[L.species, L.origin].filter(Boolean).join(" · ")}</div>
+                    {pairLabel(L) && <div className="card-pair">{pairLabel(L)}</div>}
                     <div className="card-val mono" style={{ fontSize: 17 }}>{kids.length}<small>마리</small></div>
                   </div>
                 </div>

@@ -88,6 +88,20 @@ display:flex;justify-content:space-between;gap:10px;cursor:pointer;box-shadow:no
 .tagrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .card-sub{font-size:12.5px;color:var(--dim);margin:7px 0 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
 .card-feed{font-size:11.5px;color:var(--gold-d);margin:-5px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;letter-spacing:.01em}
+
+/* ═══════════ 라인 카드의 부·모 표기 (수 74.5 관리번호 × 암 …) ═══════════ */
+.card-pair{font-size:13px;margin:-4px 0 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-wrap{display:inline-flex;align-items:center;gap:7px;flex-wrap:nowrap}
+.pl-one{display:inline-flex;align-items:center;gap:4px}
+.pl-x{font-style:normal;color:var(--dim);font-size:11px}
+.pl-sz{font-weight:700;color:var(--text);font-size:13.5px}
+.pl-code{color:var(--dim);font-size:12px}
+/* 성별 기호 — 수컷 파랑 / 암컷 핑크, 둥글고 도톰하게 */
+.sx-m,.sx-f{display:inline-flex;align-items:center;justify-content:center;
+width:19px;height:19px;border-radius:50%;font-size:12.5px;font-weight:800;line-height:1;
+font-variant-emoji:text;padding-bottom:1px}
+.sx-m{background:#DCE8F4;color:#3E6E9E}
+.sx-f{background:#FBE0EA;color:#C2557E}
 .card-val{font-size:22px;font-weight:700;font-family:var(--serif)}
 .card-val small{font-size:13px;color:var(--dim);margin-left:2px;font-family:-apple-system,sans-serif}
 .card-val em{font-style:normal;font-size:12px;color:var(--dim);font-weight:600;margin-left:7px;font-family:-apple-system,sans-serif}
