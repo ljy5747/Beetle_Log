@@ -867,10 +867,12 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
       <div className="sect">날짜</div>
       <F label="페어링일"><input type="date" className="in" value={f.pairDate} onChange={(e) => set("pairDate", e.target.value)} /></F>
       <F label="산란 셋팅일"><input type="date" className="in" value={f.setDate} onChange={(e) => set("setDate", e.target.value)} /></F>
-      <div className="row">
-        <F label="산란 해체일" half><input type="date" className="in" value={f.breakdownDate} onChange={(e) => set("breakdownDate", e.target.value)} /></F>
-        <F label="부화일" half><input type="date" className="in" value={f.hatchDate} onChange={(e) => set("hatchDate", e.target.value)} /></F>
-      </div>
+      <F label="산란 해체일"><input type="date" className="in" value={f.breakdownDate} onChange={(e) => set("breakdownDate", e.target.value)} /></F>
+      {f.setDate && !f.breakdownDate && (
+        <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>
+          비워두면 캘린더에 <b className="mono">{addDays(f.setDate, 30)}</b> 해체 예정으로 표시돼요 (셋팅 +1달). 실제 해체일을 넣으면 그 날짜로 바뀝니다.
+        </div>
+      )}
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
       {isEdit && hasLarvae && (
         <>
@@ -1235,7 +1237,7 @@ function exportXLSX(data) {
     return {
       "라인": L.code || "", "관리번호": ind.code, "종": L.species || "", "산지": L.origin || "",
       "성별": ind.sex, "상태": ind.status,
-      "산란셋팅일": L.setDate || "", "산란해체일": L.breakdownDate || "", "부화일": L.hatchDate || "",
+      "산란셋팅일": L.setDate || "", "산란해체일": L.breakdownDate || "",
       "부 관리번호": fa.code || "", "부 총장(mm)": fa.totalLength || "", "부 턱길이(mm)": fa.jawLength || "", "부 흉폭(mm)": fa.thoraxWidth || "",
       "모 관리번호": mo.code || "", "모 총장(mm)": mo.totalLength || "",
       "페어링일": L.pairDate || "",
@@ -1361,7 +1363,7 @@ async function downloadTemplate() {
   applyDV(pWs, colL(pHeaders.indexOf("상태(생존/사망)")), "생존");
 
   /* 라인 */
-  const lHeaders = ["라인명", "부 관리번호", "모 관리번호", "종", "누대수", "산지", "페어링일(YYYY-MM-DD)", "산란셋팅일(YYYY-MM-DD)", "산란해체일(YYYY-MM-DD)", "부화일(YYYY-MM-DD)", "메모"];
+  const lHeaders = ["라인명", "부 관리번호", "모 관리번호", "종", "누대수", "산지", "페어링일(YYYY-MM-DD)", "산란셋팅일(YYYY-MM-DD)", "산란해체일(YYYY-MM-DD)", "메모"];
   const lWs = makeSheet("라인", lHeaders);
   lWs.addRow(rowFor(lHeaders, { "라인명": "26-A", "부 관리번호": "P-01", "모 관리번호": "P-02", "종": "왕사슴벌레(극태)", "누대수": "WF1" }));
   applyDV(lWs, colL(lHeaders.indexOf("종")), "종");
@@ -1478,7 +1480,6 @@ function parseImportXLSX(arrayBuffer, data) {
         fatherId: fid || existing.fatherId, motherId: mid || existing.motherId,
         gen: keep(row["누대수"], existing.gen), origin: keep(row["산지"], existing.origin),
         setDate: keepD(row["산란셋팅일(YYYY-MM-DD)"], existing.setDate), breakdownDate: keepD(row["산란해체일(YYYY-MM-DD)"], existing.breakdownDate),
-        hatchDate: keepD(row["부화일(YYYY-MM-DD)"], existing.hatchDate),
         pairDate: keepD(row["페어링일(YYYY-MM-DD)"], existing.pairDate), memo: keep(row["메모"], existing.memo),
       });
       report.linesUpd++;
@@ -1486,7 +1487,7 @@ function parseImportXLSX(arrayBuffer, data) {
       lines.push({
         id: uid(), code, fatherId: fid, motherId: mid, species, gen: str(row["누대수"]), origin: str(row["산지"]),
         setDate: dstr(row["산란셋팅일(YYYY-MM-DD)"]), breakdownDate: dstr(row["산란해체일(YYYY-MM-DD)"]),
-        hatchDate: dstr(row["부화일(YYYY-MM-DD)"]), pairDate: dstr(row["페어링일(YYYY-MM-DD)"]), memo: str(row["메모"]),
+        pairDate: dstr(row["페어링일(YYYY-MM-DD)"]), memo: str(row["메모"]),
       });
       report.linesNew++;
     }
@@ -1581,9 +1582,10 @@ function collectEvents(data) {
   });
   data.lines.forEach((L) => {
     if (L.pairDate) push(L.pairDate, { type: "pair", label: `${L.code} 페어링`, sub: L.species || "", lineId: L.id });
-    if (L.hatchDate) push(L.hatchDate, { type: "hatch", label: `${L.code} 부화`, sub: L.species || "", lineId: L.id });
     if (L.setDate) push(L.setDate, { type: "setting", label: `${L.code} 산란 셋팅`, sub: L.species || "", lineId: L.id });
     if (L.breakdownDate) push(L.breakdownDate, { type: "breakdown", label: `${L.code} 산란 해체`, sub: L.species || "", lineId: L.id });
+    /* 해체일을 아직 안 적었으면 셋팅 +1달을 '예정'으로 표시 (기록은 비워둔 채) */
+    else if (L.setDate) push(addDays(L.setDate, 30), { type: "breakdownPlan", label: `${L.code} 해체 예정`, sub: `셋팅 +1달 · ${L.species || ""}`.trim(), lineId: L.id });
   });
   /* 사용자가 직접 추가한 일정 */
   (data.customEvents || []).forEach((c) => {
@@ -1595,7 +1597,7 @@ function collectEvents(data) {
   });
   return ev;
 }
-const EV_COLOR = { pair: "#B0698F", setting: "#C2705F", bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", custom: "#5A7A9A", remind: "#C2705F" };
+const EV_COLOR = { pair: "#B0698F", setting: "#C2705F", bottle: "#A8884F", breakdown: "#6E8494", breakdownPlan: "#A9B5C0", custom: "#5A7A9A", remind: "#C2705F" };
 
 /* ════════════════════ 월별 달력 ════════════════════ */
 function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent, onEditEvent }) {
@@ -2516,8 +2518,8 @@ function App() {
                 {L.pairDate && <span>페어링 <b>{shortDate(L.pairDate)}</b></span>}
                 {L.setDate && <span>셋팅 <b>{shortDate(L.setDate)}</b></span>}
                 {L.breakdownDate && <span>해체 <b>{shortDate(L.breakdownDate)}</b></span>}
-                {L.hatchDate && <span>부화 <b>{shortDate(L.hatchDate)}</b></span>}
-                {!L.pairDate && !L.setDate && !L.breakdownDate && !L.hatchDate && <span className="dim">라인 정보 미입력 — 우측 상단 '수정'</span>}
+                {L.setDate && !L.breakdownDate && <span className="dim">해체 예정 <b>{shortDate(addDays(L.setDate, 30))}</b></span>}
+                {!L.pairDate && !L.setDate && !L.breakdownDate && <span className="dim">라인 정보 미입력 — 우측 상단 '수정'</span>}
               </div>
               {L.memo && <div className="r-memo">{L.memo}</div>}
             </div>
@@ -2858,7 +2860,7 @@ function App() {
                   {[["라인", L.code], ["종", L.species], ["산지", L.origin],
                     ["부♂︎", parentById[L.fatherId] ? `${parentById[L.fatherId].code}${num(parentById[L.fatherId].totalLength) ? ` / ${parentById[L.fatherId].totalLength}mm` : ""}` : ""],
                     ["모♀︎", parentById[L.motherId] ? `${parentById[L.motherId].code}${num(parentById[L.motherId].totalLength) ? ` / ${parentById[L.motherId].totalLength}mm` : ""}` : ""],
-                    ["해체일", L.breakdownDate], ["부화일", L.hatchDate],
+                    ["해체일", L.breakdownDate],
                     ["페어링일", L.pairDate], ["메모", cur.memo],
                   ].filter(([, v]) => v).map(([k, v]) => <div key={k} className="kv-row"><span className="kv-k">{k}</span><span className="kv-v">{v}</span></div>)}
                 </div>
