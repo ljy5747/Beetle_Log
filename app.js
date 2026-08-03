@@ -2409,8 +2409,8 @@ function App() {
                     </div>
                     {(avgM || avgF || avgU) && (
                       <div className="avg-row">
-                        {avgM && <span className="avg-m">♂︎ 평균 {n1(avgM)}g</span>}
-                        {avgF && <span className="avg-f">♀︎ 평균 {n1(avgF)}g</span>}
+                        {avgM && <span className="avg-m"><span className="sx-m">♂︎</span> 평균 {n1(avgM)}g</span>}
+                        {avgF && <span className="avg-f"><span className="sx-f">♀︎</span> 평균 {n1(avgF)}g</span>}
                         {avgU && <span className="avg-u">미구분 {n1(avgU)}g</span>}
                       </div>
                     )}

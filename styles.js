@@ -117,8 +117,8 @@ vertical-align:middle;position:relative;top:-1.5px;-webkit-text-stroke:.4px curr
 .card.crown{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 .crown-ic{font-size:15px;line-height:1}
 .avg-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:13px;font-weight:700}
-.avg-m{color:#5A7A9A}
-.avg-f{color:#A8884F}
+.avg-m{color:#3E7BC4}
+.avg-f{color:#E0578F}
 .avg-u{color:var(--dim)}
 .card-thumb{width:60px;height:60px;object-fit:cover;border-radius:5px;border:1px solid var(--line);flex:none;align-self:center}
 
