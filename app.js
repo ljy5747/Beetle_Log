@@ -799,7 +799,7 @@ function GrowthRowForm({ initial, brands, onSave, onClose }) {
 function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber, hasLarvae }) {
   const [f, setF] = useState(initial || {
     code: "", fatherId: "", motherId: "", species: "", origin: "", gen: "",
-    setDate: "", breakdownDate: "", hatchDate: "", temp: "", place: "", memo: "",
+    pairDate: "", setDate: "", breakdownDate: "", hatchDate: "", temp: "", place: "", memo: "",
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const isEdit = !!initial;
@@ -862,6 +862,7 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
         })()}
       </F>
       <div className="sect">날짜</div>
+      <F label="페어링일"><input type="date" className="in" value={f.pairDate} onChange={(e) => set("pairDate", e.target.value)} /></F>
       <F label="산란 셋팅일"><input type="date" className="in" value={f.setDate} onChange={(e) => set("setDate", e.target.value)} /></F>
       {f.setDate && (
         <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>
@@ -871,11 +872,6 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
       <div className="row">
         <F label="산란 해체일" half><input type="date" className="in" value={f.breakdownDate} onChange={(e) => set("breakdownDate", e.target.value)} /></F>
         <F label="부화일" half><input type="date" className="in" value={f.hatchDate} onChange={(e) => set("hatchDate", e.target.value)} /></F>
-      </div>
-      <div className="sect">사육 환경</div>
-      <div className="row">
-        <F label="사육 온도 ℃" half><input className="in mono" value={f.temp} onChange={(e) => set("temp", e.target.value)} placeholder="23~25" /></F>
-        <F label="사육 장소" half><input className="in" value={f.place} onChange={(e) => set("place", e.target.value)} placeholder="온장고" /></F>
       </div>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
       {isEdit && hasLarvae && (
@@ -1243,7 +1239,7 @@ function exportXLSX(data) {
       "산란셋팅일": L.setDate || "", "산란해체일": L.breakdownDate || "", "부화일": L.hatchDate || "",
       "부 관리번호": fa.code || "", "부 총장(mm)": fa.totalLength || "", "부 턱길이(mm)": fa.jawLength || "", "부 흉폭(mm)": fa.thoraxWidth || "",
       "모 관리번호": mo.code || "", "모 총장(mm)": mo.totalLength || "",
-      "사육온도": L.temp || "", "사육장소": L.place || "",
+      "페어링일": L.pairDate || "",
       "최대 유충무게(g)": maxWeight(ind) ?? "", "병갈이 횟수": (ind.bottleRecords || []).length,
       "전용일": ind.pupation?.prepupaDate || "", "용화일": ind.pupation?.pupaDate || "", "번데기 무게(g)": ind.pupation?.pupaWeight || "",
       "우화일": ind.eclosion?.date || "", "총장(mm)": ind.eclosion?.totalLength || "", "턱 길이(mm)": ind.eclosion?.jawLength || "",
@@ -1366,9 +1362,9 @@ async function downloadTemplate() {
   applyDV(pWs, colL(pHeaders.indexOf("상태(생존/사망)")), "생존");
 
   /* 라인 */
-  const lHeaders = ["라인명", "부 관리번호", "모 관리번호", "종", "누대수", "산지", "산란셋팅일(YYYY-MM-DD)", "산란해체일(YYYY-MM-DD)", "부화일(YYYY-MM-DD)", "온도", "장소", "메모"];
+  const lHeaders = ["라인명", "부 관리번호", "모 관리번호", "종", "누대수", "산지", "페어링일(YYYY-MM-DD)", "산란셋팅일(YYYY-MM-DD)", "산란해체일(YYYY-MM-DD)", "부화일(YYYY-MM-DD)", "메모"];
   const lWs = makeSheet("라인", lHeaders);
-  lWs.addRow(rowFor(lHeaders, { "라인명": "26-A", "부 관리번호": "P-01", "모 관리번호": "P-02", "종": "왕사슴벌레(극태)", "누대수": "WF1", "온도": "23~25" }));
+  lWs.addRow(rowFor(lHeaders, { "라인명": "26-A", "부 관리번호": "P-01", "모 관리번호": "P-02", "종": "왕사슴벌레(극태)", "누대수": "WF1" }));
   applyDV(lWs, colL(lHeaders.indexOf("종")), "종");
   applyDV(lWs, colL(lHeaders.indexOf("누대수")), "누대수");
 
@@ -1483,15 +1479,15 @@ function parseImportXLSX(arrayBuffer, data) {
         fatherId: fid || existing.fatherId, motherId: mid || existing.motherId,
         gen: keep(row["누대수"], existing.gen), origin: keep(row["산지"], existing.origin),
         setDate: keepD(row["산란셋팅일(YYYY-MM-DD)"], existing.setDate), breakdownDate: keepD(row["산란해체일(YYYY-MM-DD)"], existing.breakdownDate),
-        hatchDate: keepD(row["부화일(YYYY-MM-DD)"], existing.hatchDate), temp: keep(row["온도"], existing.temp),
-        place: keep(row["장소"], existing.place), memo: keep(row["메모"], existing.memo),
+        hatchDate: keepD(row["부화일(YYYY-MM-DD)"], existing.hatchDate),
+        pairDate: keepD(row["페어링일(YYYY-MM-DD)"], existing.pairDate), memo: keep(row["메모"], existing.memo),
       });
       report.linesUpd++;
     } else {
       lines.push({
         id: uid(), code, fatherId: fid, motherId: mid, species, gen: str(row["누대수"]), origin: str(row["산지"]),
         setDate: dstr(row["산란셋팅일(YYYY-MM-DD)"]), breakdownDate: dstr(row["산란해체일(YYYY-MM-DD)"]),
-        hatchDate: dstr(row["부화일(YYYY-MM-DD)"]), temp: str(row["온도"]), place: str(row["장소"]), memo: str(row["메모"]),
+        hatchDate: dstr(row["부화일(YYYY-MM-DD)"]), pairDate: dstr(row["페어링일(YYYY-MM-DD)"]), memo: str(row["메모"]),
       });
       report.linesNew++;
     }
@@ -1585,6 +1581,7 @@ function collectEvents(data) {
     }
   });
   data.lines.forEach((L) => {
+    if (L.pairDate) push(L.pairDate, { type: "pair", label: `${L.code} 페어링`, sub: L.species || "", lineId: L.id });
     if (L.hatchDate) push(L.hatchDate, { type: "hatch", label: `${L.code} 부화`, sub: L.species || "", lineId: L.id });
     if (L.breakdownDate) push(L.breakdownDate, { type: "breakdown", label: `${L.code} 산란 해체`, sub: L.species || "", lineId: L.id });
     /* 산란 셋팅일이 있고 아직 해체 안 했으면 → 해체 권장 구간 표시 */
@@ -1603,7 +1600,7 @@ function collectEvents(data) {
   });
   return ev;
 }
-const EV_COLOR = { bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A", custom: "#5A7A9A", remind: "#C2705F" };
+const EV_COLOR = { pair: "#B0698F", bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A", custom: "#5A7A9A", remind: "#C2705F" };
 
 /* ════════════════════ 월별 달력 ════════════════════ */
 function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent, onEditEvent }) {
@@ -2521,12 +2518,11 @@ function App() {
             <div className="p-t lt">라인 정보</div>
             <div className="panel">
               <div className="meas mono">
+                {L.pairDate && <span>페어링 <b>{shortDate(L.pairDate)}</b></span>}
                 {L.setDate && <span>셋팅 <b>{shortDate(L.setDate)}</b></span>}
                 {L.breakdownDate && <span>해체 <b>{shortDate(L.breakdownDate)}</b></span>}
                 {L.hatchDate && <span>부화 <b>{shortDate(L.hatchDate)}</b></span>}
-                {L.temp && <span>온도 <b>{L.temp}℃</b></span>}
-                {L.place && <span>장소 <b>{L.place}</b></span>}
-                {!L.setDate && !L.breakdownDate && !L.hatchDate && !L.temp && !L.place && <span className="dim">라인 정보 미입력 — 우측 상단 '수정'</span>}
+                {!L.pairDate && !L.setDate && !L.breakdownDate && !L.hatchDate && <span className="dim">라인 정보 미입력 — 우측 상단 '수정'</span>}
               </div>
               {L.setDate && !L.breakdownDate && (() => {
                 const ds = dday(addDays(L.setDate, 21)), de = dday(addDays(L.setDate, 60));
@@ -2877,7 +2873,7 @@ function App() {
                     ["부♂︎", parentById[L.fatherId] ? `${parentById[L.fatherId].code}${num(parentById[L.fatherId].totalLength) ? ` / ${parentById[L.fatherId].totalLength}mm` : ""}` : ""],
                     ["모♀︎", parentById[L.motherId] ? `${parentById[L.motherId].code}${num(parentById[L.motherId].totalLength) ? ` / ${parentById[L.motherId].totalLength}mm` : ""}` : ""],
                     ["해체일", L.breakdownDate], ["부화일", L.hatchDate],
-                    ["온도", L.temp && L.temp + "℃"], ["장소", L.place], ["메모", cur.memo],
+                    ["페어링일", L.pairDate], ["메모", cur.memo],
                   ].filter(([, v]) => v).map(([k, v]) => <div key={k} className="kv-row"><span className="kv-k">{k}</span><span className="kv-v">{v}</span></div>)}
                 </div>
               </div>
