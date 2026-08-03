@@ -197,10 +197,6 @@ font-size:10px;font-weight:700;color:var(--dim);letter-spacing:.08em;text-transf
 .spark-range{font-size:11px;color:var(--dim);margin-top:4px}
 
 /* ═══════════ [13] 특이 케이스 태그 (원더링·거식 등) ═══════════ */
-.flagrow{display:flex;flex-wrap:wrap;gap:7px}
-.flag-chip{background:var(--surf2);border:1px solid var(--line);color:var(--dim);border-radius:4px;
-padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
-.flag-chip.on{background:#FBF1EE;border-color:#D98C6A;color:#9A4A3A}
 .flag-show{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 .flag-tag{background:#FBF1EE;color:#9A4A3A;border:1px solid #EBD3CC;border-radius:4px;
 padding:2px 9px;font-size:11px;font-weight:700}
@@ -258,7 +254,6 @@ box-shadow:0 6px 22px rgba(23,21,19,.35)}
 .toast{position:fixed;bottom:calc(132px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--text);border:none;
 color:#fff;border-radius:999px;padding:11px 19px;font-size:13.5px;font-weight:600;z-index:99;
 box-shadow:0 8px 26px rgba(23,21,19,.3);white-space:nowrap;letter-spacing:.02em}
-.del-float{position:fixed;bottom:calc(70px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:60}
 
 /* ═══════════ [17.5] 하단 탭바 ═══════════ */
 .bnav{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:520px;

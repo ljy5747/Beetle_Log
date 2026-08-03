@@ -808,7 +808,7 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
 }
 
 /* ════════════════════ 성충 사육이력 행 입력 폼 ════════════════════ */
-function GrowthRowForm({ initial, brands, onSave, onClose }) {
+function GrowthRowForm({ initial, brands, onSave, onClose, onDelete }) {
   const [f, setF] = useState({
     date: today(), instar: "", feedType: "균사", feedBrand: "", bottleSize: "", weight: "", memo: "",
     ...(initial || {}),
@@ -844,6 +844,11 @@ function GrowthRowForm({ initial, brands, onSave, onClose }) {
         <F label="브랜드" half><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
       </div>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
+      {onDelete && (
+        <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px dashed var(--line)", textAlign: "center" }}>
+          <ConfirmBtn className="btn danger sm" label="이 이력 삭제" onConfirm={onDelete} />
+        </div>
+      )}
       <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
     </Modal>
   );
@@ -1063,17 +1068,13 @@ function LarvaEditForm({ initial, lines, onSave, onClose }) {
 }
 
 /* ════════════════════ 병갈이 폼 ════════════════════ */
-function BottleForm({ initial, brands, onSave, onClose }) {
+function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
   const [f, setF] = useState({
     date: today(), instar: "", weight: "", headWidth: "",
     feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "", flags: [], pudding: false,
     ...(initial || {}),
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const toggleFlag = (flag) => setF((p) => {
-    const cur = p.flags || [];
-    return { ...p, flags: cur.includes(flag) ? cur.filter((x) => x !== flag) : [...cur, flag] };
-  });
   const save = () => { if (!f.date) return alert("날짜는 필수입니다"); onSave(f); };
   return (
     <Modal title={initial ? "교체 기록 수정" : "교체 기록"} onClose={onClose} onSave={save}>
@@ -1122,16 +1123,12 @@ function BottleForm({ initial, brands, onSave, onClose }) {
         </div>
         <div className="hint">예정일을 정하면 캘린더 탭에 자동으로 표시돼요</div>
       </F>
-      <F label="특이 케이스 (해당 시 선택)">
-        <div className="flagrow">
-          {FLAGS.map((flag) => (
-            <button key={flag} className={"flag-chip" + ((f.flags || []).includes(flag) ? " on" : "")} onClick={() => toggleFlag(flag)}>
-              {(f.flags || []).includes(flag) ? "✓ " : ""}{flag}
-            </button>
-          ))}
-        </div>
-      </F>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="식흔 상태 등" /></F>
+      {onDelete && (
+        <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px dashed var(--line)", textAlign: "center" }}>
+          <ConfirmBtn className="btn danger sm" label="이 기록 삭제" onConfirm={onDelete} />
+        </div>
+      )}
       <datalist id="dl-brands">{brands.map((b) => <option key={b} value={b} />)}</datalist>
     </Modal>
   );
@@ -2938,14 +2935,8 @@ function App() {
           onSave={saveParent} onClose={() => setModal(null)} />
       )}
       {modal?.type === "growthRow" && (
-        <div>
-          <GrowthRowForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveGrowthRow} onClose={() => setModal(null)} />
-          {modal.editId && (
-            <div className="del-float">
-              <ConfirmBtn className="btn danger sm" label="이 이력 삭제" onConfirm={deleteGrowthRow} />
-            </div>
-          )}
-        </div>
+        <GrowthRowForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveGrowthRow} onClose={() => setModal(null)}
+          onDelete={modal.editId ? deleteGrowthRow : null} />
       )}
       {modal?.type === "line" && (
         <LineForm
@@ -2981,17 +2972,11 @@ function App() {
           onSave={saveLarvaEdit} onClose={() => setModal(null)} />
       )}
       {modal?.type === "bottle" && (
-        <div>
-          <BottleForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveBottle} onClose={() => setModal(null)} />
-          {modal.editId && (
-            <div className="del-float">
-              <ConfirmBtn className="btn danger sm" label="이 기록 삭제" onConfirm={() => {
-                persist({ ...data, individuals: data.individuals.map((i) => i.id !== modal.indId ? i : { ...i, bottleRecords: i.bottleRecords.filter((r) => r.id !== modal.editId) }) });
-                setModal(null); say("기록이 삭제됐어요");
-              }} />
-            </div>
-          )}
-        </div>
+        <BottleForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveBottle} onClose={() => setModal(null)}
+          onDelete={modal.editId ? () => {
+            persist({ ...data, individuals: data.individuals.map((i) => i.id !== modal.indId ? i : { ...i, bottleRecords: i.bottleRecords.filter((r) => r.id !== modal.editId) }) });
+            setModal(null); say("기록이 삭제됐어요");
+          } : null} />
       )}
       {modal?.type === "pupation" && (
         <PupationForm initial={data.individuals.find((i) => i.id === modal.indId)?.pupation} onSave={savePupation} onClose={() => setModal(null)} />
