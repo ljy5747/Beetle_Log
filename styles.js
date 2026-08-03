@@ -409,6 +409,4 @@ border-radius:5px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;f
 .up-items{flex:1}
 .up-item{font-size:13.5px;padding:2px 0;cursor:pointer;display:flex;align-items:center;gap:7px}
 .up-item i{width:6px;height:6px;border-radius:50%;flex:none}
-.harvest-tip{margin-top:11px;padding:10px 13px;background:#FBF1EE;border:1px solid #EBD3CC;border-radius:5px;font-size:13px}
-.harvest-tip b{color:#9A4A3A}
 `;

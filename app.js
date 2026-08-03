@@ -867,11 +867,6 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
       <div className="sect">날짜</div>
       <F label="페어링일"><input type="date" className="in" value={f.pairDate} onChange={(e) => set("pairDate", e.target.value)} /></F>
       <F label="산란 셋팅일"><input type="date" className="in" value={f.setDate} onChange={(e) => set("setDate", e.target.value)} /></F>
-      {f.setDate && (
-        <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>
-          해체 권장: <b className="mono">{addDays(f.setDate, 21)}</b> ~ <b className="mono">{addDays(f.setDate, 60)}</b> (3주~2달). 캘린더에 자동 표시돼요
-        </div>
-      )}
       <div className="row">
         <F label="산란 해체일" half><input type="date" className="in" value={f.breakdownDate} onChange={(e) => set("breakdownDate", e.target.value)} /></F>
         <F label="부화일" half><input type="date" className="in" value={f.hatchDate} onChange={(e) => set("hatchDate", e.target.value)} /></F>
@@ -1587,12 +1582,8 @@ function collectEvents(data) {
   data.lines.forEach((L) => {
     if (L.pairDate) push(L.pairDate, { type: "pair", label: `${L.code} 페어링`, sub: L.species || "", lineId: L.id });
     if (L.hatchDate) push(L.hatchDate, { type: "hatch", label: `${L.code} 부화`, sub: L.species || "", lineId: L.id });
+    if (L.setDate) push(L.setDate, { type: "setting", label: `${L.code} 산란 셋팅`, sub: L.species || "", lineId: L.id });
     if (L.breakdownDate) push(L.breakdownDate, { type: "breakdown", label: `${L.code} 산란 해체`, sub: L.species || "", lineId: L.id });
-    /* 산란 셋팅일이 있고 아직 해체 안 했으면 → 해체 권장 구간 표시 */
-    if (L.setDate && !L.breakdownDate) {
-      push(addDays(L.setDate, 21), { type: "harvest", label: `${L.code} 해체 가능`, sub: `셋팅 3주차 · ${L.species || ""}`.trim(), lineId: L.id });
-      push(addDays(L.setDate, 60), { type: "harvestEnd", label: `${L.code} 해체 권장 마감`, sub: `셋팅 2달차 · ${L.species || ""}`.trim(), lineId: L.id });
-    }
   });
   /* 사용자가 직접 추가한 일정 */
   (data.customEvents || []).forEach((c) => {
@@ -1604,7 +1595,7 @@ function collectEvents(data) {
   });
   return ev;
 }
-const EV_COLOR = { pair: "#B0698F", bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", harvest: "#C2705F", harvestEnd: "#9A4A3A", custom: "#5A7A9A", remind: "#C2705F" };
+const EV_COLOR = { pair: "#B0698F", setting: "#C2705F", bottle: "#A8884F", hatch: "#6B8E4E", breakdown: "#6E8494", custom: "#5A7A9A", remind: "#C2705F" };
 
 /* ════════════════════ 월별 달력 ════════════════════ */
 function CalendarView({ data, onOpenLine, onOpenLarva, onAddEvent, onDeleteEvent, onEditEvent }) {
@@ -2528,15 +2519,6 @@ function App() {
                 {L.hatchDate && <span>부화 <b>{shortDate(L.hatchDate)}</b></span>}
                 {!L.pairDate && !L.setDate && !L.breakdownDate && !L.hatchDate && <span className="dim">라인 정보 미입력 — 우측 상단 '수정'</span>}
               </div>
-              {L.setDate && !L.breakdownDate && (() => {
-                const ds = dday(addDays(L.setDate, 21)), de = dday(addDays(L.setDate, 60));
-                return (
-                  <div className="harvest-tip">
-                    🥚 해체 권장 <b className="mono">{addDays(L.setDate, 21)}</b> ~ <b className="mono">{addDays(L.setDate, 60)}</b>
-                    <span className="dim"> · {ds > 0 ? `해체까지 D-${ds}` : de < 0 ? `권장기간 지남 (${-de}일)` : "지금 해체 가능"}</span>
-                  </div>
-                );
-              })()}
               {L.memo && <div className="r-memo">{L.memo}</div>}
             </div>
 
