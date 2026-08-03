@@ -232,7 +232,7 @@ const lastDelta = (ind) => {
 function Spark({ ind, w = 96, h = 30, big }) {
   const recs = sortedRecs(ind).filter((r) => num(r.weight));
   const vs = recs.map((r) => num(r.weight));
-  if (vs.length < 2) return <div className="spark-empty">{vs.length ? "기록 1건" : "무게 기록 없음"}</div>;
+  if (vs.length < 2) return <div className="spark-empty" />;
   const min = Math.min(...vs), max = Math.max(...vs), range = max - min || 1, p = 4;
   const pts = vs.map((v, i) => [p + (i * (w - 2 * p)) / (vs.length - 1), h - p - ((v - min) * (h - 2 * p)) / range]);
   return (
@@ -266,7 +266,14 @@ function LarvaCard({ ind, crownM, crownF, lineCode, onOpen, onBottle }) {
           {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
           {allFlags(ind).map((fl) => <span key={fl} className="chip flag-mini">{fl}</span>)}
         </div>
-        <div className="card-sub">{[ind.sex !== "미구분" ? ind.sex : null, lr ? `최근 ${shortDate(lr.date)}` : null].filter(Boolean).join(" · ") || "기록 전"}</div>
+        <div className="card-sub">
+          {ind.sex !== "미구분" && (
+            <><span className={ind.sex.includes("수") ? "sx-m" : "sx-f"}>{ind.sex.includes("수") ? "♂︎" : "♀︎"}</span>
+            <b style={{ color: "var(--text)", fontWeight: 700, marginLeft: 3 }}>{ind.sex.includes("수") ? "수컷" : "암컷"}</b>
+            {lr && " · "}</>
+          )}
+          {lr ? `최근 ${shortDate(lr.date)}` : (ind.sex === "미구분" ? "기록 전" : "")}
+        </div>
         {lr && (lr.feedBrand || lr.feedType || lr.bottleSize) && (
           <div className="card-feed">{[lr.feedBrand || lr.feedType, ccLabel(lr.bottleSize), lr.pudding ? "푸딩컵" : null].filter(Boolean).join(" · ")}</div>
         )}
@@ -297,7 +304,7 @@ function LineParentCard({ p, role, onOpen }) {
   if (!p) return (
     <div className="pcard empty">
       <div className="pcard-ph sp-ph"><span>{male ? "부 미지정" : "모 미지정"}</span></div>
-      <div className="pcard-r"><div className="pcard-role dim">{male ? "부 ♂︎" : "모 ♀︎"} 미지정</div>
+      <div className="pcard-r"><div className="pcard-role dim"><span className={male ? "sx-m" : "sx-f"}>{male ? "♂︎" : "♀︎"}</span> {male ? "부" : "모"} 미지정</div>
         <div className="pcard-sub">라인 수정에서 종충을 골라주세요</div></div>
     </div>
   );
@@ -315,7 +322,7 @@ function LineParentCard({ p, role, onOpen }) {
       <SpeciesPhoto photo={p.photo} species={p.species} className="pcard-ph" />
       <div className="pcard-r">
         <div className="pcard-top">
-          <span className="pcard-role">{male ? "부 ♂︎" : "모 ♀︎"}</span>
+          <span className="pcard-role"><span className={male ? "sx-m" : "sx-f"}>{male ? "♂︎" : "♀︎"}</span> {male ? "부" : "모"}</span>
           <span className="tag mono">{p.code}</span>
           {p.gen && <span className="chip gen mono">{p.gen}</span>}
           {p.status === "사망" && <span className="chip" style={{ color: "#9A9088", borderColor: "#9A908855" }}>사망</span>}

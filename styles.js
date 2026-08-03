@@ -97,7 +97,7 @@ display:flex;justify-content:space-between;gap:10px;cursor:pointer;box-shadow:no
 .pl-sz{font-weight:700;color:var(--text);font-size:13.5px}
 .pl-code{color:var(--dim);font-size:12px}
 /* 성별 기호 — 수컷 파랑 / 암컷 핑크. ♂♀는 기준선이 낮아 살짝 올려 정렬 */
-.sx-m,.sx-f{display:inline-block;font-size:15px;font-weight:900;line-height:1;
+.sx-m,.sx-f{display:inline-block;font-size:14px;font-weight:900;line-height:1;
 font-variant-emoji:text;font-family:-apple-system,"Apple SD Gothic Neo","Segoe UI Symbol",sans-serif;
 vertical-align:middle;position:relative;top:-1.5px;-webkit-text-stroke:.4px currentColor}
 .sx-m{color:#3E7BC4}
@@ -206,15 +206,15 @@ padding:2px 9px;font-size:11px;font-weight:700}
 /* ═══════════ [17.10] 라인 부·모 정보 카드 ═══════════ */
 .pcard{display:flex;gap:12px;background:var(--surf);border:1px solid var(--line);border-left:3px solid var(--line);
 border-radius:9px;padding:11px 12px;margin-bottom:8px;cursor:pointer;align-items:flex-start}
-.pcard.male{border-left-color:#5A7A9A}
-.pcard.female{border-left-color:var(--gold)}
+.pcard.male{border-left-color:#3E7BC4}
+.pcard.female{border-left-color:#E0578F}
 .pcard.empty{cursor:default;background:transparent;border-style:dashed}
 .pcard-ph{width:74px;height:74px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:none}
 .pcard-r{min-width:0;flex:1}
 .pcard-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .pcard-role{font-size:12px;font-weight:800;color:var(--dim);letter-spacing:.02em}
-.pcard.male .pcard-role{color:#5A7A9A}
-.pcard.female .pcard-role{color:var(--gold-d)}
+.pcard.male .pcard-role{color:#3E7BC4}
+.pcard.female .pcard-role{color:#E0578F}
 .pcard-sub{font-size:12px;color:var(--dim);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pcard-meas{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:6px;font-size:12.5px}
 .pcard-meas i{font-style:normal;color:var(--dim);font-size:11px}
