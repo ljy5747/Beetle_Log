@@ -470,58 +470,36 @@ async function recognizeScaleWeight(file) {
 function ScaleScanBtn({ onValue }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [shotFile, setShotFile] = useState(null); /* 방금 촬영한 사진 (사진첩 저장용) */
-  const run = async (file, fromCamera) => {
+  const run = async (file) => {
     if (!file) return;
-    setShotFile(fromCamera ? file : null);
     setBusy(true); setMsg("숫자를 읽는 중…");
     try {
       const v = await recognizeScaleWeight(file);
       if (v != null) { onValue(String(v)); setMsg("✓ " + v + " 인식됨 — 값이 다르면 직접 고쳐주세요"); }
-      else setMsg("숫자를 못 찾았어요 — 표시창이 크고 반듯하게 나오도록 다시 찍어주세요");
+      else setMsg("숫자를 못 찾았어요 — 표시창이 크고 반듯하게 나온 사진으로 해보세요");
     } catch (err) {
       setMsg("⚠️ 인식에 실패했어요 — 다시 시도해주세요");
     }
     setBusy(false);
   };
-  /* 매번 input을 새로 만들어 capture 속성을 직접 지정 — 일부 폰에서 카메라 대신 선택창이 뜨는 문제 해결 */
-  const pick = (fromCamera) => {
+  /* 매번 input을 새로 만들어 사진 선택창을 연다 */
+  const pick = () => {
     if (busy) return;
     const inp = document.createElement("input");
     inp.type = "file";
     inp.accept = "image/*";
-    if (fromCamera) inp.setAttribute("capture", "environment");
     inp.style.display = "none";
-    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); run(f, fromCamera); };
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); run(f); };
     inp.addEventListener("cancel", () => inp.remove());
     document.body.appendChild(inp);
     inp.click();
   };
-  const saveToAlbum = async () => {
-    if (!shotFile) return;
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [shotFile] })) {
-        await navigator.share({ files: [shotFile], title: "저울 사진" });
-        setMsg("공유 창에서 '이미지 저장'을 누르면 사진첩에 들어가요");
-        return;
-      }
-    } catch (e) { if (e && e.name === "AbortError") return; }
-    try {
-      const url = URL.createObjectURL(shotFile);
-      const a = document.createElement("a"); a.href = url; a.download = "저울_" + today() + ".jpg";
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      setMsg("사진이 다운로드 폴더에 저장됐어요");
-    } catch (e) { setMsg("⚠️ 저장에 실패했어요"); }
-  };
   return (
     <div className="field" style={{ marginTop: -6 }}>
       <div className="chiprow" style={{ marginTop: 0 }}>
-        <button className="chipbtn" onClick={() => pick(true)}>
-          {busy ? "⏳ 인식 중…" : "📷 저울 찍어서 인식"}
+        <button className="chipbtn" onClick={pick}>
+          {busy ? "⏳ 인식 중…" : "🖼 저울 사진으로 무게 인식"}
         </button>
-        <button className="chipbtn" onClick={() => pick(false)}>🖼 앨범에서</button>
-        {shotFile && !busy && <button className="chipbtn" onClick={saveToAlbum}>💾 사진첩에 저장</button>}
       </div>
       {msg && <div className="hint" style={{ marginTop: 6 }}>{msg}</div>}
     </div>
