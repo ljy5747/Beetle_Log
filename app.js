@@ -200,6 +200,156 @@ function makeICS(summary, dateISO, desc) {
     "END:VEVENT", "END:VCALENDAR"].join("\r\n");
 }
 
+
+/* ════════════════════ 저울 숫자 인식 (무료 OCR · 폰 안에서 처리, 사진은 저장하지 않음) ════════════════════ */
+let _ocrWorkerP = null;
+function getOcrWorker() {
+  if (!_ocrWorkerP) {
+    _ocrWorkerP = (async () => {
+      const worker = await Tesseract.createWorker("eng");
+      await worker.setParameters({
+        tessedit_char_whitelist: "0123456789.",   /* 숫자와 점만 읽기 */
+        tessedit_pageseg_mode: "11",              /* 사진 속 흩어진 글자 찾기 모드 */
+      });
+      return worker;
+    })().catch((e) => { _ocrWorkerP = null; throw e; });
+  }
+  return _ocrWorkerP;
+}
+
+function loadImageFile(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); res(img); };
+    img.onerror = (e) => { URL.revokeObjectURL(url); rej(e); };
+    img.src = url;
+  });
+}
+
+/* 흑백 변환 + 명암 극대화. invert=true면 어두운 화면·밝은 숫자(백라이트 저울)용 */
+function scaleCanvas(img, invert) {
+  const MAX = 1100;
+  const sc = Math.min(1, MAX / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * sc)), h = Math.max(1, Math.round(img.height * sc));
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext("2d");
+  ctx.drawImage(img, 0, 0, w, h);
+  const im = ctx.getImageData(0, 0, w, h), d = im.data, n = w * h;
+  const g = new Float32Array(n);
+  let lo = 255, hi = 0;
+  for (let i = 0; i < n; i++) {
+    const v = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+    g[i] = v; if (v < lo) lo = v; if (v > hi) hi = v;
+  }
+  const range = hi - lo || 1;
+  for (let i = 0; i < n; i++) {
+    let v = ((g[i] - lo) / range) * 255;
+    if (invert) v = 255 - v;
+    d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(im, 0, 0);
+  return cv;
+}
+
+/* 인식 결과에서 저울 표시창 숫자 고르기
+   — 표시창 숫자는 사진에서 가장 큰 글자이므로 글자 높이를 최우선으로,
+     소수점 유무·인식 신뢰도를 가산점으로 사용 (MAX 3000g 같은 작은 인쇄글씨 배제) */
+function pickWeight(rd) {
+  const cands = [];
+  const add = (txt, conf, h) => {
+    const ms = String(txt || "").match(/\d+(?:\.\d+)?/g) || [];
+    ms.forEach((m) => {
+      const v = parseFloat(m);
+      if (isFinite(v) && v >= 0.1 && v <= 999) {
+        cands.push({ v, conf: conf || 0, dot: m.includes(".") ? 1 : 0, h: h || 0 });
+      }
+    });
+  };
+  (rd.words || []).forEach((w) => {
+    const h = w.bbox ? Math.max(0, w.bbox.y1 - w.bbox.y0) : 0;
+    add(w.text, w.confidence, h);
+  });
+  if (!cands.length) add(rd.text, 0, 0);
+  if (!cands.length) return null;
+  const maxH = Math.max.apply(null, cands.map((c) => c.h)) || 1;
+  cands.forEach((c) => { c.score = (c.h / maxH) * 100 + c.dot * 18 + c.conf * 0.15; });
+  cands.sort((a, b) => b.score - a.score);
+  return cands[0].v;
+}
+
+async function recognizeScaleWeight(file) {
+  const img = await loadImageFile(file);
+  const worker = await getOcrWorker();
+  for (const invert of [false, true]) {
+    const res = await worker.recognize(scaleCanvas(img, invert));
+    const v = pickWeight(res.data);
+    if (v != null) return v;
+  }
+  return null;
+}
+
+/* 저울 촬영 버튼 — 무게 입력칸 아래에 붙여 쓰는 공용 컴포넌트
+   📷 촬영해서 인식 / 🖼 앨범 사진으로 인식 / 💾 방금 찍은 사진 사진첩에 저장 */
+function ScaleScanBtn({ onValue }) {
+  const camRef = useRef(null);
+  const albRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [shotFile, setShotFile] = useState(null); /* 방금 촬영한 사진 (사진첩 저장용) */
+  const run = async (file, fromCamera) => {
+    if (!file) return;
+    if (!window.Tesseract) { setMsg("⚠️ 인식 모듈을 불러오지 못했어요 — 인터넷 연결 후 새로고침해주세요"); return; }
+    setShotFile(fromCamera ? file : null);
+    setBusy(true); setMsg("숫자를 읽는 중… 처음 한 번은 10~20초 걸려요");
+    try {
+      const v = await recognizeScaleWeight(file);
+      if (v != null) { onValue(String(v)); setMsg("✓ " + v + " 인식됨 — 값이 다르면 직접 고쳐주세요"); }
+      else setMsg("숫자를 못 찾았어요 — 표시창이 크고 정면으로 나오게 다시 찍어주세요");
+    } catch (err) {
+      setMsg("⚠️ 인식에 실패했어요 — 다시 시도해주세요");
+    }
+    setBusy(false);
+  };
+  const onPick = (fromCamera) => (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    run(f, fromCamera);
+  };
+  const saveToAlbum = async () => {
+    if (!shotFile) return;
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [shotFile] })) {
+        await navigator.share({ files: [shotFile], title: "저울 사진" });
+        setMsg("공유 창에서 '이미지 저장'을 누르면 사진첩에 들어가요");
+        return;
+      }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    try {
+      const url = URL.createObjectURL(shotFile);
+      const a = document.createElement("a"); a.href = url; a.download = "저울_" + today() + ".jpg";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setMsg("사진이 다운로드 폴더에 저장됐어요");
+    } catch (e) { setMsg("⚠️ 저장에 실패했어요"); }
+  };
+  return (
+    <div className="field" style={{ marginTop: -6 }}>
+      <div className="chiprow" style={{ marginTop: 0 }}>
+        <button className="chipbtn" onClick={() => !busy && camRef.current && camRef.current.click()}>
+          {busy ? "⏳ 인식 중…" : "📷 저울 찍어서 인식"}
+        </button>
+        <button className="chipbtn" onClick={() => !busy && albRef.current && albRef.current.click()}>🖼 앨범에서</button>
+        {shotFile && !busy && <button className="chipbtn" onClick={saveToAlbum}>💾 사진첩에 저장</button>}
+      </div>
+      {msg && <div className="hint" style={{ marginTop: 6 }}>{msg}</div>}
+      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPick(true)} />
+      <input ref={albRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onPick(false)} />
+    </div>
+  );
+}
+
 /* ════════════════════ 계산 ════════════════════ */
 const sortedRecs = (ind) => [...(ind.bottleRecords || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
 const latestRec = (ind) => { const s = sortedRecs(ind); return s.length ? s[s.length - 1] : null; };
@@ -835,6 +985,7 @@ function GrowthRowForm({ initial, brands, onSave, onClose, onDelete }) {
           </div>
         </F>
       </div>
+      <ScaleScanBtn onValue={(v) => set("weight", v)} />
       <div className="row">
         <F label="먹이 종류" half>
           <select className="in" value={f.feedType} onChange={(e) => set("feedType", e.target.value)}>
@@ -1090,6 +1241,7 @@ function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
         <F label="유충 무게 g" half><input className="in mono" inputMode="decimal" value={f.weight} onChange={(e) => set("weight", e.target.value)} placeholder="34.2" /></F>
         <F label="두폭 mm" half><input className="in mono" inputMode="decimal" value={f.headWidth} onChange={(e) => set("headWidth", e.target.value)} /></F>
       </div>
+      <ScaleScanBtn onValue={(v) => set("weight", v)} />
       <div className="row">
         <F label="먹이 종류" half>
           <select className="in" value={f.feedType} onChange={(e) => set("feedType", e.target.value)}>
@@ -1224,6 +1376,7 @@ function PupationForm({ initial, onSave, onClose }) {
         <F label="용화일" half><input type="date" className="in" value={f.pupaDate} onChange={(e) => set("pupaDate", e.target.value)} /></F>
       </div>
       <F label="번데기 무게 g — 환원율 기준값"><input className="in mono" inputMode="decimal" value={f.pupaWeight} onChange={(e) => set("pupaWeight", e.target.value)} /></F>
+      <ScaleScanBtn onValue={(v) => set("pupaWeight", v)} />
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="원더링 여부 등" /></F>
     </Modal>
   );
