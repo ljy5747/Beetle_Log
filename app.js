@@ -201,121 +201,290 @@ function makeICS(summary, dateISO, desc) {
 }
 
 
-/* ════════════════════ 저울 숫자 인식 (무료 OCR · 폰 안에서 처리, 사진은 저장하지 않음) ════════════════════ */
-let _ocrWorkerP = null;
-function getOcrWorker() {
-  if (!_ocrWorkerP) {
-    _ocrWorkerP = (async () => {
-      const worker = await Tesseract.createWorker("eng");
-      await worker.setParameters({
-        tessedit_char_whitelist: "0123456789.",   /* 숫자와 점만 읽기 */
-        tessedit_pageseg_mode: "11",              /* 사진 속 흩어진 글자 찾기 모드 */
-      });
-      return worker;
-    })().catch((e) => { _ocrWorkerP = null; throw e; });
+/* ════════════════════ 저울 숫자 인식 (7세그먼트 전용 해독기 · 전부 폰 안에서 처리, 사진은 저장하지 않음) ════════════════════ */
+/* 일반 OCR 대신 저울 표시창의 7세그먼트 숫자 구조를 직접 해독한다.
+   다운로드가 없어 즉시 동작하고, 표시창을 자동으로 찾아 그 안의 숫자·소수점을 읽는다. */
+const slDecoder = (() => {
+  /* 적분 이미지 (지역 평균 계산용) */
+  function integralImage(g, w, h) {
+    const I = new Float64Array((w + 1) * (h + 1));
+    for (let y = 0; y < h; y++) { let row = 0;
+      for (let x = 0; x < w; x++) { row += g[y * w + x]; I[(y + 1) * (w + 1) + (x + 1)] = I[y * (w + 1) + (x + 1)] + row; } }
+    return I;
   }
-  return _ocrWorkerP;
-}
+  /* 적응형 이진화: 주변보다 충분히 어두우면(invert 시 밝으면) 1 */
+  function binarize(g, w, h, win, k, invert) {
+    const I = integralImage(g, w, h); const bin = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - win), y0 = Math.max(0, y - win), x1 = Math.min(w - 1, x + win), y1 = Math.min(h - 1, y + win);
+      const m = (I[(y1 + 1) * (w + 1) + x1 + 1] - I[y0 * (w + 1) + x1 + 1] - I[(y1 + 1) * (w + 1) + x0] + I[y0 * (w + 1) + x0]) / ((x1 - x0 + 1) * (y1 - y0 + 1));
+      const v = g[y * w + x];
+      bin[y * w + x] = (invert ? v > m * (2 - k) : v < m * k) ? 1 : 0;
+    }
+    return bin;
+  }
+  /* 팽창/침식 → 닫힘 (세그먼트 사이 틈 잇기) */
+  function morph(bin, w, h, r, isDilate) {
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let hit = isDilate ? 0 : 1;
+      outer: for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const nx = x + dx, ny = y + dy;
+        const v = (nx >= 0 && nx < w && ny >= 0 && ny < h) ? bin[ny * w + nx] : 0;
+        if (isDilate) { if (v) { hit = 1; break outer; } } else { if (!v) { hit = 0; break outer; } }
+      }
+      out[y * w + x] = hit;
+    }
+    return out;
+  }
+  const close_ = (b, w, h, r) => morph(morph(b, w, h, r, true), w, h, r, false);
+  /* 선택 픽셀들의 Otsu 임계값 (표시창 내부 전용 이진화에 사용 — 그림자·조명 얼룩 배제) */
+  function otsu(gray, idxs) {
+    const hist = new Float64Array(256);
+    for (let j = 0; j < idxs.length; j++) hist[Math.max(0, Math.min(255, gray[idxs[j]] | 0))]++;
+    const total = idxs.length;
+    let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+    let sumB = 0, wB = 0, best = 127, maxVar = -1;
+    for (let t = 0; t < 256; t++) {
+      wB += hist[t]; if (!wB) continue;
+      const wF = total - wB; if (!wF) break;
+      sumB += t * hist[t];
+      const mB = sumB / wB, mF = (sum - sumB) / wF;
+      const v = wB * wF * (mB - mF) * (mB - mF);
+      if (v > maxVar) { maxVar = v; best = t; }
+    }
+    return best;
+  }
+  /* 연결 성분 라벨링 */
+  function components(bin, w, h) {
+    const lab = new Int32Array(w * h), comps = [], stack = []; let id = 0;
+    for (let i = 0; i < w * h; i++) {
+      if (!bin[i] || lab[i]) continue;
+      id++; let x0 = w, y0 = h, x1 = 0, y1 = 0, area = 0;
+      stack.length = 0; stack.push(i); lab[i] = id;
+      while (stack.length) {
+        const p = stack.pop(), px = p % w, py = (p / w) | 0; area++;
+        if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py;
+        if (px > 0 && bin[p - 1] && !lab[p - 1]) { lab[p - 1] = id; stack.push(p - 1); }
+        if (px < w - 1 && bin[p + 1] && !lab[p + 1]) { lab[p + 1] = id; stack.push(p + 1); }
+        if (py > 0 && bin[p - w] && !lab[p - w]) { lab[p - w] = id; stack.push(p - w); }
+        if (py < h - 1 && bin[p + w] && !lab[p + w]) { lab[p + w] = id; stack.push(p + w); }
+      }
+      comps.push({ x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, area, id });
+    }
+    comps.lab = lab;
+    return comps;
+  }
+  /* 세그먼트 패턴표 [A,B,C,D,E,F,G] — 변형 폰트 패턴 포함 */
+  const SEG_DIGITS = { "1111110": 0, "0110000": 1, "1101101": 2, "1111001": 3, "0110011": 4, "1011011": 5, "1011111": 6, "1110000": 7, "1111111": 8, "1111011": 9, "1110011": 9, "1110010": 7, "0011111": 6 };
+  /* 두꺼운 획 폰트에서도 침범이 없도록 좁은 띠로 샘플링 */
+  const ZONES = [
+    [0.30, 0.00, 0.70, 0.14], /* A 위 */
+    [0.78, 0.17, 1.00, 0.43], /* B 우상 */
+    [0.78, 0.57, 1.00, 0.83], /* C 우하 */
+    [0.30, 0.86, 0.70, 1.00], /* D 아래 */
+    [0.00, 0.57, 0.22, 0.83], /* E 좌하 */
+    [0.00, 0.17, 0.22, 0.43], /* F 좌상 */
+    [0.30, 0.43, 0.70, 0.57], /* G 가운데 */
+  ];
+  /* 기울임(이탤릭) 보정: 폭이 최소가 되는 기울기를 골라 펴기 */
+  function shearDigit(bin, w, c, lab) {
+    const mine = (x, y) => bin[y * w + x] && (!lab || lab[y * w + x] === c.id);
+    let best = null;
+    for (const s of [0, 0.08, 0.15, 0.22, 0.3]) {
+      let minX = 1e9, maxX = -1e9;
+      for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) {
+        if (!mine(x, y)) continue;
+        const nx = x - s * (c.y1 - y);
+        if (nx < minX) minX = nx; if (nx > maxX) maxX = nx;
+      }
+      if (minX > maxX) continue;
+      const W2 = Math.round(maxX - minX) + 1;
+      if (!best || W2 < best.W2) best = { s, minX, W2 };
+    }
+    if (!best) return null;
+    const { s, minX, W2 } = best;
+    const H = c.h, g2 = new Uint8Array(W2 * H);
+    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) {
+      if (!mine(x, y)) continue;
+      const nx = Math.round(x - s * (c.y1 - y) - minX);
+      if (nx >= 0 && nx < W2) g2[(y - c.y0) * W2 + nx] = 1;
+    }
+    return { g2, W2, H };
+  }
+  /* 자릿수 하나 판독 */
+  function decodeDigit(bin, w, c, onTh, lab) {
+    const sh = shearDigit(bin, w, c, lab);
+    if (!sh) return null;
+    const { g2, W2, H } = sh;
+    if (W2 / H < 0.16) return 1; /* 펴고 나서도 좁으면 1 */
+    let pat = "";
+    for (const [zx0, zy0, zx1, zy1] of ZONES) {
+      const ax0 = Math.round(zx0 * W2), ay0 = Math.round(zy0 * H);
+      const ax1 = Math.round(zx1 * W2) - 1, ay1 = Math.round(zy1 * H) - 1;
+      let on = 0, tot = 0;
+      for (let y = ay0; y <= ay1; y++) for (let x = ax0; x <= ax1; x++) { tot++; if (g2[y * W2 + x]) on++; }
+      pat += (tot ? on / tot : 0) > onTh ? "1" : "0";
+    }
+    if (pat in SEG_DIGITS) return SEG_DIGITS[pat];
+    let best = null; const hits = {};
+    let nHit = 0;
+    for (const p in SEG_DIGITS) {
+      let dist = 0; for (let i = 0; i < 7; i++) if (p[i] !== pat[i]) dist++;
+      if (dist === 1 && !(SEG_DIGITS[p] in hits)) { hits[SEG_DIGITS[p]] = 1; nHit++; best = SEG_DIGITS[p]; }
+    }
+    return nHit === 1 ? best : null;
+  }
+  /* 비슷한 높이로 가로로 늘어선 숫자 줄 찾기 + 소수점 배치 */
+  function findRow(bin, w, comps, imgH, onTh) {
+    const cand = comps.filter((c) =>
+      c.h >= imgH * 0.04 && c.h <= imgH * 0.7 && c.w / c.h <= 0.85 && c.w >= 2 &&
+      c.area / (c.w * c.h) >= 0.18 && c.area / (c.w * c.h) <= 0.97);
+    if (!cand.length) return null;
+    cand.sort((a, b) => b.h - a.h);
+    for (const tall of cand.slice(0, 6)) {
+      const row = cand.filter((c) => {
+        if (c.h < tall.h * 0.6 || c.h > tall.h * 1.4) return false;
+        const ov = Math.min(c.y1, tall.y1) - Math.max(c.y0, tall.y0);
+        return ov > Math.min(c.h, tall.h) * 0.5;
+      }).sort((a, b) => a.x0 - b.x0);
+      if (!row.length || row.length > 8) continue;
+      const dec = row.map((c) => decodeDigit(bin, w, c, onTh, comps.lab));
+      const ti = row.indexOf(tall);
+      if (dec[ti] == null) continue;
+      let s = ti, e = ti;
+      while (s > 0 && dec[s - 1] != null && row[s].x0 - row[s - 1].x1 < tall.h * 0.9) s--;
+      while (e < row.length - 1 && dec[e + 1] != null && row[e + 1].x0 - row[e].x1 < tall.h * 0.9) e++;
+      const digits = row.slice(s, e + 1);
+      const dots = comps.filter((c) =>
+        c.h <= tall.h * 0.3 && c.w <= tall.h * 0.35 && c.area >= 3 && digits.indexOf(c) === -1 &&
+        (c.y0 + c.y1) / 2 > tall.y0 + tall.h * 0.6 && (c.y0 + c.y1) / 2 < tall.y1 + tall.h * 0.2);
+      let out = "";
+      for (let i = s; i <= e; i++) {
+        out += dec[i];
+        if (i < e) {
+          const dot = dots.find((p) => p.x0 >= row[i].x1 - tall.h * 0.12 && p.x1 <= row[i + 1].x0 + tall.h * 0.12);
+          if (dot) out += ".";
+        }
+      }
+      const v = parseFloat(out);
+      if (out.length && isFinite(v) && v >= 0.05 && v <= 5000)
+        return { value: v, raw: out, nDigits: digits.length };
+    }
+    return null;
+  }
+  /* 전체 파이프라인: ①바로 숫자 줄 탐색 → ②표시창 덩어리 찾아 내부만 Otsu 재이진화 후 재탐색 */
+  function readDisplay(gray, w, h, opts) {
+    const { win, k, r, invert, onTh } = opts;
+    const bin = close_(binarize(gray, w, h, win, k, invert), w, h, r);
+    const comps = components(bin, w, h);
+    const direct = findRow(bin, w, comps, h, onTh);
+    if (direct && direct.nDigits >= 2) return direct;
+    let weak = direct;
+    const disps = comps.filter((c) =>
+      c.w / c.h >= 1.2 && c.w / c.h <= 4.5 && c.h >= h * 0.08 &&
+      c.area / (c.w * c.h) >= 0.06 && c.area / (c.w * c.h) <= 0.7)
+      .sort((a, b) => b.area - a.area).slice(0, 3);
+    for (const d of disps) {
+      const band = Math.max(4, Math.round(Math.min(d.w, d.h) * 0.05)) + r;
+      const idxs = [];
+      for (let y = d.y0 + band; y <= d.y1 - band; y++)
+        for (let x = d.x0 + band; x <= d.x1 - band; x++) idxs.push(y * w + x);
+      if (idxs.length < 200) continue;
+      const th = otsu(gray, idxs);
+      for (const darkDigits of [!invert, invert]) {
+        const bin2 = new Uint8Array(w * h);
+        for (let j = 0; j < idxs.length; j++) { const i = idxs[j]; bin2[i] = (darkDigits ? gray[i] < th : gray[i] > th) ? 1 : 0; }
+        const bin2c = close_(bin2, w, h, r);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          if (x < d.x0 + band || x > d.x1 - band || y < d.y0 + band || y > d.y1 - band) bin2c[y * w + x] = 0;
+        }
+        const comps2 = components(bin2c, w, h);
+        const rr = findRow(bin2c, w, comps2, h, onTh);
+        if (rr && rr.nDigits >= 2) return rr;
+        if (rr && !weak) weak = rr;
+      }
+    }
+    return weak;
+  }
+  return { readDisplay };
+})();
 
-function loadImageFile(file) {
-  return new Promise((res, rej) => {
+/* 사진 파일 → 이미지 */
+function slLoadImage(file) {
+  return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => { URL.revokeObjectURL(url); res(img); };
-    img.onerror = (e) => { URL.revokeObjectURL(url); rej(e); };
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이미지 열기 실패")); };
     img.src = url;
   });
 }
-
-/* 흑백 변환 + 명암 극대화. invert=true면 어두운 화면·밝은 숫자(백라이트 저울)용 */
-function scaleCanvas(img, invert) {
-  const MAX = 1100;
-  const sc = Math.min(1, MAX / Math.max(img.width, img.height));
-  const w = Math.max(1, Math.round(img.width * sc)), h = Math.max(1, Math.round(img.height * sc));
-  const cv = document.createElement("canvas");
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext("2d");
+/* 이미지 → 흑백 픽셀 배열 (긴 변 기준 축소) */
+function slGray(img, maxSide) {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const scale = Math.min(1, maxSide / Math.max(iw, ih));
+  const w = Math.max(1, Math.round(iw * scale)), h = Math.max(1, Math.round(ih * scale));
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
   ctx.drawImage(img, 0, 0, w, h);
-  const im = ctx.getImageData(0, 0, w, h), d = im.data, n = w * h;
-  const g = new Float32Array(n);
-  let lo = 255, hi = 0;
-  for (let i = 0; i < n; i++) {
-    const v = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
-    g[i] = v; if (v < lo) lo = v; if (v > hi) hi = v;
-  }
-  const range = hi - lo || 1;
-  for (let i = 0; i < n; i++) {
-    let v = ((g[i] - lo) / range) * 255;
-    if (invert) v = 255 - v;
-    d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
-  }
-  ctx.putImageData(im, 0, 0);
-  return cv;
-}
-
-/* 인식 결과에서 저울 표시창 숫자 고르기
-   — 표시창 숫자는 사진에서 가장 큰 글자이므로 글자 높이를 최우선으로,
-     소수점 유무·인식 신뢰도를 가산점으로 사용 (MAX 3000g 같은 작은 인쇄글씨 배제) */
-function pickWeight(rd) {
-  const cands = [];
-  const add = (txt, conf, h) => {
-    const ms = String(txt || "").match(/\d+(?:\.\d+)?/g) || [];
-    ms.forEach((m) => {
-      const v = parseFloat(m);
-      if (isFinite(v) && v >= 0.1 && v <= 999) {
-        cands.push({ v, conf: conf || 0, dot: m.includes(".") ? 1 : 0, h: h || 0 });
-      }
-    });
-  };
-  (rd.words || []).forEach((w) => {
-    const h = w.bbox ? Math.max(0, w.bbox.y1 - w.bbox.y0) : 0;
-    add(w.text, w.confidence, h);
-  });
-  if (!cands.length) add(rd.text, 0, 0);
-  if (!cands.length) return null;
-  const maxH = Math.max.apply(null, cands.map((c) => c.h)) || 1;
-  cands.forEach((c) => { c.score = (c.h / maxH) * 100 + c.dot * 18 + c.conf * 0.15; });
-  cands.sort((a, b) => b.score - a.score);
-  return cands[0].v;
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const gray = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) gray[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+  return { gray, w, h };
 }
 
 async function recognizeScaleWeight(file) {
-  const img = await loadImageFile(file);
-  const worker = await getOcrWorker();
-  for (const invert of [false, true]) {
-    const res = await worker.recognize(scaleCanvas(img, invert));
-    const v = pickWeight(res.data);
-    if (v != null) return v;
+  const img = await slLoadImage(file);
+  const { gray, w, h } = slGray(img, 1000);
+  /* 여러 설정을 순서대로 시도 — 보통 첫 시도(어두운 숫자 LCD)에서 끝난다 */
+  const tries = [
+    { invert: false, win: 25, k: 0.85, r: 2 },
+    { invert: true, win: 25, k: 0.85, r: 2 },   /* 밝은 숫자(백라이트) 저울 */
+    { invert: false, win: 45, k: 0.88, r: 2 },
+    { invert: false, win: 25, k: 0.85, r: 3 },
+  ];
+  let weak = null;
+  for (const t of tries) {
+    const res = slDecoder.readDisplay(gray, w, h, { win: t.win, k: t.k, r: t.r, invert: t.invert, onTh: 0.3 });
+    if (res && res.nDigits >= 2) return res.raw;
+    if (res && !weak) weak = res.raw;
+    await new Promise((rs) => setTimeout(rs, 0)); /* 화면 멈춤 방지 */
   }
-  return null;
+  return weak;
 }
 
 /* 저울 촬영 버튼 — 무게 입력칸 아래에 붙여 쓰는 공용 컴포넌트
    📷 촬영해서 인식 / 🖼 앨범 사진으로 인식 / 💾 방금 찍은 사진 사진첩에 저장 */
 function ScaleScanBtn({ onValue }) {
-  const camRef = useRef(null);
-  const albRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [shotFile, setShotFile] = useState(null); /* 방금 촬영한 사진 (사진첩 저장용) */
   const run = async (file, fromCamera) => {
     if (!file) return;
-    if (!window.Tesseract) { setMsg("⚠️ 인식 모듈을 불러오지 못했어요 — 인터넷 연결 후 새로고침해주세요"); return; }
     setShotFile(fromCamera ? file : null);
-    setBusy(true); setMsg("숫자를 읽는 중… 처음 한 번은 10~20초 걸려요");
+    setBusy(true); setMsg("숫자를 읽는 중…");
     try {
       const v = await recognizeScaleWeight(file);
       if (v != null) { onValue(String(v)); setMsg("✓ " + v + " 인식됨 — 값이 다르면 직접 고쳐주세요"); }
-      else setMsg("숫자를 못 찾았어요 — 표시창이 크고 정면으로 나오게 다시 찍어주세요");
+      else setMsg("숫자를 못 찾았어요 — 표시창이 크고 반듯하게 나오도록 다시 찍어주세요");
     } catch (err) {
       setMsg("⚠️ 인식에 실패했어요 — 다시 시도해주세요");
     }
     setBusy(false);
   };
-  const onPick = (fromCamera) => (e) => {
-    const f = e.target.files && e.target.files[0];
-    e.target.value = "";
-    run(f, fromCamera);
+  /* 매번 input을 새로 만들어 capture 속성을 직접 지정 — 일부 폰에서 카메라 대신 선택창이 뜨는 문제 해결 */
+  const pick = (fromCamera) => {
+    if (busy) return;
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    if (fromCamera) inp.setAttribute("capture", "environment");
+    inp.style.display = "none";
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); run(f, fromCamera); };
+    inp.addEventListener("cancel", () => inp.remove());
+    document.body.appendChild(inp);
+    inp.click();
   };
   const saveToAlbum = async () => {
     if (!shotFile) return;
@@ -337,15 +506,13 @@ function ScaleScanBtn({ onValue }) {
   return (
     <div className="field" style={{ marginTop: -6 }}>
       <div className="chiprow" style={{ marginTop: 0 }}>
-        <button className="chipbtn" onClick={() => !busy && camRef.current && camRef.current.click()}>
+        <button className="chipbtn" onClick={() => pick(true)}>
           {busy ? "⏳ 인식 중…" : "📷 저울 찍어서 인식"}
         </button>
-        <button className="chipbtn" onClick={() => !busy && albRef.current && albRef.current.click()}>🖼 앨범에서</button>
+        <button className="chipbtn" onClick={() => pick(false)}>🖼 앨범에서</button>
         {shotFile && !busy && <button className="chipbtn" onClick={saveToAlbum}>💾 사진첩에 저장</button>}
       </div>
       {msg && <div className="hint" style={{ marginTop: 6 }}>{msg}</div>}
-      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPick(true)} />
-      <input ref={albRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onPick(false)} />
     </div>
   );
 }
