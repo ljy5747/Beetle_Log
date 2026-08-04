@@ -303,8 +303,9 @@ const slDecoder = (() => {
     [0.30, 0.43, 0.70, 0.57], /* G 가운데 */
   ];
   /* 성분에 얇게 붙은 선(LCD 테두리·밑줄)을 잘라 경계상자를 바로잡는다 */
+  const belongs = (c, lab, i) => !lab || (c.ids ? c.ids.indexOf(lab[i]) >= 0 : lab[i] === c.id);
   function trimComp(bin, w, c, lab) {
-    const mine = (x, y) => bin[y * w + x] && (!lab || lab[y * w + x] === c.id);
+    const mine = (x, y) => bin[y * w + x] && belongs(c, lab, y * w + x);
     const rows = new Int32Array(c.h), cols = new Int32Array(c.w);
     for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++)
       if (mine(x, y)) { rows[y - c.y0]++; cols[x - c.x0]++; }
@@ -349,12 +350,12 @@ const slDecoder = (() => {
       break;
     }
     if (x0 === c.x0 && x1 === c.x1 && y0 === c.y0 && y1 === c.y1) return c;
-    return { x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, area: c.area, id: c.id };
+    return { x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, area: c.area, id: c.id, ids: c.ids };
   }
 
   /* 기울임(이탤릭) 보정: 폭이 최소가 되는 기울기를 골라 펴기 */
   function shearDigit(bin, w, c, lab) {
-    const mine = (x, y) => bin[y * w + x] && (!lab || lab[y * w + x] === c.id);
+    const mine = (x, y) => bin[y * w + x] && belongs(c, lab, y * w + x);
     let best = null;
     for (const s of [0, 0.08, 0.15, 0.22, 0.3]) {
       let minX = 1e9, maxX = -1e9;
@@ -402,18 +403,58 @@ const slDecoder = (() => {
     return nHit === 1 ? best : null;
   }
   /* 비슷한 높이로 가로로 늘어선 숫자 줄 찾기 + 소수점 배치 */
+  /* 7세그 '1'처럼 위·아래 획이 끊겨 두 조각으로 잡힌 경우 한 글자로 합친다 */
+  function mergeStacked(list) {
+    const items = list.map((c) => ({ x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, w: c.w, h: c.h, area: c.area, id: c.id, ids: c.ids || [c.id] }));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      outer:
+      for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        const up = a.y1 <= b.y1 ? a : b, lo = a.y1 <= b.y1 ? b : a;
+        const ovX = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+        if (ovX < Math.min(a.w, b.w) * 0.5) continue;      /* 같은 세로줄에 있어야 함 */
+        const gap = lo.y0 - up.y1;
+        if (gap < -Math.min(a.h, b.h) * 0.3 || gap > Math.max(a.h, b.h) * 0.55) continue;
+        const nx0 = Math.min(a.x0, b.x0), nx1 = Math.max(a.x1, b.x1);
+        const ny0 = Math.min(a.y0, b.y0), ny1 = Math.max(a.y1, b.y1);
+        const nw = nx1 - nx0 + 1, nh = ny1 - ny0 + 1;
+        if (nw / nh > 0.45) continue;                       /* 합쳐도 가늘어야 '1' */
+        items[i] = { x0: nx0, y0: ny0, x1: nx1, y1: ny1, w: nw, h: nh, area: a.area + b.area, id: a.id, ids: a.ids.concat(b.ids) };
+        items.splice(j, 1);
+        changed = true;
+        break outer;
+      }
+    }
+    return items;
+  }
   function findRow(bin, w, comps, imgH, onTh) {
     const cand = comps.filter((c) =>
       c.h >= imgH * 0.04 && c.h <= imgH * 0.7 && c.w / c.h <= 0.85 && c.w >= 2 &&
       c.area / (c.w * c.h) >= 0.18 && c.area / (c.w * c.h) <= 0.97);
+    /* '1' 조각 후보 (줄 높이보다 짧은 가는 세로획) */
+    const frags = comps.filter((c) =>
+      c.h >= imgH * 0.015 && c.w / c.h <= 0.60 && c.w >= 2 && c.area / (c.w * c.h) >= 0.30);
     if (!cand.length) return null;
     cand.sort((a, b) => b.h - a.h);
     for (const tall of cand.slice(0, 6)) {
-      const row = cand.filter((c) => {
+      const inRow = (c) => {
         if (c.h < tall.h * 0.6 || c.h > tall.h * 1.4) return false;
         const ov = Math.min(c.y1, tall.y1) - Math.max(c.y0, tall.y0);
         return ov > Math.min(c.h, tall.h) * 0.5;
-      }).sort((a, b) => a.x0 - b.x0);
+      };
+      const members = cand.filter(inRow);
+      /* 7세그 '1'이 위·아래로 끊긴 경우: 이 줄에 비해 짧은 세로획들만 합쳐 본다 */
+      const shorts = frags.filter((c) => c.h < tall.h * 0.62 &&
+        Math.min(c.y1, tall.y1) - Math.max(c.y0, tall.y0) > 0);
+      for (const m of mergeStacked(shorts)) {
+        if (m.ids.length < 2 || m.w / m.h > 0.45) continue;
+        if (!inRow(m)) continue;
+        if (members.some((c) => m.x0 <= c.x1 && c.x0 <= m.x1)) continue; /* 기존 글자와 겹치면 제외 */
+        members.push(m);
+      }
+      const row = members.sort((a, b) => a.x0 - b.x0);
       if (!row.length || row.length > 8) continue;
       const dec = row.map((c) => decodeDigit(bin, w, c, onTh, comps.lab));
       const ti = row.indexOf(tall);
@@ -424,8 +465,11 @@ const slDecoder = (() => {
       const digits = row.slice(s, e + 1);
       /* 소수점: 베이스라인 근처의 작고 네모난 덩어리 하나만 인정 */
       const base = tall.y1;
+      const usedIds = [];
+      digits.forEach((d) => (d.ids || [d.id]).forEach((x) => usedIds.push(x)));
       const dots = comps.filter((c) => {
         if (digits.indexOf(c) !== -1) return false;
+        if (usedIds.indexOf(c.id) !== -1) return false;
         if (c.h < tall.h * 0.05 || c.h > tall.h * 0.28) return false;
         if (c.w < tall.h * 0.05 || c.w > tall.h * 0.30) return false;
         const ar = c.w / c.h;
