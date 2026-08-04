@@ -200,6 +200,404 @@ function makeICS(summary, dateISO, desc) {
     "END:VEVENT", "END:VCALENDAR"].join("\r\n");
 }
 
+/* ════════════════════ 저울 숫자 인식 (7세그먼트 전용 해독기 · 전부 폰 안에서 처리, 사진은 저장하지 않음) ════════════════════ */
+/* 일반 OCR 대신 저울 표시창의 7세그먼트 숫자 구조를 직접 해독한다.
+   다운로드가 없어 즉시 동작하고, 표시창을 자동으로 찾아 그 안의 숫자·소수점을 읽는다. */
+const slDecoder = (() => {
+  /* 적분 이미지 (지역 평균 계산용) */
+  function integralImage(g, w, h) {
+    const I = new Float64Array((w + 1) * (h + 1));
+    for (let y = 0; y < h; y++) { let row = 0;
+      for (let x = 0; x < w; x++) { row += g[y * w + x]; I[(y + 1) * (w + 1) + (x + 1)] = I[y * (w + 1) + (x + 1)] + row; } }
+    return I;
+  }
+  /* 적응형 이진화: 주변보다 충분히 어두우면(invert 시 밝으면) 1 */
+  function binarize(g, w, h, win, k, invert) {
+    const I = integralImage(g, w, h); const bin = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - win), y0 = Math.max(0, y - win), x1 = Math.min(w - 1, x + win), y1 = Math.min(h - 1, y + win);
+      const m = (I[(y1 + 1) * (w + 1) + x1 + 1] - I[y0 * (w + 1) + x1 + 1] - I[(y1 + 1) * (w + 1) + x0] + I[y0 * (w + 1) + x0]) / ((x1 - x0 + 1) * (y1 - y0 + 1));
+      const v = g[y * w + x];
+      bin[y * w + x] = (invert ? v > m * (2 - k) : v < m * k) ? 1 : 0;
+    }
+    return bin;
+  }
+  /* 팽창/침식 → 닫힘 (세그먼트 사이 틈 잇기) */
+  function morph(bin, w, h, r, isDilate) {
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let hit = isDilate ? 0 : 1;
+      outer: for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const nx = x + dx, ny = y + dy;
+        const v = (nx >= 0 && nx < w && ny >= 0 && ny < h) ? bin[ny * w + nx] : 0;
+        if (isDilate) { if (v) { hit = 1; break outer; } } else { if (!v) { hit = 0; break outer; } }
+      }
+      out[y * w + x] = hit;
+    }
+    return out;
+  }
+  const close_ = (b, w, h, r) => morph(morph(b, w, h, r, true), w, h, r, false);
+  const open_ = (b, w, h, r) => morph(morph(b, w, h, r, false), w, h, r, true);
+  /* 세로 방향 1D 형태학 — 가로로 뻗은 얇은 선(테두리·밑줄)만 제거, 세로획('1')은 보존 */
+  function morphV(bin, w, h, r, isDilate) {
+    const out = new Uint8Array(w * h);
+    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) {
+      let hit = isDilate ? 0 : 1;
+      for (let dy = -r; dy <= r; dy++) {
+        const ny = y + dy;
+        const v = (ny >= 0 && ny < h) ? bin[ny * w + x] : 0;
+        if (isDilate) { if (v) { hit = 1; break; } } else { if (!v) { hit = 0; break; } }
+      }
+      out[y * w + x] = hit;
+    }
+    return out;
+  }
+  const openV = (b, w, h, r) => morphV(morphV(b, w, h, r, false), w, h, r, true);
+  /* 선택 픽셀들의 Otsu 임계값 (표시창 내부 전용 이진화에 사용 — 그림자·조명 얼룩 배제) */
+  function otsu(gray, idxs) {
+    const hist = new Float64Array(256);
+    for (let j = 0; j < idxs.length; j++) hist[Math.max(0, Math.min(255, gray[idxs[j]] | 0))]++;
+    const total = idxs.length;
+    let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+    let sumB = 0, wB = 0, best = 127, maxVar = -1;
+    for (let t = 0; t < 256; t++) {
+      wB += hist[t]; if (!wB) continue;
+      const wF = total - wB; if (!wF) break;
+      sumB += t * hist[t];
+      const mB = sumB / wB, mF = (sum - sumB) / wF;
+      const v = wB * wF * (mB - mF) * (mB - mF);
+      if (v > maxVar) { maxVar = v; best = t; }
+    }
+    return best;
+  }
+  /* 연결 성분 라벨링 */
+  function components(bin, w, h) {
+    const lab = new Int32Array(w * h), comps = [], stack = []; let id = 0;
+    for (let i = 0; i < w * h; i++) {
+      if (!bin[i] || lab[i]) continue;
+      id++; let x0 = w, y0 = h, x1 = 0, y1 = 0, area = 0;
+      stack.length = 0; stack.push(i); lab[i] = id;
+      while (stack.length) {
+        const p = stack.pop(), px = p % w, py = (p / w) | 0; area++;
+        if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py;
+        if (px > 0 && bin[p - 1] && !lab[p - 1]) { lab[p - 1] = id; stack.push(p - 1); }
+        if (px < w - 1 && bin[p + 1] && !lab[p + 1]) { lab[p + 1] = id; stack.push(p + 1); }
+        if (py > 0 && bin[p - w] && !lab[p - w]) { lab[p - w] = id; stack.push(p - w); }
+        if (py < h - 1 && bin[p + w] && !lab[p + w]) { lab[p + w] = id; stack.push(p + w); }
+      }
+      comps.push({ x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, area, id });
+    }
+    comps.lab = lab;
+    return comps;
+  }
+  /* 세그먼트 패턴표 [A,B,C,D,E,F,G] — 변형 폰트 패턴 포함 */
+  const SEG_DIGITS = { "1111110": 0, "0110000": 1, "1101101": 2, "1111001": 3, "0110011": 4, "1011011": 5, "1011111": 6, "1110000": 7, "1111111": 8, "1111011": 9, "1110011": 9, "1110010": 7, "0011111": 6 };
+  /* 두꺼운 획 폰트에서도 침범이 없도록 좁은 띠로 샘플링 */
+  const ZONES = [
+    [0.30, 0.00, 0.70, 0.14], /* A 위 */
+    [0.78, 0.17, 1.00, 0.43], /* B 우상 */
+    [0.78, 0.57, 1.00, 0.83], /* C 우하 */
+    [0.30, 0.86, 0.70, 1.00], /* D 아래 */
+    [0.00, 0.57, 0.22, 0.83], /* E 좌하 */
+    [0.00, 0.17, 0.22, 0.43], /* F 좌상 */
+    [0.30, 0.43, 0.70, 0.57], /* G 가운데 */
+  ];
+  /* 성분에 얇게 붙은 선(LCD 테두리·밑줄)을 잘라 경계상자를 바로잡는다 */
+  function trimComp(bin, w, c, lab) {
+    const mine = (x, y) => bin[y * w + x] && (!lab || lab[y * w + x] === c.id);
+    const rows = new Int32Array(c.h), cols = new Int32Array(c.w);
+    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++)
+      if (mine(x, y)) { rows[y - c.y0]++; cols[x - c.x0]++; }
+    /* 획 두께 추정: 0이 아닌 열 값들의 중앙값 */
+    const nz = Array.from(cols).filter((v) => v > 0).sort((a, b) => a - b);
+    if (!nz.length) return c;
+    const medCol = nz[nz.length >> 1];
+    const thin = Math.max(2, Math.round(medCol * 0.18));
+    let y0 = c.y0, y1 = c.y1, x0 = c.x0, x1 = c.x1;
+    /* 위/아래에서 얇은 띠 제거 (얇은 줄 뒤에 빈 줄이 이어지면 붙은 잡선으로 판단) */
+    const rowThin = (i) => rows[i] > 0 && rows[i] < c.w * 0.05 ? false : false;
+    let i = 0;
+    while (i < c.h - 1 && (y1 - y0) > c.h * 0.4) {
+      /* 아래쪽 */
+      let j = y1 - c.y0;
+      let run = 0;
+      while (j - run >= 0 && rows[j - run] > 0) run++;
+      if (run > 0 && run <= thin && (j - run) >= 0 && rows[j - run] === 0) { y1 -= run; i++; continue; }
+      break;
+    }
+    i = 0;
+    while (i < c.h - 1 && (y1 - y0) > c.h * 0.4) {
+      let j = y0 - c.y0, run = 0;
+      while (j + run < c.h && rows[j + run] > 0) run++;
+      if (run > 0 && run <= thin && (j + run) < c.h && rows[j + run] === 0) { y0 += run; i++; continue; }
+      break;
+    }
+    /* 좌/우 */
+    const colThinLimit = Math.max(2, Math.round((y1 - y0 + 1) * 0.06));
+    i = 0;
+    while (i < c.w - 1 && (x1 - x0) > c.w * 0.35) {
+      let j = x1 - c.x0, run = 0;
+      while (j - run >= 0 && cols[j - run] > 0) run++;
+      if (run > 0 && run <= colThinLimit && (j - run) >= 0 && cols[j - run] === 0) { x1 -= run; i++; continue; }
+      break;
+    }
+    i = 0;
+    while (i < c.w - 1 && (x1 - x0) > c.w * 0.35) {
+      let j = x0 - c.x0, run = 0;
+      while (j + run < c.w && cols[j + run] > 0) run++;
+      if (run > 0 && run <= colThinLimit && (j + run) < c.w && cols[j + run] === 0) { x0 += run; i++; continue; }
+      break;
+    }
+    if (x0 === c.x0 && x1 === c.x1 && y0 === c.y0 && y1 === c.y1) return c;
+    return { x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, area: c.area, id: c.id };
+  }
+
+  /* 기울임(이탤릭) 보정: 폭이 최소가 되는 기울기를 골라 펴기 */
+  function shearDigit(bin, w, c, lab) {
+    const mine = (x, y) => bin[y * w + x] && (!lab || lab[y * w + x] === c.id);
+    let best = null;
+    for (const s of [0, 0.08, 0.15, 0.22, 0.3]) {
+      let minX = 1e9, maxX = -1e9;
+      for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) {
+        if (!mine(x, y)) continue;
+        const nx = x - s * (c.y1 - y);
+        if (nx < minX) minX = nx; if (nx > maxX) maxX = nx;
+      }
+      if (minX > maxX) continue;
+      const W2 = Math.round(maxX - minX) + 1;
+      if (!best || W2 < best.W2) best = { s, minX, W2 };
+    }
+    if (!best) return null;
+    const { s, minX, W2 } = best;
+    const H = c.h, g2 = new Uint8Array(W2 * H);
+    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) {
+      if (!mine(x, y)) continue;
+      const nx = Math.round(x - s * (c.y1 - y) - minX);
+      if (nx >= 0 && nx < W2) g2[(y - c.y0) * W2 + nx] = 1;
+    }
+    return { g2, W2, H };
+  }
+  /* 자릿수 하나 판독 */
+  function decodeDigit(bin, w, c0, onTh, lab) {
+    const c = trimComp(bin, w, c0, lab);
+    const sh = shearDigit(bin, w, c, lab);
+    if (!sh) return null;
+    const { g2, W2, H } = sh;
+    if (W2 / H < 0.30) return 1; /* 펴고 나서도 좁으면 1 (다른 숫자는 0.35 이상) */
+    let pat = "";
+    for (const [zx0, zy0, zx1, zy1] of ZONES) {
+      const ax0 = Math.round(zx0 * W2), ay0 = Math.round(zy0 * H);
+      const ax1 = Math.round(zx1 * W2) - 1, ay1 = Math.round(zy1 * H) - 1;
+      let on = 0, tot = 0;
+      for (let y = ay0; y <= ay1; y++) for (let x = ax0; x <= ax1; x++) { tot++; if (g2[y * W2 + x]) on++; }
+      pat += (tot ? on / tot : 0) > onTh ? "1" : "0";
+    }
+    if (pat in SEG_DIGITS) return SEG_DIGITS[pat];
+    let best = null; const hits = {};
+    let nHit = 0;
+    for (const p in SEG_DIGITS) {
+      let dist = 0; for (let i = 0; i < 7; i++) if (p[i] !== pat[i]) dist++;
+      if (dist === 1 && !(SEG_DIGITS[p] in hits)) { hits[SEG_DIGITS[p]] = 1; nHit++; best = SEG_DIGITS[p]; }
+    }
+    return nHit === 1 ? best : null;
+  }
+  /* 비슷한 높이로 가로로 늘어선 숫자 줄 찾기 + 소수점 배치 */
+  function findRow(bin, w, comps, imgH, onTh) {
+    const cand = comps.filter((c) =>
+      c.h >= imgH * 0.04 && c.h <= imgH * 0.7 && c.w / c.h <= 0.85 && c.w >= 2 &&
+      c.area / (c.w * c.h) >= 0.18 && c.area / (c.w * c.h) <= 0.97);
+    if (!cand.length) return null;
+    cand.sort((a, b) => b.h - a.h);
+    for (const tall of cand.slice(0, 6)) {
+      const row = cand.filter((c) => {
+        if (c.h < tall.h * 0.6 || c.h > tall.h * 1.4) return false;
+        const ov = Math.min(c.y1, tall.y1) - Math.max(c.y0, tall.y0);
+        return ov > Math.min(c.h, tall.h) * 0.5;
+      }).sort((a, b) => a.x0 - b.x0);
+      if (!row.length || row.length > 8) continue;
+      const dec = row.map((c) => decodeDigit(bin, w, c, onTh, comps.lab));
+      const ti = row.indexOf(tall);
+      if (dec[ti] == null) continue;
+      let s = ti, e = ti;
+      while (s > 0 && dec[s - 1] != null && row[s].x0 - row[s - 1].x1 < tall.h * 0.9) s--;
+      while (e < row.length - 1 && dec[e + 1] != null && row[e + 1].x0 - row[e].x1 < tall.h * 0.9) e++;
+      const digits = row.slice(s, e + 1);
+      /* 소수점: 베이스라인 근처의 작고 네모난 덩어리 하나만 인정 */
+      const base = tall.y1;
+      const dots = comps.filter((c) => {
+        if (digits.indexOf(c) !== -1) return false;
+        if (c.h < tall.h * 0.05 || c.h > tall.h * 0.28) return false;
+        if (c.w < tall.h * 0.05 || c.w > tall.h * 0.30) return false;
+        const ar = c.w / c.h;
+        if (ar < 0.45 || ar > 2.2) return false;
+        if (c.area < c.w * c.h * 0.35) return false;
+        const cy = (c.y0 + c.y1) / 2;
+        return cy > base - tall.h * 0.22 && cy < base + tall.h * 0.14;
+      });
+      /* 각 자리 사이 틈마다 후보를 찾고, 그중 가장 큰 것 하나만 채택 */
+      let bestDot = null;
+      for (let i = s; i < e; i++) {
+        const gapL = row[i].x1, gapR = row[i + 1].x0, tol = tall.h * 0.10;
+        const hit = dots.filter((p) => p.x0 >= gapL - tol && p.x1 <= gapR + tol)
+          .sort((a, b) => b.area - a.area)[0];
+        if (hit && (!bestDot || hit.area > bestDot.dot.area)) bestDot = { at: i, dot: hit };
+      }
+      let out = "";
+      for (let i = s; i <= e; i++) {
+        out += dec[i];
+        if (bestDot && bestDot.at === i) out += ".";
+      }
+      const v = parseFloat(out);
+      const wellFormed = /^\d{1,4}(\.\d{1,2})?$/.test(out);
+      if (wellFormed && isFinite(v) && v >= 0.05 && v <= 5000)
+        return { value: v, raw: out, nDigits: digits.length };
+    }
+    return null;
+  }
+  /* 전체 파이프라인: ①바로 숫자 줄 탐색 → ②표시창 덩어리 찾아 내부만 Otsu 재이진화 후 재탐색 */
+  function readDisplay(gray, w, h, opts) {
+    const { win, k, r, invert, onTh } = opts;
+    let bin = close_(binarize(gray, w, h, win, k, invert), w, h, r);
+    if (opts.open) bin = open_(bin, w, h, opts.open);
+    if (opts.openV) bin = openV(bin, w, h, opts.openV);
+    const comps = components(bin, w, h);
+    const direct = findRow(bin, w, comps, h, onTh);
+    if (direct && direct.nDigits >= 2) return direct;
+    let weak = direct;
+    const disps = comps.filter((c) =>
+      c.w / c.h >= 1.2 && c.w / c.h <= 4.5 && c.h >= h * 0.08 &&
+      c.area / (c.w * c.h) >= 0.06 && c.area / (c.w * c.h) <= 0.7)
+      .sort((a, b) => b.area - a.area).slice(0, 3);
+    for (const d of disps) {
+      const band = Math.max(4, Math.round(Math.min(d.w, d.h) * 0.05)) + r;
+      const idxs = [];
+      for (let y = d.y0 + band; y <= d.y1 - band; y++)
+        for (let x = d.x0 + band; x <= d.x1 - band; x++) idxs.push(y * w + x);
+      if (idxs.length < 200) continue;
+      const th = otsu(gray, idxs);
+      for (const darkDigits of [!invert, invert]) {
+        const bin2 = new Uint8Array(w * h);
+        for (let j = 0; j < idxs.length; j++) { const i = idxs[j]; bin2[i] = (darkDigits ? gray[i] < th : gray[i] > th) ? 1 : 0; }
+        let bin2c = close_(bin2, w, h, r);
+        if (opts.open) bin2c = open_(bin2c, w, h, opts.open);
+        if (opts.openV) bin2c = openV(bin2c, w, h, opts.openV);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          if (x < d.x0 + band || x > d.x1 - band || y < d.y0 + band || y > d.y1 - band) bin2c[y * w + x] = 0;
+        }
+        const comps2 = components(bin2c, w, h);
+        const rr = findRow(bin2c, w, comps2, h, onTh);
+        if (rr && rr.nDigits >= 2) return rr;
+        if (rr && !weak) weak = rr;
+      }
+    }
+    return weak;
+  }
+  return { readDisplay };
+})();
+
+/* 사진 파일 → 이미지 */
+function slLoadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이미지 열기 실패")); };
+    img.src = url;
+  });
+}
+/* 이미지 → 흑백 픽셀 배열 (긴 변 기준 축소)
+   한 번에 크게 줄이면 폰 브라우저가 가는 획·소수점을 뭉개므로 반씩 단계적으로 축소한다 */
+function slGray(img, maxSide) {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const scale = Math.min(1, maxSide / Math.max(iw, ih));
+  const w = Math.max(1, Math.round(iw * scale)), h = Math.max(1, Math.round(ih * scale));
+  let srcImg = img, sw = iw, sh = ih;
+  while (sw * 0.5 > w) {
+    sw = Math.max(w, Math.round(sw * 0.5)); sh = Math.max(h, Math.round(sh * 0.5));
+    const mid = document.createElement("canvas"); mid.width = sw; mid.height = sh;
+    const mx = mid.getContext("2d");
+    mx.imageSmoothingEnabled = true; try { mx.imageSmoothingQuality = "high"; } catch (e) {}
+    mx.drawImage(srcImg, 0, 0, sw, sh);
+    srcImg = mid;
+  }
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true; try { ctx.imageSmoothingQuality = "high"; } catch (e) {}
+  ctx.drawImage(srcImg, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const gray = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) gray[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+  return { gray, w, h };
+}
+
+async function recognizeScaleWeight(file) {
+  const img = await slLoadImage(file);
+  const { gray, w, h } = slGray(img, 1400);
+  /* 설정을 바꿔가며 여러 번 읽고, 같은 값이 두 번 나오면 확정 (교차 검증) */
+  const tries = [
+    { invert: false, win: 25, k: 0.85, r: 2, openV: 0 },
+    { invert: false, win: 25, k: 0.85, r: 2, openV: 3 },
+    { invert: false, win: 60, k: 0.85, r: 2, openV: 0 },
+    { invert: false, win: 25, k: 0.85, r: 3, openV: 3 },
+    { invert: true, win: 25, k: 0.85, r: 2, openV: 0 },   /* 밝은 숫자(백라이트) 저울 */
+    { invert: true, win: 25, k: 0.85, r: 2, openV: 3 },
+  ];
+  const votes = {}, order = [];
+  for (const t of tries) {
+    const res = slDecoder.readDisplay(gray, w, h, { win: t.win, k: t.k, r: t.r, invert: t.invert, onTh: 0.3, openV: t.openV });
+    if (res) {
+      if (!(res.raw in votes)) { votes[res.raw] = 0; order.push(res.raw); }
+      votes[res.raw]++;
+      if (votes[res.raw] >= 2) return res.raw;
+    }
+    await new Promise((rs) => setTimeout(rs, 0)); /* 화면 멈춤 방지 */
+  }
+  if (!order.length) return null;
+  order.sort((a, b) => votes[b] - votes[a]);
+  return order[0];
+}
+
+/* 저울 촬영 버튼 — 무게 입력칸 아래에 붙여 쓰는 공용 컴포넌트
+   📷 촬영해서 인식 / 🖼 앨범 사진으로 인식 / 💾 방금 찍은 사진 사진첩에 저장 */
+function ScaleScanBtn({ onValue }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const run = async (file) => {
+    if (!file) return;
+    setBusy(true); setMsg("숫자를 읽는 중…");
+    try {
+      const v = await recognizeScaleWeight(file);
+      if (v != null) { onValue(String(v)); setMsg("✓ " + v + " 인식됨 — 값이 다르면 직접 고쳐주세요"); }
+      else setMsg("숫자를 못 찾았어요 — 표시창이 크고 반듯하게 나온 사진으로 해보세요");
+    } catch (err) {
+      setMsg("⚠️ 인식에 실패했어요 — 다시 시도해주세요");
+    }
+    setBusy(false);
+  };
+  /* 매번 input을 새로 만들어 사진 선택창을 연다 */
+  const pick = () => {
+    if (busy) return;
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    inp.style.display = "none";
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); run(f); };
+    inp.addEventListener("cancel", () => inp.remove());
+    document.body.appendChild(inp);
+    inp.click();
+  };
+  return (
+    <div className="field" style={{ marginTop: -6 }}>
+      <div className="chiprow" style={{ marginTop: 0 }}>
+        <button className="chipbtn" onClick={pick}>
+          {busy ? "⏳ 인식 중…" : "🖼 저울 사진으로 무게 인식"}
+        </button>
+      </div>
+      {msg && <div className="hint" style={{ marginTop: 6 }}>{msg}</div>}
+    </div>
+  );
+}
+
 /* ════════════════════ 계산 ════════════════════ */
 const sortedRecs = (ind) => [...(ind.bottleRecords || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
 const latestRec = (ind) => { const s = sortedRecs(ind); return s.length ? s[s.length - 1] : null; };
@@ -835,6 +1233,7 @@ function GrowthRowForm({ initial, brands, onSave, onClose, onDelete }) {
           </div>
         </F>
       </div>
+      <ScaleScanBtn onValue={(v) => set("weight", v)} />
       <div className="row">
         <F label="먹이 종류" half>
           <select className="in" value={f.feedType} onChange={(e) => set("feedType", e.target.value)}>
@@ -1090,6 +1489,7 @@ function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
         <F label="유충 무게 g" half><input className="in mono" inputMode="decimal" value={f.weight} onChange={(e) => set("weight", e.target.value)} placeholder="34.2" /></F>
         <F label="두폭 mm" half><input className="in mono" inputMode="decimal" value={f.headWidth} onChange={(e) => set("headWidth", e.target.value)} /></F>
       </div>
+      <ScaleScanBtn onValue={(v) => set("weight", v)} />
       <div className="row">
         <F label="먹이 종류" half>
           <select className="in" value={f.feedType} onChange={(e) => set("feedType", e.target.value)}>
@@ -1224,6 +1624,7 @@ function PupationForm({ initial, onSave, onClose }) {
         <F label="용화일" half><input type="date" className="in" value={f.pupaDate} onChange={(e) => set("pupaDate", e.target.value)} /></F>
       </div>
       <F label="번데기 무게 g — 환원율 기준값"><input className="in mono" inputMode="decimal" value={f.pupaWeight} onChange={(e) => set("pupaWeight", e.target.value)} /></F>
+      <ScaleScanBtn onValue={(v) => set("pupaWeight", v)} />
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="원더링 여부 등" /></F>
     </Modal>
   );
