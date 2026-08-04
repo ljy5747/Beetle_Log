@@ -200,527 +200,6 @@ function makeICS(summary, dateISO, desc) {
     "END:VEVENT", "END:VCALENDAR"].join("\r\n");
 }
 
-/* ════════════════════ 저울 숫자 인식 (7세그먼트 전용 해독기 · 전부 폰 안에서 처리, 사진은 저장하지 않음) ════════════════════ */
-/* 일반 OCR 대신 저울 표시창의 7세그먼트 숫자 구조를 직접 해독한다.
-   다운로드가 없어 즉시 동작하고, 표시창을 자동으로 찾아 그 안의 숫자·소수점을 읽는다. */
-const slDecoder = (() => {
-  /* 적분 이미지 (지역 평균 계산용) */
-  function integralImage(g, w, h) {
-    const I = new Float64Array((w + 1) * (h + 1));
-    for (let y = 0; y < h; y++) { let row = 0;
-      for (let x = 0; x < w; x++) { row += g[y * w + x]; I[(y + 1) * (w + 1) + (x + 1)] = I[y * (w + 1) + (x + 1)] + row; } }
-    return I;
-  }
-  /* 적응형 이진화: 주변보다 충분히 어두우면(invert 시 밝으면) 1 */
-  function binarize(g, w, h, win, k, invert) {
-    const I = integralImage(g, w, h); const bin = new Uint8Array(w * h);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const x0 = Math.max(0, x - win), y0 = Math.max(0, y - win), x1 = Math.min(w - 1, x + win), y1 = Math.min(h - 1, y + win);
-      const m = (I[(y1 + 1) * (w + 1) + x1 + 1] - I[y0 * (w + 1) + x1 + 1] - I[(y1 + 1) * (w + 1) + x0] + I[y0 * (w + 1) + x0]) / ((x1 - x0 + 1) * (y1 - y0 + 1));
-      const v = g[y * w + x];
-      bin[y * w + x] = (invert ? v > m * (2 - k) : v < m * k) ? 1 : 0;
-    }
-    return bin;
-  }
-  /* 팽창/침식 → 닫힘 (세그먼트 사이 틈 잇기) */
-  /* 정사각 구조요소는 가로·세로 1차원 연산으로 분리해 계산하면 훨씬 빠르다 (결과 동일) */
-  function morph1D(bin, w, h, r, isDilate, horiz) {
-    const out = new Uint8Array(w * h);
-    const n = horiz ? w : h, m = horiz ? h : w;
-    const idx = horiz ? (a, b) => b * w + a : (a, b) => a * w + b;
-    const win = 2 * r + 1;
-    for (let b = 0; b < m; b++) {
-      let cnt = 0;
-      for (let a = 0; a < Math.min(r, n); a++) cnt += bin[idx(a, b)];
-      for (let a = 0; a < n; a++) {
-        const add = a + r, sub = a - r - 1;
-        if (add < n) cnt += bin[idx(add, b)];
-        if (sub >= 0) cnt -= bin[idx(sub, b)];
-        out[idx(a, b)] = isDilate ? (cnt > 0 ? 1 : 0) : (cnt === win ? 1 : 0);
-      }
-    }
-    return out;
-  }
-  function morph(bin, w, h, r, isDilate) {
-    return morph1D(morph1D(bin, w, h, r, isDilate, true), w, h, r, isDilate, false);
-  }
-  const close_ = (b, w, h, r) => morph(morph(b, w, h, r, true), w, h, r, false);
-  const open_ = (b, w, h, r) => morph(morph(b, w, h, r, false), w, h, r, true);
-  /* 세로 방향 1D 형태학 — 가로로 뻗은 얇은 선(테두리·밑줄)만 제거, 세로획('1')은 보존 */
-  function morphV(bin, w, h, r, isDilate) {
-    const out = new Uint8Array(w * h);
-    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) {
-      let hit = isDilate ? 0 : 1;
-      for (let dy = -r; dy <= r; dy++) {
-        const ny = y + dy;
-        const v = (ny >= 0 && ny < h) ? bin[ny * w + x] : 0;
-        if (isDilate) { if (v) { hit = 1; break; } } else { if (!v) { hit = 0; break; } }
-      }
-      out[y * w + x] = hit;
-    }
-    return out;
-  }
-  const openV = (b, w, h, r) => morphV(morphV(b, w, h, r, false), w, h, r, true);
-  /* 선택 픽셀들의 Otsu 임계값 (표시창 내부 전용 이진화에 사용 — 그림자·조명 얼룩 배제) */
-  function otsu(gray, idxs) {
-    const hist = new Float64Array(256);
-    for (let j = 0; j < idxs.length; j++) hist[Math.max(0, Math.min(255, gray[idxs[j]] | 0))]++;
-    const total = idxs.length;
-    let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
-    let sumB = 0, wB = 0, best = 127, maxVar = -1;
-    for (let t = 0; t < 256; t++) {
-      wB += hist[t]; if (!wB) continue;
-      const wF = total - wB; if (!wF) break;
-      sumB += t * hist[t];
-      const mB = sumB / wB, mF = (sum - sumB) / wF;
-      const v = wB * wF * (mB - mF) * (mB - mF);
-      if (v > maxVar) { maxVar = v; best = t; }
-    }
-    return best;
-  }
-  /* 연결 성분 라벨링 */
-  function components(bin, w, h) {
-    const lab = new Int32Array(w * h), comps = [], stack = []; let id = 0;
-    for (let i = 0; i < w * h; i++) {
-      if (!bin[i] || lab[i]) continue;
-      id++; let x0 = w, y0 = h, x1 = 0, y1 = 0, area = 0;
-      stack.length = 0; stack.push(i); lab[i] = id;
-      while (stack.length) {
-        const p = stack.pop(), px = p % w, py = (p / w) | 0; area++;
-        if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py;
-        if (px > 0 && bin[p - 1] && !lab[p - 1]) { lab[p - 1] = id; stack.push(p - 1); }
-        if (px < w - 1 && bin[p + 1] && !lab[p + 1]) { lab[p + 1] = id; stack.push(p + 1); }
-        if (py > 0 && bin[p - w] && !lab[p - w]) { lab[p - w] = id; stack.push(p - w); }
-        if (py < h - 1 && bin[p + w] && !lab[p + w]) { lab[p + w] = id; stack.push(p + w); }
-      }
-      comps.push({ x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, area, id });
-    }
-    comps.lab = lab;
-    return comps;
-  }
-  /* 세그먼트 패턴표 [A,B,C,D,E,F,G] — 변형 폰트 패턴 포함 */
-  const SEG_DIGITS = { "1111110": 0, "0110000": 1, "1101101": 2, "1111001": 3, "0110011": 4, "1011011": 5, "1011111": 6, "1110000": 7, "1111111": 8, "1111011": 9, "1110011": 9, "1110010": 7, "0011111": 6 };
-  /* 두꺼운 획 폰트에서도 침범이 없도록 좁은 띠로 샘플링 */
-  const ZONES = [
-    [0.30, 0.00, 0.70, 0.14], /* A 위 */
-    [0.78, 0.17, 1.00, 0.43], /* B 우상 */
-    [0.78, 0.57, 1.00, 0.83], /* C 우하 */
-    [0.30, 0.86, 0.70, 1.00], /* D 아래 */
-    [0.00, 0.57, 0.22, 0.83], /* E 좌하 */
-    [0.00, 0.17, 0.22, 0.43], /* F 좌상 */
-    [0.30, 0.43, 0.70, 0.57], /* G 가운데 */
-  ];
-  /* 성분에 얇게 붙은 선(LCD 테두리·밑줄)을 잘라 경계상자를 바로잡는다 */
-  const belongs = (c, lab, i) => !lab || (c.ids ? c.ids.indexOf(lab[i]) >= 0 : lab[i] === c.id);
-  function trimComp(bin, w, c, lab) {
-    const mine = (x, y) => bin[y * w + x] && belongs(c, lab, y * w + x);
-    const rows = new Int32Array(c.h), cols = new Int32Array(c.w);
-    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++)
-      if (mine(x, y)) { rows[y - c.y0]++; cols[x - c.x0]++; }
-    /* 획 두께 추정: 0이 아닌 열 값들의 중앙값 */
-    const nz = Array.from(cols).filter((v) => v > 0).sort((a, b) => a - b);
-    if (!nz.length) return c;
-    const medCol = nz[nz.length >> 1];
-    const thin = Math.max(2, Math.round(medCol * 0.18));
-    let y0 = c.y0, y1 = c.y1, x0 = c.x0, x1 = c.x1;
-    /* 위/아래에서 얇은 띠 제거 (얇은 줄 뒤에 빈 줄이 이어지면 붙은 잡선으로 판단) */
-    const rowThin = (i) => rows[i] > 0 && rows[i] < c.w * 0.05 ? false : false;
-    let i = 0;
-    while (i < c.h - 1 && (y1 - y0) > c.h * 0.4) {
-      /* 아래쪽 */
-      let j = y1 - c.y0;
-      let run = 0;
-      while (j - run >= 0 && rows[j - run] > 0) run++;
-      if (run > 0 && run <= thin && (j - run) >= 0 && rows[j - run] === 0) { y1 -= run; i++; continue; }
-      break;
-    }
-    i = 0;
-    while (i < c.h - 1 && (y1 - y0) > c.h * 0.4) {
-      let j = y0 - c.y0, run = 0;
-      while (j + run < c.h && rows[j + run] > 0) run++;
-      if (run > 0 && run <= thin && (j + run) < c.h && rows[j + run] === 0) { y0 += run; i++; continue; }
-      break;
-    }
-    /* 좌/우 */
-    const colThinLimit = Math.max(2, Math.round((y1 - y0 + 1) * 0.06));
-    i = 0;
-    while (i < c.w - 1 && (x1 - x0) > c.w * 0.35) {
-      let j = x1 - c.x0, run = 0;
-      while (j - run >= 0 && cols[j - run] > 0) run++;
-      if (run > 0 && run <= colThinLimit && (j - run) >= 0 && cols[j - run] === 0) { x1 -= run; i++; continue; }
-      break;
-    }
-    i = 0;
-    while (i < c.w - 1 && (x1 - x0) > c.w * 0.35) {
-      let j = x0 - c.x0, run = 0;
-      while (j + run < c.w && cols[j + run] > 0) run++;
-      if (run > 0 && run <= colThinLimit && (j + run) < c.w && cols[j + run] === 0) { x0 += run; i++; continue; }
-      break;
-    }
-    if (x0 === c.x0 && x1 === c.x1 && y0 === c.y0 && y1 === c.y1) return c;
-    return { x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, area: c.area, id: c.id, ids: c.ids };
-  }
-
-  /* 기울임(이탤릭) 보정: 폭이 최소가 되는 기울기를 골라 펴기 */
-  function shearDigit(bin, w, c, lab) {
-    const mine = (x, y) => bin[y * w + x] && belongs(c, lab, y * w + x);
-    let best = null;
-    for (const s of [0, 0.08, 0.15, 0.22, 0.3]) {
-      let minX = 1e9, maxX = -1e9;
-      for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) {
-        if (!mine(x, y)) continue;
-        const nx = x - s * (c.y1 - y);
-        if (nx < minX) minX = nx; if (nx > maxX) maxX = nx;
-      }
-      if (minX > maxX) continue;
-      const W2 = Math.round(maxX - minX) + 1;
-      if (!best || W2 < best.W2) best = { s, minX, W2 };
-    }
-    if (!best) return null;
-    const { s, minX, W2 } = best;
-    const H = c.h, g2 = new Uint8Array(W2 * H);
-    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) {
-      if (!mine(x, y)) continue;
-      const nx = Math.round(x - s * (c.y1 - y) - minX);
-      if (nx >= 0 && nx < W2) g2[(y - c.y0) * W2 + nx] = 1;
-    }
-    return { g2, W2, H };
-  }
-  /* 자릿수 하나 판독 */
-  function decodeDigit(bin, w, c0, onTh, lab) {
-    const c = trimComp(bin, w, c0, lab);
-    const sh = shearDigit(bin, w, c, lab);
-    if (!sh) return null;
-    const { g2, W2, H } = sh;
-    if (W2 / H < 0.30) return 1; /* 펴고 나서도 좁으면 1 (다른 숫자는 0.35 이상) */
-    let pat = "";
-    for (const [zx0, zy0, zx1, zy1] of ZONES) {
-      const ax0 = Math.round(zx0 * W2), ay0 = Math.round(zy0 * H);
-      const ax1 = Math.round(zx1 * W2) - 1, ay1 = Math.round(zy1 * H) - 1;
-      let on = 0, tot = 0;
-      for (let y = ay0; y <= ay1; y++) for (let x = ax0; x <= ax1; x++) { tot++; if (g2[y * W2 + x]) on++; }
-      pat += (tot ? on / tot : 0) > onTh ? "1" : "0";
-    }
-    if (pat in SEG_DIGITS) return SEG_DIGITS[pat];
-    let best = null; const hits = {};
-    let nHit = 0;
-    for (const p in SEG_DIGITS) {
-      let dist = 0; for (let i = 0; i < 7; i++) if (p[i] !== pat[i]) dist++;
-      if (dist === 1 && !(SEG_DIGITS[p] in hits)) { hits[SEG_DIGITS[p]] = 1; nHit++; best = SEG_DIGITS[p]; }
-    }
-    return nHit === 1 ? best : null;
-  }
-  /* 비슷한 높이로 가로로 늘어선 숫자 줄 찾기 + 소수점 배치 */
-  /* 7세그 '1'처럼 위·아래 획이 끊겨 두 조각으로 잡힌 경우 한 글자로 합친다 */
-  function mergeStacked(list) {
-    const items = list.map((c) => ({ x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, w: c.w, h: c.h, area: c.area, id: c.id, ids: c.ids || [c.id] }));
-    let changed = true;
-    while (changed) {
-      changed = false;
-      outer:
-      for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
-        const a = items[i], b = items[j];
-        const up = a.y1 <= b.y1 ? a : b, lo = a.y1 <= b.y1 ? b : a;
-        const ovX = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
-        if (ovX < Math.min(a.w, b.w) * 0.5) continue;      /* 같은 세로줄에 있어야 함 */
-        const gap = lo.y0 - up.y1;
-        if (gap < -Math.min(a.h, b.h) * 0.3 || gap > Math.max(a.h, b.h) * 0.55) continue;
-        const nx0 = Math.min(a.x0, b.x0), nx1 = Math.max(a.x1, b.x1);
-        const ny0 = Math.min(a.y0, b.y0), ny1 = Math.max(a.y1, b.y1);
-        const nw = nx1 - nx0 + 1, nh = ny1 - ny0 + 1;
-        if (nw / nh > 0.45) continue;                       /* 합쳐도 가늘어야 '1' */
-        items[i] = { x0: nx0, y0: ny0, x1: nx1, y1: ny1, w: nw, h: nh, area: a.area + b.area, id: a.id, ids: a.ids.concat(b.ids) };
-        items.splice(j, 1);
-        changed = true;
-        break outer;
-      }
-    }
-    return items;
-  }
-  function findRow(bin, w, comps, imgH, onTh, hMin, hMax) {
-    hMin = hMin || 0.04; hMax = hMax || 0.7;
-    const cand = comps.filter((c) =>
-      c.h >= imgH * hMin && c.h <= imgH * hMax && c.w / c.h <= 0.85 && c.w >= 2 &&
-      c.area / (c.w * c.h) >= 0.18 && c.area / (c.w * c.h) <= 0.97);
-    /* '1' 조각 후보 (줄 높이보다 짧은 가는 세로획) */
-    const frags = comps.filter((c) =>
-      c.h >= imgH * hMin * 0.35 && c.w / c.h <= 0.60 && c.w >= 2 && c.area / (c.w * c.h) >= 0.30);
-    if (!cand.length) return null;
-    cand.sort((a, b) => b.h - a.h);
-    for (const tall of cand.slice(0, 6)) {
-      const inRow = (c) => {
-        if (c.h < tall.h * 0.6 || c.h > tall.h * 1.4) return false;
-        const ov = Math.min(c.y1, tall.y1) - Math.max(c.y0, tall.y0);
-        return ov > Math.min(c.h, tall.h) * 0.5;
-      };
-      const members = cand.filter(inRow);
-      /* 7세그 '1'이 위·아래로 끊긴 경우: 이 줄에 비해 짧은 세로획들만 합쳐 본다 */
-      const shorts = frags.filter((c) => c.h < tall.h * 0.62 &&
-        Math.min(c.y1, tall.y1) - Math.max(c.y0, tall.y0) > 0);
-      for (const m of mergeStacked(shorts)) {
-        if (m.ids.length < 2 || m.w / m.h > 0.45) continue;
-        if (!inRow(m)) continue;
-        if (members.some((c) => m.x0 <= c.x1 && c.x0 <= m.x1)) continue; /* 기존 글자와 겹치면 제외 */
-        members.push(m);
-      }
-      const row = members.sort((a, b) => a.x0 - b.x0);
-      if (!row.length || row.length > 8) continue;
-      const dec = row.map((c) => decodeDigit(bin, w, c, onTh, comps.lab));
-      const ti = row.indexOf(tall);
-      if (dec[ti] == null) continue;
-      let s = ti, e = ti;
-      while (s > 0 && dec[s - 1] != null && row[s].x0 - row[s - 1].x1 < tall.h * 0.9) s--;
-      while (e < row.length - 1 && dec[e + 1] != null && row[e + 1].x0 - row[e].x1 < tall.h * 0.9) e++;
-      /* 바로 옆에 붙어 있는데 판독 실패한 자리가 있으면, 그 자리를 잘라내고 답을 내면 안 된다 */
-      const gapLim = tall.h * 0.9;
-      if (e < row.length - 1 && dec[e + 1] == null && row[e + 1].x0 - row[e].x1 < gapLim) continue;
-      if (s > 0 && dec[s - 1] == null && row[s].x0 - row[s - 1].x1 < gapLim) continue;
-      const digits = row.slice(s, e + 1);
-      /* 가장자리에 딱 붙은 채 '1'로 읽힌 자리는 잘려서 가늘어진 것일 수 있다 → 신뢰하지 않는다 */
-      const edgeM = Math.max(4, Math.round(tall.h * 0.08));
-      if (dec[e] === 1 && row[e].x1 >= w - edgeM) continue;
-      if (dec[s] === 1 && row[s].x0 <= edgeM) continue;
-      /* 소수점: 베이스라인 근처의 작고 네모난 덩어리 하나만 인정 */
-      const base = tall.y1;
-      const usedIds = [];
-      digits.forEach((d) => (d.ids || [d.id]).forEach((x) => usedIds.push(x)));
-      const dots = comps.filter((c) => {
-        if (digits.indexOf(c) !== -1) return false;
-        if (usedIds.indexOf(c.id) !== -1) return false;
-        if (c.h < tall.h * 0.05 || c.h > tall.h * 0.28) return false;
-        if (c.w < tall.h * 0.05 || c.w > tall.h * 0.30) return false;
-        const ar = c.w / c.h;
-        if (ar < 0.45 || ar > 2.2) return false;
-        if (c.area < c.w * c.h * 0.35) return false;
-        const cy = (c.y0 + c.y1) / 2;
-        return cy > base - tall.h * 0.22 && cy < base + tall.h * 0.14;
-      });
-      /* 각 자리 사이 틈마다 후보를 찾고, 그중 가장 큰 것 하나만 채택 */
-      let bestDot = null;
-      for (let i = s; i < e; i++) {
-        const gapL = row[i].x1, gapR = row[i + 1].x0, tol = tall.h * 0.10;
-        const hit = dots.filter((p) => p.x0 >= gapL - tol && p.x1 <= gapR + tol)
-          .sort((a, b) => b.area - a.area)[0];
-        if (hit && (!bestDot || hit.area > bestDot.dot.area)) bestDot = { at: i, dot: hit };
-      }
-      let out = "";
-      for (let i = s; i <= e; i++) {
-        out += dec[i];
-        if (bestDot && bestDot.at === i) out += ".";
-      }
-      /* 읽어낸 자리 바깥(좌/우)에 아직 획이 남아 있으면 = 자리를 놓친 것 → 거부 */
-      const bandY0 = Math.max(0, tall.y0), bandY1 = tall.y1;
-      /* 세로로 길게 이어진 획(=놓친 숫자)이 오른쪽에 남아 있는지만 본다 */
-      const bandH = bandY1 - bandY0 + 1;
-      let tallLeftover = false;
-      const px0 = digits[digits.length - 1].x1 + Math.round(tall.h * 0.15);
-      const px1 = digits[digits.length - 1].x1 + Math.round(tall.h * 0.75);
-      for (let x = px0; x <= px1 && !tallLeftover; x++) {
-        if (x < 0 || x >= w) continue;
-        let on = 0;
-        for (let y = bandY0; y <= bandY1; y++) if (bin[y * w + x]) on++;
-        if (on >= bandH * 0.45) tallLeftover = true;
-      }
-      if (tallLeftover) continue;
-      const v = parseFloat(out);
-      const wellFormed = /^\d{1,4}(\.\d{1,2})?$/.test(out);
-      if (wellFormed && isFinite(v) && v >= 0.05 && v <= 5000)
-        return { value: v, raw: out, nDigits: digits.length };
-    }
-    return null;
-  }
-  /* 전체 파이프라인: ①바로 숫자 줄 탐색 → ②표시창 덩어리 찾아 내부만 Otsu 재이진화 후 재탐색 */
-  function readDisplay(gray, w, h, opts) {
-    const { win, k, r, invert, onTh } = opts;
-    let bin = close_(binarize(gray, w, h, win, k, invert), w, h, r);
-    if (opts.open) bin = open_(bin, w, h, opts.open);
-    if (opts.openV) bin = openV(bin, w, h, opts.openV);
-    const comps = components(bin, w, h);
-    const direct = findRow(bin, w, comps, h, onTh);
-    if (direct && direct.nDigits >= 2) return direct;
-    let weak = direct;
-    const disps = comps.filter((c) =>
-      c.w / c.h >= 1.2 && c.w / c.h <= 4.5 && c.h >= h * 0.08 &&
-      c.area / (c.w * c.h) >= 0.06 && c.area / (c.w * c.h) <= 0.7)
-      .sort((a, b) => b.area - a.area).slice(0, 3);
-    for (const d of disps) {
-      const band = Math.max(4, Math.round(Math.min(d.w, d.h) * 0.05)) + r;
-      const idxs = [];
-      for (let y = d.y0 + band; y <= d.y1 - band; y++)
-        for (let x = d.x0 + band; x <= d.x1 - band; x++) idxs.push(y * w + x);
-      if (idxs.length < 200) continue;
-      const th = otsu(gray, idxs);
-      for (const darkDigits of [!invert, invert]) {
-        const bin2 = new Uint8Array(w * h);
-        for (let j = 0; j < idxs.length; j++) { const i = idxs[j]; bin2[i] = (darkDigits ? gray[i] < th : gray[i] > th) ? 1 : 0; }
-        let bin2c = close_(bin2, w, h, r);
-        if (opts.open) bin2c = open_(bin2c, w, h, opts.open);
-        if (opts.openV) bin2c = openV(bin2c, w, h, opts.openV);
-        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-          if (x < d.x0 + band || x > d.x1 - band || y < d.y0 + band || y > d.y1 - band) bin2c[y * w + x] = 0;
-        }
-        const comps2 = components(bin2c, w, h);
-        const rr = findRow(bin2c, w, comps2, h, onTh);
-        if (rr && rr.nDigits >= 2) return rr;
-        if (rr && !weak) weak = rr;
-      }
-    }
-    return weak;
-  }
-  
-  /* 표시창 영역을 잘라 일정 높이로 확대 (이중선형) — 사진마다 다른 크기를 맞춰준다 */
-  function cropScale(gray, w, h, x0, y0, x1, y1, targetH) {
-    const rw = x1 - x0 + 1, rh = y1 - y0 + 1, s = targetH / rh;
-    const W = Math.max(8, Math.round(rw * s)), H = Math.max(8, Math.round(rh * s));
-    const out = new Float32Array(W * H);
-    for (let y = 0; y < H; y++) {
-      const sy = y0 + (y + 0.5) / s - 0.5;
-      const iy = Math.max(y0, Math.min(y1, Math.floor(sy))), fy = Math.max(0, Math.min(1, sy - iy)), iy2 = Math.min(y1, iy + 1);
-      for (let x = 0; x < W; x++) {
-        const sx = x0 + (x + 0.5) / s - 0.5;
-        const ix = Math.max(x0, Math.min(x1, Math.floor(sx))), fx = Math.max(0, Math.min(1, sx - ix)), ix2 = Math.min(x1, ix + 1);
-        const a = gray[iy * w + ix], b = gray[iy * w + ix2], c = gray[iy2 * w + ix], d = gray[iy2 * w + ix2];
-        out[y * W + x] = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
-      }
-    }
-    return { g: out, W, H };
-  }
-  const FULL_SET = [
-    { win: 25, k: 0.85, r: 2, invert: false },
-    { win: 25, k: 0.85, r: 3, invert: false },
-    { win: 60, k: 0.85, r: 2, invert: false },
-  ];
-  const CROP_SET = [
-    { bf: 0.04, win: 25, k: 0.90 }, { bf: 0.04, win: 25, k: 0.85 },
-    { bf: 0.04, win: 40, k: 0.90 }, { bf: 0.04, win: 40, k: 0.85 },
-    { bf: 0.015, win: 25, k: 0.88 }, { bf: 0.015, win: 40, k: 0.88 },
-  ];
-  /* 최종 진입점: 여러 방식으로 읽어 교차검증한다.
-     확신이 부족하면 weak=true로 표시해, 틀린 값을 채우는 대신 사용자에게 확인을 맡긴다 */
-  function recognize(gray, w, h) {
-    const votes = {};
-    const add = (raw) => { if (raw && raw.replace(".", "").length >= 2) votes[raw] = (votes[raw] || 0) + 1; };
-    const disps = [];
-    for (const t of FULL_SET) {
-      const bin = close_(binarize(gray, w, h, t.win, t.k, t.invert), w, h, t.r);
-      const comps = components(bin, w, h);
-      const rr = findRow(bin, w, comps, h, 0.3);
-      if (rr) add(rr.raw);
-      comps.filter((c) => c.w / c.h >= 1.15 && c.w / c.h <= 4.5 && c.h >= h * 0.07 && c.w >= w * 0.15 &&
-        c.area / (c.w * c.h) >= 0.05 && c.area / (c.w * c.h) <= 0.75)
-        .sort((a, b) => b.area - a.area).slice(0, 2)
-        .forEach((d) => { if (!disps.some((e) => Math.abs(e.x0 - d.x0) < 20 && Math.abs(e.y0 - d.y0) < 20)) disps.push(d); });
-    }
-    for (const d of disps.slice(0, 2)) {
-      for (const s of CROP_SET) {
-        const bx = Math.round(d.w * s.bf), by = Math.round(d.h * s.bf);
-        if (d.w - 2 * bx < 40 || d.h - 2 * by < 40) continue;
-        const cs = cropScale(gray, w, h, d.x0 + bx, d.y0 + by, d.x1 - bx, d.y1 - by, 300);
-        const bin = close_(binarize(cs.g, cs.W, cs.H, s.win, s.k, false), cs.W, cs.H, 2);
-        const comps = components(bin, cs.W, cs.H);
-        const rr = findRow(bin, cs.W, comps, cs.H, 0.3, 0.18, 0.95);
-        if (rr) add(rr.raw);
-      }
-    }
-    const ent = Object.keys(votes).map((k) => [k, votes[k]]);
-    if (!ent.length) return null;
-    const total = ent.reduce((a, e) => a + e[1], 0);
-    ent.sort((a, b) => (b[1] - a[1]) || (b[0].replace(".", "").length - a[0].replace(".", "").length));
-    const raw = ent[0][0], v = ent[0][1];
-    return { raw: raw, votes: v, total: total, weak: (v < 2 || v < total * 0.55) };
-  }
-  return { readDisplay, recognize };
-
-})();
-
-/* 사진 파일 → 이미지 */
-function slLoadImage(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("이미지 열기 실패")); };
-    img.src = url;
-  });
-}
-/* 이미지 → 흑백 픽셀 배열 (긴 변 기준 축소)
-   한 번에 크게 줄이면 폰 브라우저가 가는 획·소수점을 뭉개므로 반씩 단계적으로 축소한다 */
-function slGray(img, maxSide) {
-  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-  const scale = Math.min(1, maxSide / Math.max(iw, ih));
-  const w = Math.max(1, Math.round(iw * scale)), h = Math.max(1, Math.round(ih * scale));
-  let srcImg = img, sw = iw, sh = ih;
-  while (sw * 0.5 > w) {
-    sw = Math.max(w, Math.round(sw * 0.5)); sh = Math.max(h, Math.round(sh * 0.5));
-    const mid = document.createElement("canvas"); mid.width = sw; mid.height = sh;
-    const mx = mid.getContext("2d");
-    mx.imageSmoothingEnabled = true; try { mx.imageSmoothingQuality = "high"; } catch (e) {}
-    mx.drawImage(srcImg, 0, 0, sw, sh);
-    srcImg = mid;
-  }
-  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
-  const ctx = cv.getContext("2d", { willReadFrequently: true });
-  ctx.imageSmoothingEnabled = true; try { ctx.imageSmoothingQuality = "high"; } catch (e) {}
-  ctx.drawImage(srcImg, 0, 0, w, h);
-  const d = ctx.getImageData(0, 0, w, h).data;
-  const gray = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) gray[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
-  return { gray, w, h };
-}
-
-async function recognizeScaleWeight(file) {
-  const img = await slLoadImage(file);
-  const { gray, w, h } = slGray(img, 1400);
-  await new Promise((rs) => setTimeout(rs, 0)); /* 화면 멈춤 방지 */
-  return slDecoder.recognize(gray, w, h); /* { raw, votes, total, weak } 또는 null */
-}
-
-/* 저울 촬영 버튼 — 무게 입력칸 아래에 붙여 쓰는 공용 컴포넌트
-   📷 촬영해서 인식 / 🖼 앨범 사진으로 인식 / 💾 방금 찍은 사진 사진첩에 저장 */
-function ScaleScanBtn({ onValue }) {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const run = async (file) => {
-    if (!file) return;
-    setBusy(true); setMsg("숫자를 읽는 중…");
-    try {
-      const res = await recognizeScaleWeight(file);
-      if (res && !res.weak) {
-        onValue(res.raw);
-        setMsg("✓ " + res.raw + " 인식됨 — 값이 다르면 직접 고쳐주세요");
-      } else {
-        /* 확신이 부족하면 틀린 값을 채우지 않는다 */
-        setMsg("숫자를 확실하게 읽지 못했어요 — 직접 입력해주세요. 밝은 곳에서 표시창이 크고 반듯하게 나오도록 찍으면 잘 인식돼요");
-      }
-    } catch (err) {
-      setMsg("⚠️ 인식에 실패했어요 — 다시 시도해주세요");
-    }
-    setBusy(false);
-  };
-  /* 매번 input을 새로 만들어 사진 선택창을 연다 */
-  const pick = () => {
-    if (busy) return;
-    const inp = document.createElement("input");
-    inp.type = "file";
-    inp.accept = "image/*";
-    inp.style.display = "none";
-    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); run(f); };
-    inp.addEventListener("cancel", () => inp.remove());
-    document.body.appendChild(inp);
-    inp.click();
-  };
-  return (
-    <div className="field" style={{ marginTop: -6 }}>
-      <div className="chiprow" style={{ marginTop: 0 }}>
-        <button className="chipbtn" onClick={pick}>
-          {busy ? "⏳ 인식 중…" : "🖼 저울 사진으로 무게 인식"}
-        </button>
-      </div>
-      {msg && <div className="hint" style={{ marginTop: 6 }}>{msg}</div>}
-    </div>
-  );
-}
-
 /* ════════════════════ 계산 ════════════════════ */
 const sortedRecs = (ind) => [...(ind.bottleRecords || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
 const latestRec = (ind) => { const s = sortedRecs(ind); return s.length ? s[s.length - 1] : null; };
@@ -730,6 +209,8 @@ const lossRate = (ind) => { const mw = maxWeight(ind), pw = num(ind.pupation?.pu
 /* 가장 최근 병갈이의 두폭 (없으면 그 이전 기록에서) */
 const lastHeadWidth = (ind) => { const s = sortedRecs(ind).map((r) => num(r.headWidth)).filter(Boolean); return s.length ? s[s.length - 1] : null; };
 /* 병갈이 기록 중 한 번이라도 해당 플래그가 있었는지 */
+/* 사망·분양 개체는 통계·그래프에서 제외 */
+const isActive = (ind) => ind.status !== "사망" && ind.status !== "분양";
 const hasFlag = (ind, flag) => (ind.flags || []).includes(flag) || (ind.bottleRecords || []).some((r) => (r.flags || []).includes(flag));
 /* 개체에 표시된 특이사항 전체 (개체 표식 + 병갈이 기록) */
 const allFlags = (ind) => {
@@ -866,7 +347,7 @@ function LineSexStats({ kids }) {
     { key: "수", label: "♂︎ 수컷", color: "#5A7A9A" },
     { key: "암", label: "♀︎ 암컷", color: "#A8884F" },
   ].map((r) => {
-    const mine = kids.filter((i) => (i.sex || "").includes(r.key));
+    const mine = kids.filter((i) => isActive(i) && (i.sex || "").includes(r.key));
     const ws = mine.filter((i) => i.status === "유충").map((i) => num(latestRec(i)?.weight)).filter(Boolean);
     const pw = mine.map((i) => num(i.pupation?.pupaWeight)).filter(Boolean);
     const tl = mine.map((i) => num(i.eclosion?.totalLength)).filter(Boolean);
@@ -897,7 +378,7 @@ function LineSexStats({ kids }) {
 /* ════════════════════ 라인 무게 그래프 (병갈이 회차 기준 꺾은선) ════════════════════ */
 function LineWeightChart({ kids }) {
   /* 투입한 병이 1번 병. 푸딩컵 기록은 병 번호에서 제외 (푸딩 다음 병이 1병) */
-  const series = kids.map((ind) => {
+  const series = kids.filter(isActive).map((ind) => {
     const ws = sortedRecs(ind).filter((r) => !isPudding(r)).map((r) => num(r.weight)).filter(Boolean);
     return { ind, pts: [{ n: 1, w: 0 }, ...ws.map((w, i) => ({ n: i + 2, w }))], recN: ws.length };
   }).filter((s) => s.recN >= 1);
@@ -913,7 +394,7 @@ function LineWeightChart({ kids }) {
   const tail = (code) => { const m = String(code).match(/(\d+)\s*$/); return m ? m[1] : String(code).slice(-3); };
   /* 암수 평균 (살아있는 유충의 최근 무게) — 가로 점선 */
   const avgOf = (sexKey) => {
-    const ws = kids.filter((i) => (i.sex || "").includes(sexKey) && i.status === "유충")
+    const ws = kids.filter((i) => isActive(i) && (i.sex || "").includes(sexKey) && i.status === "유충")
       .map((i) => num(latestRec(i)?.weight)).filter(Boolean);
     return ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null;
   };
@@ -1356,7 +837,6 @@ function GrowthRowForm({ initial, brands, onSave, onClose, onDelete }) {
           </div>
         </F>
       </div>
-      <ScaleScanBtn onValue={(v) => set("weight", v)} />
       <div className="row">
         <F label="먹이 종류" half>
           <select className="in" value={f.feedType} onChange={(e) => set("feedType", e.target.value)}>
@@ -1612,7 +1092,6 @@ function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
         <F label="유충 무게 g" half><input className="in mono" inputMode="decimal" value={f.weight} onChange={(e) => set("weight", e.target.value)} placeholder="34.2" /></F>
         <F label="두폭 mm" half><input className="in mono" inputMode="decimal" value={f.headWidth} onChange={(e) => set("headWidth", e.target.value)} /></F>
       </div>
-      <ScaleScanBtn onValue={(v) => set("weight", v)} />
       <div className="row">
         <F label="먹이 종류" half>
           <select className="in" value={f.feedType} onChange={(e) => set("feedType", e.target.value)}>
@@ -1747,7 +1226,6 @@ function PupationForm({ initial, onSave, onClose }) {
         <F label="용화일" half><input type="date" className="in" value={f.pupaDate} onChange={(e) => set("pupaDate", e.target.value)} /></F>
       </div>
       <F label="번데기 무게 g — 환원율 기준값"><input className="in mono" inputMode="decimal" value={f.pupaWeight} onChange={(e) => set("pupaWeight", e.target.value)} /></F>
-      <ScaleScanBtn onValue={(v) => set("pupaWeight", v)} />
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="원더링 여부 등" /></F>
     </Modal>
   );
@@ -2955,7 +2433,7 @@ function App() {
               const cnt = STATUSES.map((s) => [s, kids.filter((i) => i.status === s).length]).filter(([, n]) => n > 0);
               const dd = lineDday(L.id);
               const avgOf = (sexKey) => {
-                const ws = kids.filter((i) => sexKey === "수" ? i.sex?.includes("수") : sexKey === "암" ? i.sex?.includes("암") : !i.sex?.includes("수") && !i.sex?.includes("암"))
+                const ws = kids.filter(isActive).filter((i) => sexKey === "수" ? i.sex?.includes("수") : sexKey === "암" ? i.sex?.includes("암") : !i.sex?.includes("수") && !i.sex?.includes("암"))
                   .map((i) => num(latestRec(i)?.weight)).filter(Boolean);
                 return ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null;
               };
@@ -3136,7 +2614,7 @@ function App() {
         const counts = STATUSES.reduce((a, s) => ({ ...a, [s]: kids.filter((i) => i.status === s).length }), {});
         /* 성별별 기대주(👑): 살아있는 개체 중 우화한 게 있으면 총장 최대, 없으면 유충무게 최대 */
         const topOf = (sexKey) => {
-          const pool = kids.filter((i) => i.status !== "사망" && i.sex && i.sex.includes(sexKey));
+          const pool = kids.filter((i) => isActive(i) && i.sex && i.sex.includes(sexKey));
           if (pool.length === 0) return null;
           const eclosed = pool.filter((i) => num(i.eclosion?.totalLength));
           if (eclosed.length) {
