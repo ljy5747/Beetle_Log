@@ -238,6 +238,22 @@ const slDecoder = (() => {
     return out;
   }
   const close_ = (b, w, h, r) => morph(morph(b, w, h, r, true), w, h, r, false);
+  const open_ = (b, w, h, r) => morph(morph(b, w, h, r, false), w, h, r, true);
+  /* 세로 방향 1D 형태학 — 가로로 뻗은 얇은 선(테두리·밑줄)만 제거, 세로획('1')은 보존 */
+  function morphV(bin, w, h, r, isDilate) {
+    const out = new Uint8Array(w * h);
+    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) {
+      let hit = isDilate ? 0 : 1;
+      for (let dy = -r; dy <= r; dy++) {
+        const ny = y + dy;
+        const v = (ny >= 0 && ny < h) ? bin[ny * w + x] : 0;
+        if (isDilate) { if (v) { hit = 1; break; } } else { if (!v) { hit = 0; break; } }
+      }
+      out[y * w + x] = hit;
+    }
+    return out;
+  }
+  const openV = (b, w, h, r) => morphV(morphV(b, w, h, r, false), w, h, r, true);
   /* 선택 픽셀들의 Otsu 임계값 (표시창 내부 전용 이진화에 사용 — 그림자·조명 얼룩 배제) */
   function otsu(gray, idxs) {
     const hist = new Float64Array(256);
@@ -287,6 +303,56 @@ const slDecoder = (() => {
     [0.00, 0.17, 0.22, 0.43], /* F 좌상 */
     [0.30, 0.43, 0.70, 0.57], /* G 가운데 */
   ];
+  /* 성분에 얇게 붙은 선(LCD 테두리·밑줄)을 잘라 경계상자를 바로잡는다 */
+  function trimComp(bin, w, c, lab) {
+    const mine = (x, y) => bin[y * w + x] && (!lab || lab[y * w + x] === c.id);
+    const rows = new Int32Array(c.h), cols = new Int32Array(c.w);
+    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++)
+      if (mine(x, y)) { rows[y - c.y0]++; cols[x - c.x0]++; }
+    /* 획 두께 추정: 0이 아닌 열 값들의 중앙값 */
+    const nz = Array.from(cols).filter((v) => v > 0).sort((a, b) => a - b);
+    if (!nz.length) return c;
+    const medCol = nz[nz.length >> 1];
+    const thin = Math.max(2, Math.round(medCol * 0.18));
+    let y0 = c.y0, y1 = c.y1, x0 = c.x0, x1 = c.x1;
+    /* 위/아래에서 얇은 띠 제거 (얇은 줄 뒤에 빈 줄이 이어지면 붙은 잡선으로 판단) */
+    const rowThin = (i) => rows[i] > 0 && rows[i] < c.w * 0.05 ? false : false;
+    let i = 0;
+    while (i < c.h - 1 && (y1 - y0) > c.h * 0.4) {
+      /* 아래쪽 */
+      let j = y1 - c.y0;
+      let run = 0;
+      while (j - run >= 0 && rows[j - run] > 0) run++;
+      if (run > 0 && run <= thin && (j - run) >= 0 && rows[j - run] === 0) { y1 -= run; i++; continue; }
+      break;
+    }
+    i = 0;
+    while (i < c.h - 1 && (y1 - y0) > c.h * 0.4) {
+      let j = y0 - c.y0, run = 0;
+      while (j + run < c.h && rows[j + run] > 0) run++;
+      if (run > 0 && run <= thin && (j + run) < c.h && rows[j + run] === 0) { y0 += run; i++; continue; }
+      break;
+    }
+    /* 좌/우 */
+    const colThinLimit = Math.max(2, Math.round((y1 - y0 + 1) * 0.06));
+    i = 0;
+    while (i < c.w - 1 && (x1 - x0) > c.w * 0.35) {
+      let j = x1 - c.x0, run = 0;
+      while (j - run >= 0 && cols[j - run] > 0) run++;
+      if (run > 0 && run <= colThinLimit && (j - run) >= 0 && cols[j - run] === 0) { x1 -= run; i++; continue; }
+      break;
+    }
+    i = 0;
+    while (i < c.w - 1 && (x1 - x0) > c.w * 0.35) {
+      let j = x0 - c.x0, run = 0;
+      while (j + run < c.w && cols[j + run] > 0) run++;
+      if (run > 0 && run <= colThinLimit && (j + run) < c.w && cols[j + run] === 0) { x0 += run; i++; continue; }
+      break;
+    }
+    if (x0 === c.x0 && x1 === c.x1 && y0 === c.y0 && y1 === c.y1) return c;
+    return { x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, area: c.area, id: c.id };
+  }
+
   /* 기울임(이탤릭) 보정: 폭이 최소가 되는 기울기를 골라 펴기 */
   function shearDigit(bin, w, c, lab) {
     const mine = (x, y) => bin[y * w + x] && (!lab || lab[y * w + x] === c.id);
@@ -313,11 +379,12 @@ const slDecoder = (() => {
     return { g2, W2, H };
   }
   /* 자릿수 하나 판독 */
-  function decodeDigit(bin, w, c, onTh, lab) {
+  function decodeDigit(bin, w, c0, onTh, lab) {
+    const c = trimComp(bin, w, c0, lab);
     const sh = shearDigit(bin, w, c, lab);
     if (!sh) return null;
     const { g2, W2, H } = sh;
-    if (W2 / H < 0.16) return 1; /* 펴고 나서도 좁으면 1 */
+    if (W2 / H < 0.30) return 1; /* 펴고 나서도 좁으면 1 (다른 숫자는 0.35 이상) */
     let pat = "";
     for (const [zx0, zy0, zx1, zy1] of ZONES) {
       const ax0 = Math.round(zx0 * W2), ay0 = Math.round(zy0 * H);
@@ -356,19 +423,34 @@ const slDecoder = (() => {
       while (s > 0 && dec[s - 1] != null && row[s].x0 - row[s - 1].x1 < tall.h * 0.9) s--;
       while (e < row.length - 1 && dec[e + 1] != null && row[e + 1].x0 - row[e].x1 < tall.h * 0.9) e++;
       const digits = row.slice(s, e + 1);
-      const dots = comps.filter((c) =>
-        c.h <= tall.h * 0.3 && c.w <= tall.h * 0.35 && c.area >= 3 && digits.indexOf(c) === -1 &&
-        (c.y0 + c.y1) / 2 > tall.y0 + tall.h * 0.6 && (c.y0 + c.y1) / 2 < tall.y1 + tall.h * 0.2);
+      /* 소수점: 베이스라인 근처의 작고 네모난 덩어리 하나만 인정 */
+      const base = tall.y1;
+      const dots = comps.filter((c) => {
+        if (digits.indexOf(c) !== -1) return false;
+        if (c.h < tall.h * 0.05 || c.h > tall.h * 0.28) return false;
+        if (c.w < tall.h * 0.05 || c.w > tall.h * 0.30) return false;
+        const ar = c.w / c.h;
+        if (ar < 0.45 || ar > 2.2) return false;
+        if (c.area < c.w * c.h * 0.35) return false;
+        const cy = (c.y0 + c.y1) / 2;
+        return cy > base - tall.h * 0.22 && cy < base + tall.h * 0.14;
+      });
+      /* 각 자리 사이 틈마다 후보를 찾고, 그중 가장 큰 것 하나만 채택 */
+      let bestDot = null;
+      for (let i = s; i < e; i++) {
+        const gapL = row[i].x1, gapR = row[i + 1].x0, tol = tall.h * 0.10;
+        const hit = dots.filter((p) => p.x0 >= gapL - tol && p.x1 <= gapR + tol)
+          .sort((a, b) => b.area - a.area)[0];
+        if (hit && (!bestDot || hit.area > bestDot.dot.area)) bestDot = { at: i, dot: hit };
+      }
       let out = "";
       for (let i = s; i <= e; i++) {
         out += dec[i];
-        if (i < e) {
-          const dot = dots.find((p) => p.x0 >= row[i].x1 - tall.h * 0.12 && p.x1 <= row[i + 1].x0 + tall.h * 0.12);
-          if (dot) out += ".";
-        }
+        if (bestDot && bestDot.at === i) out += ".";
       }
       const v = parseFloat(out);
-      if (out.length && isFinite(v) && v >= 0.05 && v <= 5000)
+      const wellFormed = /^\d{1,4}(\.\d{1,2})?$/.test(out);
+      if (wellFormed && isFinite(v) && v >= 0.05 && v <= 5000)
         return { value: v, raw: out, nDigits: digits.length };
     }
     return null;
@@ -376,7 +458,9 @@ const slDecoder = (() => {
   /* 전체 파이프라인: ①바로 숫자 줄 탐색 → ②표시창 덩어리 찾아 내부만 Otsu 재이진화 후 재탐색 */
   function readDisplay(gray, w, h, opts) {
     const { win, k, r, invert, onTh } = opts;
-    const bin = close_(binarize(gray, w, h, win, k, invert), w, h, r);
+    let bin = close_(binarize(gray, w, h, win, k, invert), w, h, r);
+    if (opts.open) bin = open_(bin, w, h, opts.open);
+    if (opts.openV) bin = openV(bin, w, h, opts.openV);
     const comps = components(bin, w, h);
     const direct = findRow(bin, w, comps, h, onTh);
     if (direct && direct.nDigits >= 2) return direct;
@@ -395,7 +479,9 @@ const slDecoder = (() => {
       for (const darkDigits of [!invert, invert]) {
         const bin2 = new Uint8Array(w * h);
         for (let j = 0; j < idxs.length; j++) { const i = idxs[j]; bin2[i] = (darkDigits ? gray[i] < th : gray[i] > th) ? 1 : 0; }
-        const bin2c = close_(bin2, w, h, r);
+        let bin2c = close_(bin2, w, h, r);
+        if (opts.open) bin2c = open_(bin2c, w, h, opts.open);
+        if (opts.openV) bin2c = openV(bin2c, w, h, opts.openV);
         for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
           if (x < d.x0 + band || x > d.x1 - band || y < d.y0 + band || y > d.y1 - band) bin2c[y * w + x] = 0;
         }
@@ -448,21 +534,28 @@ function slGray(img, maxSide) {
 async function recognizeScaleWeight(file) {
   const img = await slLoadImage(file);
   const { gray, w, h } = slGray(img, 1400);
-  /* 여러 설정을 순서대로 시도 — 보통 첫 시도(어두운 숫자 LCD)에서 끝난다 */
+  /* 설정을 바꿔가며 여러 번 읽고, 같은 값이 두 번 나오면 확정 (교차 검증) */
   const tries = [
-    { invert: false, win: 25, k: 0.85, r: 2 },
-    { invert: true, win: 25, k: 0.85, r: 2 },   /* 밝은 숫자(백라이트) 저울 */
-    { invert: false, win: 45, k: 0.88, r: 2 },
-    { invert: false, win: 25, k: 0.85, r: 3 },
+    { invert: false, win: 25, k: 0.85, r: 2, openV: 0 },
+    { invert: false, win: 25, k: 0.85, r: 2, openV: 3 },
+    { invert: false, win: 60, k: 0.85, r: 2, openV: 0 },
+    { invert: false, win: 25, k: 0.85, r: 3, openV: 3 },
+    { invert: true, win: 25, k: 0.85, r: 2, openV: 0 },   /* 밝은 숫자(백라이트) 저울 */
+    { invert: true, win: 25, k: 0.85, r: 2, openV: 3 },
   ];
-  let weak = null;
+  const votes = {}, order = [];
   for (const t of tries) {
-    const res = slDecoder.readDisplay(gray, w, h, { win: t.win, k: t.k, r: t.r, invert: t.invert, onTh: 0.3 });
-    if (res && res.nDigits >= 2) return res.raw;
-    if (res && !weak) weak = res.raw;
+    const res = slDecoder.readDisplay(gray, w, h, { win: t.win, k: t.k, r: t.r, invert: t.invert, onTh: 0.3, openV: t.openV });
+    if (res) {
+      if (!(res.raw in votes)) { votes[res.raw] = 0; order.push(res.raw); }
+      votes[res.raw]++;
+      if (votes[res.raw] >= 2) return res.raw;
+    }
     await new Promise((rs) => setTimeout(rs, 0)); /* 화면 멈춤 방지 */
   }
-  return weak;
+  if (!order.length) return null;
+  order.sort((a, b) => votes[b] - votes[a]);
+  return order[0];
 }
 
 /* 저울 촬영 버튼 — 무게 입력칸 아래에 붙여 쓰는 공용 컴포넌트
