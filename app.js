@@ -223,18 +223,26 @@ const slDecoder = (() => {
     return bin;
   }
   /* 팽창/침식 → 닫힘 (세그먼트 사이 틈 잇기) */
-  function morph(bin, w, h, r, isDilate) {
+  /* 정사각 구조요소는 가로·세로 1차원 연산으로 분리해 계산하면 훨씬 빠르다 (결과 동일) */
+  function morph1D(bin, w, h, r, isDilate, horiz) {
     const out = new Uint8Array(w * h);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      let hit = isDilate ? 0 : 1;
-      outer: for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-        const nx = x + dx, ny = y + dy;
-        const v = (nx >= 0 && nx < w && ny >= 0 && ny < h) ? bin[ny * w + nx] : 0;
-        if (isDilate) { if (v) { hit = 1; break outer; } } else { if (!v) { hit = 0; break outer; } }
+    const n = horiz ? w : h, m = horiz ? h : w;
+    const idx = horiz ? (a, b) => b * w + a : (a, b) => a * w + b;
+    const win = 2 * r + 1;
+    for (let b = 0; b < m; b++) {
+      let cnt = 0;
+      for (let a = 0; a < Math.min(r, n); a++) cnt += bin[idx(a, b)];
+      for (let a = 0; a < n; a++) {
+        const add = a + r, sub = a - r - 1;
+        if (add < n) cnt += bin[idx(add, b)];
+        if (sub >= 0) cnt -= bin[idx(sub, b)];
+        out[idx(a, b)] = isDilate ? (cnt > 0 ? 1 : 0) : (cnt === win ? 1 : 0);
       }
-      out[y * w + x] = hit;
     }
     return out;
+  }
+  function morph(bin, w, h, r, isDilate) {
+    return morph1D(morph1D(bin, w, h, r, isDilate, true), w, h, r, isDilate, false);
   }
   const close_ = (b, w, h, r) => morph(morph(b, w, h, r, true), w, h, r, false);
   const open_ = (b, w, h, r) => morph(morph(b, w, h, r, false), w, h, r, true);
@@ -429,13 +437,14 @@ const slDecoder = (() => {
     }
     return items;
   }
-  function findRow(bin, w, comps, imgH, onTh) {
+  function findRow(bin, w, comps, imgH, onTh, hMin, hMax) {
+    hMin = hMin || 0.04; hMax = hMax || 0.7;
     const cand = comps.filter((c) =>
-      c.h >= imgH * 0.04 && c.h <= imgH * 0.7 && c.w / c.h <= 0.85 && c.w >= 2 &&
+      c.h >= imgH * hMin && c.h <= imgH * hMax && c.w / c.h <= 0.85 && c.w >= 2 &&
       c.area / (c.w * c.h) >= 0.18 && c.area / (c.w * c.h) <= 0.97);
     /* '1' 조각 후보 (줄 높이보다 짧은 가는 세로획) */
     const frags = comps.filter((c) =>
-      c.h >= imgH * 0.015 && c.w / c.h <= 0.60 && c.w >= 2 && c.area / (c.w * c.h) >= 0.30);
+      c.h >= imgH * hMin * 0.35 && c.w / c.h <= 0.60 && c.w >= 2 && c.area / (c.w * c.h) >= 0.30);
     if (!cand.length) return null;
     cand.sort((a, b) => b.h - a.h);
     for (const tall of cand.slice(0, 6)) {
@@ -462,7 +471,15 @@ const slDecoder = (() => {
       let s = ti, e = ti;
       while (s > 0 && dec[s - 1] != null && row[s].x0 - row[s - 1].x1 < tall.h * 0.9) s--;
       while (e < row.length - 1 && dec[e + 1] != null && row[e + 1].x0 - row[e].x1 < tall.h * 0.9) e++;
+      /* 바로 옆에 붙어 있는데 판독 실패한 자리가 있으면, 그 자리를 잘라내고 답을 내면 안 된다 */
+      const gapLim = tall.h * 0.9;
+      if (e < row.length - 1 && dec[e + 1] == null && row[e + 1].x0 - row[e].x1 < gapLim) continue;
+      if (s > 0 && dec[s - 1] == null && row[s].x0 - row[s - 1].x1 < gapLim) continue;
       const digits = row.slice(s, e + 1);
+      /* 가장자리에 딱 붙은 채 '1'로 읽힌 자리는 잘려서 가늘어진 것일 수 있다 → 신뢰하지 않는다 */
+      const edgeM = Math.max(4, Math.round(tall.h * 0.08));
+      if (dec[e] === 1 && row[e].x1 >= w - edgeM) continue;
+      if (dec[s] === 1 && row[s].x0 <= edgeM) continue;
       /* 소수점: 베이스라인 근처의 작고 네모난 덩어리 하나만 인정 */
       const base = tall.y1;
       const usedIds = [];
@@ -491,6 +508,20 @@ const slDecoder = (() => {
         out += dec[i];
         if (bestDot && bestDot.at === i) out += ".";
       }
+      /* 읽어낸 자리 바깥(좌/우)에 아직 획이 남아 있으면 = 자리를 놓친 것 → 거부 */
+      const bandY0 = Math.max(0, tall.y0), bandY1 = tall.y1;
+      /* 세로로 길게 이어진 획(=놓친 숫자)이 오른쪽에 남아 있는지만 본다 */
+      const bandH = bandY1 - bandY0 + 1;
+      let tallLeftover = false;
+      const px0 = digits[digits.length - 1].x1 + Math.round(tall.h * 0.15);
+      const px1 = digits[digits.length - 1].x1 + Math.round(tall.h * 0.75);
+      for (let x = px0; x <= px1 && !tallLeftover; x++) {
+        if (x < 0 || x >= w) continue;
+        let on = 0;
+        for (let y = bandY0; y <= bandY1; y++) if (bin[y * w + x]) on++;
+        if (on >= bandH * 0.45) tallLeftover = true;
+      }
+      if (tallLeftover) continue;
       const v = parseFloat(out);
       const wellFormed = /^\d{1,4}(\.\d{1,2})?$/.test(out);
       if (wellFormed && isFinite(v) && v >= 0.05 && v <= 5000)
@@ -536,7 +567,70 @@ const slDecoder = (() => {
     }
     return weak;
   }
-  return { readDisplay };
+  
+  /* 표시창 영역을 잘라 일정 높이로 확대 (이중선형) — 사진마다 다른 크기를 맞춰준다 */
+  function cropScale(gray, w, h, x0, y0, x1, y1, targetH) {
+    const rw = x1 - x0 + 1, rh = y1 - y0 + 1, s = targetH / rh;
+    const W = Math.max(8, Math.round(rw * s)), H = Math.max(8, Math.round(rh * s));
+    const out = new Float32Array(W * H);
+    for (let y = 0; y < H; y++) {
+      const sy = y0 + (y + 0.5) / s - 0.5;
+      const iy = Math.max(y0, Math.min(y1, Math.floor(sy))), fy = Math.max(0, Math.min(1, sy - iy)), iy2 = Math.min(y1, iy + 1);
+      for (let x = 0; x < W; x++) {
+        const sx = x0 + (x + 0.5) / s - 0.5;
+        const ix = Math.max(x0, Math.min(x1, Math.floor(sx))), fx = Math.max(0, Math.min(1, sx - ix)), ix2 = Math.min(x1, ix + 1);
+        const a = gray[iy * w + ix], b = gray[iy * w + ix2], c = gray[iy2 * w + ix], d = gray[iy2 * w + ix2];
+        out[y * W + x] = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+      }
+    }
+    return { g: out, W, H };
+  }
+  const FULL_SET = [
+    { win: 25, k: 0.85, r: 2, invert: false },
+    { win: 25, k: 0.85, r: 3, invert: false },
+    { win: 60, k: 0.85, r: 2, invert: false },
+  ];
+  const CROP_SET = [
+    { bf: 0.04, win: 25, k: 0.90 }, { bf: 0.04, win: 25, k: 0.85 },
+    { bf: 0.04, win: 40, k: 0.90 }, { bf: 0.04, win: 40, k: 0.85 },
+    { bf: 0.015, win: 25, k: 0.88 }, { bf: 0.015, win: 40, k: 0.88 },
+  ];
+  /* 최종 진입점: 여러 방식으로 읽어 교차검증한다.
+     확신이 부족하면 weak=true로 표시해, 틀린 값을 채우는 대신 사용자에게 확인을 맡긴다 */
+  function recognize(gray, w, h) {
+    const votes = {};
+    const add = (raw) => { if (raw && raw.replace(".", "").length >= 2) votes[raw] = (votes[raw] || 0) + 1; };
+    const disps = [];
+    for (const t of FULL_SET) {
+      const bin = close_(binarize(gray, w, h, t.win, t.k, t.invert), w, h, t.r);
+      const comps = components(bin, w, h);
+      const rr = findRow(bin, w, comps, h, 0.3);
+      if (rr) add(rr.raw);
+      comps.filter((c) => c.w / c.h >= 1.15 && c.w / c.h <= 4.5 && c.h >= h * 0.07 && c.w >= w * 0.15 &&
+        c.area / (c.w * c.h) >= 0.05 && c.area / (c.w * c.h) <= 0.75)
+        .sort((a, b) => b.area - a.area).slice(0, 2)
+        .forEach((d) => { if (!disps.some((e) => Math.abs(e.x0 - d.x0) < 20 && Math.abs(e.y0 - d.y0) < 20)) disps.push(d); });
+    }
+    for (const d of disps.slice(0, 2)) {
+      for (const s of CROP_SET) {
+        const bx = Math.round(d.w * s.bf), by = Math.round(d.h * s.bf);
+        if (d.w - 2 * bx < 40 || d.h - 2 * by < 40) continue;
+        const cs = cropScale(gray, w, h, d.x0 + bx, d.y0 + by, d.x1 - bx, d.y1 - by, 300);
+        const bin = close_(binarize(cs.g, cs.W, cs.H, s.win, s.k, false), cs.W, cs.H, 2);
+        const comps = components(bin, cs.W, cs.H);
+        const rr = findRow(bin, cs.W, comps, cs.H, 0.3, 0.18, 0.95);
+        if (rr) add(rr.raw);
+      }
+    }
+    const ent = Object.keys(votes).map((k) => [k, votes[k]]);
+    if (!ent.length) return null;
+    const total = ent.reduce((a, e) => a + e[1], 0);
+    ent.sort((a, b) => (b[1] - a[1]) || (b[0].replace(".", "").length - a[0].replace(".", "").length));
+    const raw = ent[0][0], v = ent[0][1];
+    return { raw: raw, votes: v, total: total, weak: (v < 2 || v < total * 0.55) };
+  }
+  return { readDisplay, recognize };
+
 })();
 
 /* 사진 파일 → 이미지 */
@@ -577,28 +671,8 @@ function slGray(img, maxSide) {
 async function recognizeScaleWeight(file) {
   const img = await slLoadImage(file);
   const { gray, w, h } = slGray(img, 1400);
-  /* 설정을 바꿔가며 여러 번 읽고, 같은 값이 두 번 나오면 확정 (교차 검증) */
-  const tries = [
-    { invert: false, win: 25, k: 0.85, r: 2, openV: 0 },
-    { invert: false, win: 25, k: 0.85, r: 2, openV: 3 },
-    { invert: false, win: 60, k: 0.85, r: 2, openV: 0 },
-    { invert: false, win: 25, k: 0.85, r: 3, openV: 3 },
-    { invert: true, win: 25, k: 0.85, r: 2, openV: 0 },   /* 밝은 숫자(백라이트) 저울 */
-    { invert: true, win: 25, k: 0.85, r: 2, openV: 3 },
-  ];
-  const votes = {}, order = [];
-  for (const t of tries) {
-    const res = slDecoder.readDisplay(gray, w, h, { win: t.win, k: t.k, r: t.r, invert: t.invert, onTh: 0.3, openV: t.openV });
-    if (res) {
-      if (!(res.raw in votes)) { votes[res.raw] = 0; order.push(res.raw); }
-      votes[res.raw]++;
-      if (votes[res.raw] >= 2) return res.raw;
-    }
-    await new Promise((rs) => setTimeout(rs, 0)); /* 화면 멈춤 방지 */
-  }
-  if (!order.length) return null;
-  order.sort((a, b) => votes[b] - votes[a]);
-  return order[0];
+  await new Promise((rs) => setTimeout(rs, 0)); /* 화면 멈춤 방지 */
+  return slDecoder.recognize(gray, w, h); /* { raw, votes, total, weak } 또는 null */
 }
 
 /* 저울 촬영 버튼 — 무게 입력칸 아래에 붙여 쓰는 공용 컴포넌트
@@ -610,9 +684,14 @@ function ScaleScanBtn({ onValue }) {
     if (!file) return;
     setBusy(true); setMsg("숫자를 읽는 중…");
     try {
-      const v = await recognizeScaleWeight(file);
-      if (v != null) { onValue(String(v)); setMsg("✓ " + v + " 인식됨 — 값이 다르면 직접 고쳐주세요"); }
-      else setMsg("숫자를 못 찾았어요 — 표시창이 크고 반듯하게 나온 사진으로 해보세요");
+      const res = await recognizeScaleWeight(file);
+      if (res && !res.weak) {
+        onValue(res.raw);
+        setMsg("✓ " + res.raw + " 인식됨 — 값이 다르면 직접 고쳐주세요");
+      } else {
+        /* 확신이 부족하면 틀린 값을 채우지 않는다 */
+        setMsg("숫자를 확실하게 읽지 못했어요 — 직접 입력해주세요. 밝은 곳에서 표시창이 크고 반듯하게 나오도록 찍으면 잘 인식돼요");
+      }
     } catch (err) {
       setMsg("⚠️ 인식에 실패했어요 — 다시 시도해주세요");
     }
