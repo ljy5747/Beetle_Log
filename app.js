@@ -1913,18 +1913,42 @@ function App() {
   /* ── 뒤로가기 (갤럭시 시스템 뒤로가기 + 아이폰 엣지 스와이프) ── */
   const backRef = useRef({});
   backRef.current = { modal, view, settingsOpen, data };
+  /* ── 화면별 스크롤 위치 기억 (뒤로 가면 보던 자리로) ── */
+  const scrollMem = useRef({});
+  const viewKey = (v) => v.name + (v.id ? ":" + v.id : "") + (v.name === "list" ? ":" + tab : "");
+  /* 화면을 떠나기 전 현재 위치 저장 */
+  const rememberScroll = () => {
+    try { scrollMem.current[viewKey(view)] = window.scrollY || 0; } catch (e) {}
+  };
+  /* 새 화면으로 이동 (뒤로가기면 이전 위치 복원, 아니면 맨 위) */
+  const goView = (next, restore) => {
+    rememberScroll();
+    setView(next);
+    const y = restore ? (scrollMem.current[viewKey(next)] || 0) : 0;
+    let tries = 0;
+    const tick = () => {
+      /* 화면이 그려져 스크롤이 가능해지면 이동 */
+      if (document.body.scrollHeight > y + window.innerHeight * 0.5 || tries > 10) {
+        window.scrollTo({ top: y, behavior: "auto" });
+        return;
+      }
+      tries++; setTimeout(tick, 50);
+    };
+    setTimeout(tick, 50);
+  };
+
   const goBackStep = () => {
     const b = backRef.current;
     if (b.modal) { setModal(null); return true; }
     if (b.settingsOpen) { setSettingsOpen(false); return true; }
     if (b.view.name === "detail") {
       const ind = b.data && b.data.individuals.find((i) => i.id === b.view.id);
-      setView(ind && ind.lineId ? { name: "lineDetail", id: ind.lineId } : { name: "list" });
+      goView(ind && ind.lineId ? { name: "lineDetail", id: ind.lineId } : { name: "list" }, true);
       return true;
     }
-    if (b.view.name === "dueList") { setView({ name: "list" }); return true; }
+    if (b.view.name === "dueList") { goView({ name: "list" }, true); return true; }
     if (b.view.name === "lineDetail" || b.view.name === "parentDetail") {
-      setFilter("전체"); setView({ name: "list" }); return true;
+      setFilter("전체"); goView({ name: "list" }, true); return true;
     }
     return false; /* 이미 맨 처음 화면 */
   };
@@ -2146,7 +2170,7 @@ function App() {
     else {
       const nl = { ...f, id: uid() };
       persist({ ...data, lines: [...data.lines, nl] });
-      setModal(null); say("✓ 라인 생성됨"); setView({ name: "lineDetail", id: nl.id });
+      setModal(null); say("✓ 라인 생성됨"); goView({ name: "lineDetail", id: nl.id }, false);
       return;
     }
     setModal(null); say("✓ 저장됨");
@@ -2233,7 +2257,7 @@ function App() {
       individuals: data.individuals.map((i) => i.id === ind.id ? { ...i, promotedToParentId: newParent.id } : i),
     });
     say("✓ 성충으로 등록됐어요 — 사육 이력도 옮겨졌어요");
-    setView({ name: "parentDetail", id: newParent.id });
+    goView({ name: "parentDetail", id: newParent.id }, false);
   };
   const importJSON = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -2363,7 +2387,7 @@ function App() {
                 + (ev[addDays(today(), 2)] || []).filter((e) => e.type === "bottle").length;
               if (!due && !soon) return null;
               return (
-                <div className="alert" onClick={() => setView({ name: "dueList" })}>
+                <div className="alert" onClick={() => goView({ name: "dueList" }, false)}>
                   <span className="alert-dot" />
                   {due > 0 ? <b>교체할 유충 {due}마리</b> : <b>곧 교체 {soon}마리</b>}
                   {due > 0 && soon > 0 && <span className="dim"> · 2일 내 {soon}마리 더</span>}
@@ -2413,7 +2437,7 @@ function App() {
               };
               const avgM = avgOf("수"), avgF = avgOf("암"), avgU = avgOf("미");
               return (
-                <div key={L.id} className="card" onClick={() => setView({ name: "lineDetail", id: L.id })}>
+                <div key={L.id} className="card" onClick={() => goView({ name: "lineDetail", id: L.id }, false)}>
                   <div className="card-l">
                     <div className="tagrow">
                       <span className="tag mono">{L.code}</span>
@@ -2514,7 +2538,7 @@ function App() {
                     const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id).length;
                     const dead = p.status === "사망";
                     return (
-                      <div key={p.id} className={"card" + (dead ? " dead" : "")} onClick={() => setView({ name: "parentDetail", id: p.id })}>
+                      <div key={p.id} className={"card" + (dead ? " dead" : "")} onClick={() => goView({ name: "parentDetail", id: p.id }, false)}>
                         <div className="card-l">
                           <div className="tagrow">
                             <span className={"tag mono" + (dead ? " strike" : "")}>{p.code}</span>
@@ -2556,7 +2580,7 @@ function App() {
         return (
           <>
             <div className="topbar">
-              <button className="hbtn" onClick={() => setView({ name: "list" })}>‹ 목록</button>
+              <button className="hbtn" onClick={() => goView({ name: "list" }, true)}>‹ 목록</button>
               <div className="mtitle">교체할 유충</div>
               <span style={{ width: 44 }} />
             </div>
@@ -2569,7 +2593,7 @@ function App() {
             )}
             {items.map(({ ind }) => (
               <LarvaCard key={ind.id} ind={ind} lineCode={(lineById[ind.lineId] || {}).code}
-                onOpen={() => setView({ name: "detail", id: ind.id })}
+                onOpen={() => goView({ name: "detail", id: ind.id }, false)}
                 onBottle={() => setModal({ type: "bottle", indId: ind.id })} />
             ))}
             <div style={{ height: 40 }} />
@@ -2604,7 +2628,7 @@ function App() {
         return (
           <>
             <div className="topbar">
-              <button className="hbtn" onClick={() => { setFilter("전체"); setView({ name: "list" }); }}>‹ 목록</button>
+              <button className="hbtn" onClick={() => { setFilter("전체"); goView({ name: "list" }, true); }}>‹ 목록</button>
               <div className="tagrow"><span className="tag mono big">{L.code}</span></div>
               <button className="hbtn" onClick={() => setModal({ type: "line", editId: L.id })}>수정</button>
             </div>
@@ -2612,9 +2636,9 @@ function App() {
 
             {/* 부·모 종충 정보 카드 */}
             <LineParentCard p={parentById[L.fatherId]} role="부"
-              onOpen={() => parentById[L.fatherId] && setView({ name: "parentDetail", id: L.fatherId })} />
+              onOpen={() => parentById[L.fatherId] && goView({ name: "parentDetail", id: L.fatherId }, false)} />
             <LineParentCard p={parentById[L.motherId]} role="모"
-              onOpen={() => parentById[L.motherId] && setView({ name: "parentDetail", id: L.motherId })} />
+              onOpen={() => parentById[L.motherId] && goView({ name: "parentDetail", id: L.motherId }, false)} />
 
             <div className="p-t lt">라인 정보</div>
             <div className="panel">
@@ -2655,7 +2679,7 @@ function App() {
 
             {shown.map((ind) => (
               <LarvaCard key={ind.id} ind={ind} crownM={crownM} crownF={crownF}
-                onOpen={() => setView({ name: "detail", id: ind.id })}
+                onOpen={() => goView({ name: "detail", id: ind.id }, false)}
                 onBottle={() => setModal({ type: "bottle", indId: ind.id })} />
             ))}
 
@@ -2678,7 +2702,7 @@ function App() {
         return (
           <>
             <div className="topbar">
-              <button className="hbtn" onClick={() => setView({ name: "list" })}>‹ 목록</button>
+              <button className="hbtn" onClick={() => goView({ name: "list" }, true)}>‹ 목록</button>
               <div className="tagrow"><span className="tag mono big">{p.code}</span></div>
               <button className="hbtn" onClick={() => setModal({ type: "parent", editId: p.id })}>수정</button>
             </div>
@@ -2756,7 +2780,7 @@ function App() {
             {myLines.map((L) => {
               const kids = larvaeOf(L.id);
               return (
-                <div key={L.id} className="card" onClick={() => setView({ name: "lineDetail", id: L.id })}>
+                <div key={L.id} className="card" onClick={() => goView({ name: "lineDetail", id: L.id }, false)}>
                   <div className="card-l">
                     <div className="tagrow"><span className="tag mono">{L.code}</span></div>
                     <div className="card-sub">{[L.species, L.origin].filter(Boolean).join(" · ")}</div>
@@ -2797,7 +2821,7 @@ function App() {
         return (
           <>
             <div className="topbar">
-              <button className="hbtn" onClick={() => setView(L.id ? { name: "lineDetail", id: L.id } : { name: "list" })}>‹ {L.code || "목록"}</button>
+              <button className="hbtn" onClick={() => goView(L.id ? { name: "lineDetail", id: L.id } : { name: "list" }, true)}>‹ {L.code || "목록"}</button>
               <div className="tagrow">
                 <span className="tag mono big">{cur.code}</span>
                 <span className="chip" style={{ color: STATUS_COLOR[cur.status], borderColor: STATUS_COLOR[cur.status] + "55" }}>{cur.status}</span>
@@ -2844,7 +2868,7 @@ function App() {
             {cur.eclosion && (
               cur.promotedToParentId && data.parents.find((p) => p.id === cur.promotedToParentId) ? (
                 <button className="btn sm" style={{ width: "100%", marginBottom: 16, borderColor: "#A8884F66", color: "#937640" }}
-                  onClick={() => setView({ name: "parentDetail", id: cur.promotedToParentId })}>
+                  onClick={() => goView({ name: "parentDetail", id: cur.promotedToParentId }, false)}>
                   🪲 등록된 성충 보기 ›
                 </button>
               ) : (
