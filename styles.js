@@ -114,6 +114,9 @@ vertical-align:middle;position:relative;top:-1.5px;-webkit-text-stroke:.4px curr
 .dim{color:var(--dim)} .warn{color:var(--red);font-size:12px;font-weight:700;margin-left:6px}
 .card.dead{opacity:.5;background:var(--surf2)}
 .card.dead .card-val,.card.dead .card-sub{color:var(--dim)}
+/* 방금 저장한 유충 카드를 잠깐 강조 */
+.card.just-saved{border-color:var(--gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 22%,transparent);
+transition:box-shadow .3s,border-color .3s}
 .card.crown{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 .crown-ic{font-size:15px;line-height:1}
 .avg-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;font-size:13px;font-weight:700}
