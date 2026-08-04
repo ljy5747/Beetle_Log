@@ -420,14 +420,25 @@ function slLoadImage(file) {
     img.src = url;
   });
 }
-/* 이미지 → 흑백 픽셀 배열 (긴 변 기준 축소) */
+/* 이미지 → 흑백 픽셀 배열 (긴 변 기준 축소)
+   한 번에 크게 줄이면 폰 브라우저가 가는 획·소수점을 뭉개므로 반씩 단계적으로 축소한다 */
 function slGray(img, maxSide) {
   const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
   const scale = Math.min(1, maxSide / Math.max(iw, ih));
   const w = Math.max(1, Math.round(iw * scale)), h = Math.max(1, Math.round(ih * scale));
+  let srcImg = img, sw = iw, sh = ih;
+  while (sw * 0.5 > w) {
+    sw = Math.max(w, Math.round(sw * 0.5)); sh = Math.max(h, Math.round(sh * 0.5));
+    const mid = document.createElement("canvas"); mid.width = sw; mid.height = sh;
+    const mx = mid.getContext("2d");
+    mx.imageSmoothingEnabled = true; try { mx.imageSmoothingQuality = "high"; } catch (e) {}
+    mx.drawImage(srcImg, 0, 0, sw, sh);
+    srcImg = mid;
+  }
   const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
   const ctx = cv.getContext("2d", { willReadFrequently: true });
-  ctx.drawImage(img, 0, 0, w, h);
+  ctx.imageSmoothingEnabled = true; try { ctx.imageSmoothingQuality = "high"; } catch (e) {}
+  ctx.drawImage(srcImg, 0, 0, w, h);
   const d = ctx.getImageData(0, 0, w, h).data;
   const gray = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) gray[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
@@ -436,7 +447,7 @@ function slGray(img, maxSide) {
 
 async function recognizeScaleWeight(file) {
   const img = await slLoadImage(file);
-  const { gray, w, h } = slGray(img, 1000);
+  const { gray, w, h } = slGray(img, 1400);
   /* 여러 설정을 순서대로 시도 — 보통 첫 시도(어두운 숫자 LCD)에서 끝난다 */
   const tries = [
     { invert: false, win: 25, k: 0.85, r: 2 },
