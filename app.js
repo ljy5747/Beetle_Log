@@ -209,6 +209,19 @@ const lossRate = (ind) => { const mw = maxWeight(ind), pw = num(ind.pupation?.pu
 /* 가장 최근 병갈이의 두폭 (없으면 그 이전 기록에서) */
 const lastHeadWidth = (ind) => { const s = sortedRecs(ind).map((r) => num(r.headWidth)).filter(Boolean); return s.length ? s[s.length - 1] : null; };
 /* 병갈이 기록 중 한 번이라도 해당 플래그가 있었는지 */
+/* ── 연도 구분 ──
+   라인: 페어링 → 셋팅 → 해체 순으로 가장 이른 날짜의 연도
+   종충: 우화일 → 첫 사육기록 순 */
+const yearOf = (iso) => { const m = String(iso || "").match(/^(\d{4})/); return m ? m[1] : null; };
+const lineYear = (L) => yearOf(L.pairDate) || yearOf(L.setDate) || yearOf(L.breakdownDate) || null;
+const parentYear = (p) => {
+  const y = yearOf(p.eclosionDate);
+  if (y) return y;
+  const gr = (p.growthRecords || []).map((r) => r.date).filter(Boolean).sort();
+  return gr.length ? yearOf(gr[0]) : null;
+};
+const YEAR_NONE = "연도 미상";
+
 /* 사망·분양 개체는 통계·그래프에서 제외 */
 const isActive = (ind) => ind.status !== "사망" && ind.status !== "분양";
 const hasFlag = (ind, flag) => (ind.flags || []).includes(flag) || (ind.bottleRecords || []).some((r) => (r.flags || []).includes(flag));
@@ -249,6 +262,21 @@ function Spark({ ind, w = 96, h = 30, big }) {
       {/* 선만 있으면 변화를 알 수 없어 양 끝 무게를 함께 표시 */}
       <div className="spark-ends mono"><span>{n1(first)}</span><i>→</i><span className="e">{n1(last)}g</span></div>
       {big && <div className="spark-range mono">최대 {n1(max)}g</div>}
+    </div>
+  );
+}
+
+/* ════════════════════ 연도 선택 칩 ════════════════════ */
+function YearChips({ years, value, onChange, counts }) {
+  if (years.length <= 1) return null; /* 연도가 하나뿐이면 굳이 안 보여줌 */
+  const all = ["전체", ...years];
+  return (
+    <div className="filters">
+      {all.map((y) => (
+        <button key={y} className={"fchip" + (value === y ? " on" : "")} onClick={() => onChange(y)}>
+          {y}{counts[y] != null && <span className="fchip-n"> {counts[y]}</span>}
+        </button>
+      ))}
     </div>
   );
 }
@@ -1861,6 +1889,7 @@ function App() {
   const [theme, setTheme] = useState("brown");
   const [snaps, setSnaps] = useState([]);
   const [folderBy, setFolderBy] = useState("species");
+  const [yearFilter, setYearFilter] = useState("전체");
   const [infoOpen, setInfoOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncKey, setSyncKey] = useState("");
@@ -2431,7 +2460,18 @@ function App() {
               </div>
             )}
 
-            {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
+            {(() => {
+              /* 연도별 개수 (최신 연도부터) */
+              const cnt = { "전체": data.lines.length };
+              data.lines.forEach((L) => { const y = lineYear(L) || YEAR_NONE; cnt[y] = (cnt[y] || 0) + 1; });
+              const years = Object.keys(cnt).filter((k) => k !== "전체")
+                .sort((a, b) => (a === YEAR_NONE ? 1 : b === YEAR_NONE ? -1 : b.localeCompare(a)));
+              return <YearChips years={years} value={yearFilter} onChange={setYearFilter} counts={cnt} />;
+            })()}
+
+            {[...data.lines]
+              .filter((L) => yearFilter === "전체" || (lineYear(L) || YEAR_NONE) === yearFilter)
+              .sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
               const kids = larvaeOf(L.id);
               const cnt = STATUSES.map((s) => [s, kids.filter((i) => i.status === s).length]).filter(([, n]) => n > 0);
               const dd = lineDday(L.id);
@@ -2481,11 +2521,17 @@ function App() {
               </div>
             )}
             {data.parents.length > 0 && (() => {
-              /* 폴더 기준(종/혈통)으로 그룹핑. 미입력은 '미지정'으로 */
+              /* 연도별 개수 (최신 연도부터) */
+              const ycnt = { "전체": data.parents.length };
+              data.parents.forEach((p) => { const y = parentYear(p) || YEAR_NONE; ycnt[y] = (ycnt[y] || 0) + 1; });
+              const yearList = Object.keys(ycnt).filter((k) => k !== "전체")
+                .sort((a, b) => (a === YEAR_NONE ? 1 : b === YEAR_NONE ? -1 : b.localeCompare(a)));
+              /* 연도로 먼저 거르고, 폴더 기준(종/혈통)으로 그룹핑. 미입력은 '미지정'으로 */
+              const pool = data.parents.filter((p) => yearFilter === "전체" || (parentYear(p) || YEAR_NONE) === yearFilter);
               const byLabel = folderBy === "line" ? "혈통" : "종";
               const noneKey = byLabel + " 미지정";
               const groups = {};
-              data.parents.forEach((p) => {
+              pool.forEach((p) => {
                 const key = (folderBy === "line" ? (p.line || "") : (p.species || "")).trim() || noneKey;
                 (groups[key] = groups[key] || []).push(p);
               });
@@ -2499,6 +2545,7 @@ function App() {
               if (!speciesFolder || !groups[speciesFolder]) {
                 return (
                   <>
+                    <YearChips years={yearList} value={yearFilter} onChange={(y) => { setYearFilter(y); setSpeciesFolder(null); }} counts={ycnt} />
                     <div className="view-toggle">
                       <button className={"vt-btn" + (folderBy === "species" ? " on" : "")} onClick={() => { setFolderBy("species"); setSpeciesFolder(null); }}>종별</button>
                       <button className={"vt-btn" + (folderBy === "line" ? " on" : "")} onClick={() => { setFolderBy("line"); setSpeciesFolder(null); }}>혈통별</button>
@@ -3136,7 +3183,7 @@ function App() {
       <div className="bnav">
         {[["lines", "라인"], ["parents", "종충"], ["calendar", "캘린더"]].map(([k, label]) => (
           <button key={k} className={"bnav-b" + (!settingsOpen && view.name === "list" && tab === k ? " on" : "")}
-            onClick={() => { setSettingsOpen(false); setFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
+            onClick={() => { setSettingsOpen(false); setFilter("전체"); setYearFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
             <span className="bnav-ic"><img src={"icons/tab-" + k + ".png?v=2"} alt={label} /></span>
             <span className="bnav-l">{label}</span>
           </button>

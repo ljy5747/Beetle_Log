@@ -69,6 +69,8 @@ padding:12px 14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inhe
 .fchip{flex:none;background:transparent;border:1px solid var(--line);color:var(--dim);border-radius:999px;
 padding:6px 15px;font-size:12.5px;font-weight:600;cursor:pointer;letter-spacing:.02em}
 .fchip.on{color:var(--bg);border-color:var(--text);background:var(--text)}
+.fchip-n{opacity:.55;font-weight:600}
+.fchip.on .fchip-n{opacity:.75}
 .tag{display:inline-block;border:none;border-radius:0;padding:0;font-family:var(--serif);font-size:18px;font-weight:700;background:none;letter-spacing:.01em}
 .tag.big{font-size:21px;padding:0}
 .tag.strike{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--dim)}
