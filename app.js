@@ -237,6 +237,7 @@ function Spark({ ind, w = 96, h = 30, big }) {
   if (vs.length < 2) return <div className="spark-empty" />;
   const min = Math.min(...vs), max = Math.max(...vs), range = max - min || 1, p = 4;
   const pts = vs.map((v, i) => [p + (i * (w - 2 * p)) / (vs.length - 1), h - p - ((v - min) * (h - 2 * p)) / range]);
+  const first = vs[0], last = vs[vs.length - 1];
   return (
     <div className="spark">
       <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
@@ -245,7 +246,9 @@ function Spark({ ind, w = 96, h = 30, big }) {
           <circle key={i} cx={q[0]} cy={q[1]} r={i === pts.length - 1 ? 3 : 1.7} fill={i === pts.length - 1 ? "#A8884F" : "#6B8E4E"} />
         ))}
       </svg>
-      {big && <div className="spark-range mono">{n1(min)}g → 최대 {n1(max)}g</div>}
+      {/* 선만 있으면 변화를 알 수 없어 양 끝 무게를 함께 표시 */}
+      <div className="spark-ends mono"><span>{n1(first)}</span><i>→</i><span className="e">{n1(last)}g</span></div>
+      {big && <div className="spark-range mono">최대 {n1(max)}g</div>}
     </div>
   );
 }

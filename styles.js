@@ -198,6 +198,11 @@ font-size:10px;font-weight:700;color:var(--dim);letter-spacing:.08em;text-transf
 .r-gap{font-size:11.5px;color:var(--dim);font-weight:600;background:var(--surf2);border-radius:4px;padding:1px 7px;margin-left:2px}
 .spark-empty{font-size:11px;color:var(--dim);padding:8px 0}
 .spark-range{font-size:11px;color:var(--dim);margin-top:4px}
+/* 스파크라인 양 끝 무게 (선만으론 변화를 알 수 없어서) */
+.spark-ends{display:flex;align-items:center;justify-content:center;gap:4px;
+font-size:10.5px;color:var(--dim);margin-top:1px;letter-spacing:-.01em}
+.spark-ends i{font-style:normal;font-size:9px;opacity:.6}
+.spark-ends .e{color:var(--gold-d);font-weight:700}
 
 /* ═══════════ [13] 특이 케이스 태그 (원더링·거식 등) ═══════════ */
 .flag-show{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
