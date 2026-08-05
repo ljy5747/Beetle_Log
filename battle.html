@@ -167,7 +167,9 @@ max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 44px rgba(0
 .rec-body{overflow:auto;padding:6px 15px 15px}
 .rec-body table{min-width:100%}
 .rec-body th{position:sticky;top:0;background:var(--surf);z-index:1}
-.pud-tag{font-size:11px;margin-left:3px;vertical-align:middle}
+.pud-tag{display:inline-block;margin-left:4px;vertical-align:middle}
+.pud-ico{vertical-align:middle;display:inline-block}
+.rec-note .pud-ico{margin:0 1px}
 .th-s{font-size:9px;font-weight:400;color:#6E6559}
 .hw{color:var(--dim);font-weight:400}
 .fd{font-size:11px;color:var(--gold-l);opacity:.8;font-weight:400;margin-top:2px;white-space:nowrap;line-height:1.35}
@@ -554,6 +556,21 @@ function render(B){
 }
 
 /* 개체별 기록 창 */
+var PUD_GRID=["..eeeeeeeeee..",".e..........e.",".ewwwwwwwwwwe.",".ewwgwwwwgwwe.",
+".ewwwwwgwwwwe.",".ewgwwwwwwgwe.",".ewwwwwwwwwwe.","..ewwgwwwgwe..",
+"..ewwwwwwwwe..","...ewwgwwwe...","...ewwwwwwe...","....eeeeee...."];
+function puddingIcon(px,edge){
+  px=px||2;edge=edge||"#A8884F";
+  var cols=14,rows=12,rects="";
+  for(var y=0;y<rows;y++)for(var x=0;x<cols;x++){
+    var ch=PUD_GRID[y][x],col=null;
+    if(ch==="e")col=edge; else if(ch==="w")col="#F4F1EB"; else if(ch==="g")col="#CDBD9C";
+    if(!col)continue;
+    rects+='<rect x="'+(x*px)+'" y="'+(y*px)+'" width="'+px+'" height="'+px+'" fill="'+col+'"/>';
+  }
+  return '<svg width="'+(cols*px)+'" height="'+(rows*px)+'" viewBox="0 0 '+(cols*px)+' '+(rows*px)
+    +'" shape-rendering="crispEdges" class="pud-ico">'+rects+'</svg>';
+}
 function openRecords(bi){
   var r=(window.__REC||[])[bi]; if(!r)return;
   var br=r.br,rounds=window.__ROUNDS||[];
@@ -568,7 +585,7 @@ function openRecords(bi){
     var sx=sexOf(l.sex);
     var isBest=(r.best.m&&r.best.m.code===l.code&&sx==="m")||(r.best.f&&r.best.f.code===l.code&&sx==="f");
     h+='<tr class="'+(isBest?"best":"")+'"><td class="mono">'+(isBest?'<span class="star">★</span> ':"")+esc(l.code)
-      +(l.pudding?'<span class="pud-tag" title="첫 병 전 푸딩컵 사용">🍮</span>':"")+'</td>'
+      +(l.pudding?'<span class="pud-tag" title="첫 병 전 푸딩컵 사용">'+puddingIcon(2)+'</span>':"")+'</td>'
       +'<td>'+(sx==="m"?'<span class="sx-m">♂</span>':sx==="f"?'<span class="sx-f">♀</span>':'<span style="color:var(--dim)">—</span>')+'</td>'
       +rounds.map(function(_,i){
         var w=num(l.weights[i]);
@@ -583,7 +600,7 @@ function openRecords(bi){
   });
   var anyPud=br.larvae.some(function(l){return l.pudding;});
   h+='</table><div class="rec-note">★ = 팀 스코어에 반영되는 선발 개체'
-    +(anyPud?' &nbsp;·&nbsp; 🍮 = 첫 병 전 푸딩컵 사용':"")+'</div></div>';
+    +(anyPud?' &nbsp;·&nbsp; '+puddingIcon(2)+' = 첫 병 전 푸딩컵 사용':"")+'</div></div>';
   var d=document.createElement("div");
   d.className="rec-ov";d.id="recOv";d.innerHTML='<div class="rec-box">'+h+'</div>';
   d.onclick=function(e){if(e.target===d)closeRecords();};
