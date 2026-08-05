@@ -69,17 +69,6 @@ padding:12px 14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inhe
 .fchip{flex:none;background:transparent;border:1px solid var(--line);color:var(--dim);border-radius:999px;
 padding:6px 15px;font-size:12.5px;font-weight:600;cursor:pointer;letter-spacing:.02em}
 .fchip.on{color:var(--bg);border-color:var(--text);background:var(--text)}
-.fchip-n{opacity:.55;font-weight:600}
-
-/* ═══════════ 연도 이동 (‹ 2026 ›) ═══════════ */
-.year-nav{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px}
-.year-arrow{background:none;border:none;color:var(--text);font-size:24px;font-weight:400;
-cursor:pointer;padding:2px 14px;line-height:1;font-family:inherit;border-radius:6px}
-.year-arrow:disabled{color:var(--line);cursor:default}
-.year-cur{display:flex;align-items:baseline;gap:7px;min-width:112px;justify-content:center}
-.year-n{font-size:20px;font-weight:800;letter-spacing:.02em}
-.year-c{font-size:12px;color:var(--dim);font-weight:700}
-.fchip.on .fchip-n{opacity:.75}
 .tag{display:inline-block;border:none;border-radius:0;padding:0;font-family:var(--serif);font-size:18px;font-weight:700;background:none;letter-spacing:.01em}
 .tag.big{font-size:21px;padding:0}
 .tag.strike{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--dim)}

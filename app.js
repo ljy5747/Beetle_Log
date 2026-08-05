@@ -209,22 +209,6 @@ const lossRate = (ind) => { const mw = maxWeight(ind), pw = num(ind.pupation?.pu
 /* 가장 최근 병갈이의 두폭 (없으면 그 이전 기록에서) */
 const lastHeadWidth = (ind) => { const s = sortedRecs(ind).map((r) => num(r.headWidth)).filter(Boolean); return s.length ? s[s.length - 1] : null; };
 /* 병갈이 기록 중 한 번이라도 해당 플래그가 있었는지 */
-/* ── 연도 구분 ──
-   라인: 페어링 → 셋팅 → 해체 순으로 가장 이른 날짜의 연도
-   종충: 우화일 → 첫 사육기록 순 */
-/* 연도는 사용자가 직접 선택해 저장 (year). 예전 데이터는 2026 소속으로 봄 */
-const DEFAULT_YEAR = "2026";
-const itemYear = (x) => String((x && x.year) || DEFAULT_YEAR);
-const thisYear = () => String(new Date().getFullYear());
-/* 이동 가능한 연도 범위: 과거는 데이터가 있는 가장 이른 해(또는 3년 전)까지, 미래는 올해까지
-   → 새해가 되면 그 해가 자동으로 열림 */
-const yearRange = (arr) => {
-  const now = parseInt(thisYear());
-  let min = Math.min(parseInt(DEFAULT_YEAR), now);
-  (arr || []).forEach((x) => { const v = parseInt(itemYear(x)); if (v < min) min = v; });
-  return { minYear: Math.min(min, now - 3), maxYear: now };
-};
-
 /* 사망·분양 개체는 통계·그래프에서 제외 */
 const isActive = (ind) => ind.status !== "사망" && ind.status !== "분양";
 const hasFlag = (ind, flag) => (ind.flags || []).includes(flag) || (ind.bottleRecords || []).some((r) => (r.flags || []).includes(flag));
@@ -265,23 +249,6 @@ function Spark({ ind, w = 96, h = 30, big }) {
       {/* 선만 있으면 변화를 알 수 없어 양 끝 무게를 함께 표시 */}
       <div className="spark-ends mono"><span>{n1(first)}</span><i>→</i><span className="e">{n1(last)}g</span></div>
       {big && <div className="spark-range mono">최대 {n1(max)}g</div>}
-    </div>
-  );
-}
-
-/* ════════════════════ 연도 선택 칩 ════════════════════ */
-function YearChips({ value, onChange, counts, minYear, maxYear }) {
-  const y = parseInt(value);
-  const canPrev = y - 1 >= minYear;   /* 과거는 최소 연도까지 */
-  const canNext = y + 1 <= maxYear;   /* 미래는 올해까지만 (해 바뀌면 자동으로 열림) */
-  return (
-    <div className="year-nav">
-      <button className="year-arrow" disabled={!canPrev} onClick={() => canPrev && onChange(String(y - 1))}>‹</button>
-      <div className="year-cur">
-        <span className="year-n mono">{value}</span>
-        <span className="year-c">{counts[value] || 0}</span>
-      </div>
-      <button className="year-arrow" disabled={!canNext} onClick={() => canNext && onChange(String(y + 1))}>›</button>
     </div>
   );
 }
@@ -710,7 +677,7 @@ function SimplePicker({ options, value, onChange, placeholder }) {
 }
 
 /* ════════════════════ 성충 등록/수정 폼 ════════════════════ */
-function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClose, yearOpts }) {
+function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClose }) {
   const [f, setF] = useState({
     code: "", sex: "수컷 ♂", species: "", line: "", origin: "", gen: "",
     totalLength: "", jawLength: "", jawWidth: "", jawThick: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
@@ -776,9 +743,6 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
         <F label="혈통 / 계보" half><input className="in" value={f.line} onChange={(e) => set("line", e.target.value)} /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
-      <F label="연도">
-        <SimplePicker options={yearOpts} value={String(f.year || DEFAULT_YEAR)} onChange={(v) => set("year", v)} placeholder="탭하여 선택" />
-      </F>
       <F label="누대수">
         <SimplePicker options={GENS} value={f.gen} onChange={(v) => set("gen", v)} placeholder="탭하여 선택 (WD=와일드)" />
         <div className="hint" style={{ marginTop: 6 }}>
@@ -896,7 +860,7 @@ function GrowthRowForm({ initial, brands, onSave, onClose, onDelete }) {
 }
 
 /* ════════════════════ 라인 등록/수정 폼 ════════════════════ */
-function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber, hasLarvae, yearOpts }) {
+function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber, hasLarvae }) {
   const [f, setF] = useState({
     code: "", fatherId: "", motherId: "", species: "", origin: "", gen: "",
     pairDate: "", setDate: "", breakdownDate: "", memo: "",
@@ -948,9 +912,6 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
         <F label="종" half><SimplePicker options={SPECIES} value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
-      <F label="연도">
-        <SimplePicker options={yearOpts} value={String(f.year || DEFAULT_YEAR)} onChange={(v) => set("year", v)} placeholder="탭하여 선택" />
-      </F>
       <F label="누대수">
         <SimplePicker options={GENS} value={f.gen} onChange={(v) => set("gen", v)} placeholder="부·모를 고르면 자동 계산돼요" />
         {(() => {
@@ -1900,14 +1861,6 @@ function App() {
   const [theme, setTheme] = useState("brown");
   const [snaps, setSnaps] = useState([]);
   const [folderBy, setFolderBy] = useState("species");
-  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
-  /* 폼에서 고를 수 있는 연도: 저장된 연도 + 올해 앞뒤 (최신순) */
-  const yearOpts = (() => {
-    const y = new Date().getFullYear();
-    const set = new Set([DEFAULT_YEAR, String(y - 1), String(y), String(y + 1)]);
-    [...(data?.lines || []), ...(data?.parents || [])].forEach((x) => set.add(itemYear(x)));
-    return [...set].sort((a, b) => b.localeCompare(a));
-  })();
   const [infoOpen, setInfoOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncKey, setSyncKey] = useState("");
@@ -2197,8 +2150,8 @@ function App() {
   /* ── 핸들러 ── */
   const saveParent = (f) => {
     if (modal.editId) persist({ ...data, parents: data.parents.map((p) => (p.id === modal.editId ? { ...p, ...f } : p)) });
-    else persist({ ...data, parents: [...data.parents, { ...f, id: uid(), year: yearFilter }] });
-    setModal(null); say(`✓ ${yearFilter}년 성충으로 저장됨`);
+    else persist({ ...data, parents: [...data.parents, { ...f, id: uid() }] });
+    setModal(null); say("✓ 성충 저장됨");
   };
   const saveGrowthRow = (f) => {
     let d = rememberBrand(data, f.feedBrand);
@@ -2220,9 +2173,9 @@ function App() {
   const saveLine = (f) => {
     if (modal.editId) persist({ ...data, lines: data.lines.map((l) => (l.id === modal.editId ? { ...l, ...f } : l)) });
     else {
-      const nl = { ...f, id: uid(), year: yearFilter };
+      const nl = { ...f, id: uid() };
       persist({ ...data, lines: [...data.lines, nl] });
-      setModal(null); say(`✓ ${yearFilter}년 라인 생성됨`); goView({ name: "lineDetail", id: nl.id }, false);
+      setModal(null); say("✓ 라인 생성됨"); goView({ name: "lineDetail", id: nl.id }, false);
       return;
     }
     setModal(null); say("✓ 저장됨");
@@ -2478,16 +2431,7 @@ function App() {
               </div>
             )}
 
-            {(() => {
-              const cnt = {};
-              data.lines.forEach((L) => { const y = itemYear(L); cnt[y] = (cnt[y] || 0) + 1; });
-              const { minYear, maxYear } = yearRange(data.lines);
-              return <YearChips value={yearFilter} onChange={setYearFilter} counts={cnt} minYear={minYear} maxYear={maxYear} />;
-            })()}
-
-            {[...data.lines]
-              .filter((L) => itemYear(L) === yearFilter)
-              .sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
+            {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
               const kids = larvaeOf(L.id);
               const cnt = STATUSES.map((s) => [s, kids.filter((i) => i.status === s).length]).filter(([, n]) => n > 0);
               const dd = lineDday(L.id);
@@ -2537,15 +2481,11 @@ function App() {
               </div>
             )}
             {data.parents.length > 0 && (() => {
-              const ycnt = {};
-              data.parents.forEach((p) => { const y = itemYear(p); ycnt[y] = (ycnt[y] || 0) + 1; });
-              const yrs = yearRange(data.parents);
-              /* 연도로 먼저 거르고, 폴더 기준(종/혈통)으로 그룹핑. 미입력은 '미지정'으로 */
-              const pool = data.parents.filter((p) => itemYear(p) === yearFilter);
+              /* 폴더 기준(종/혈통)으로 그룹핑. 미입력은 '미지정'으로 */
               const byLabel = folderBy === "line" ? "혈통" : "종";
               const noneKey = byLabel + " 미지정";
               const groups = {};
-              pool.forEach((p) => {
+              data.parents.forEach((p) => {
                 const key = (folderBy === "line" ? (p.line || "") : (p.species || "")).trim() || noneKey;
                 (groups[key] = groups[key] || []).push(p);
               });
@@ -2559,7 +2499,6 @@ function App() {
               if (!speciesFolder || !groups[speciesFolder]) {
                 return (
                   <>
-                    <YearChips value={yearFilter} onChange={(y) => { setYearFilter(y); setSpeciesFolder(null); }} counts={ycnt} minYear={yrs.minYear} maxYear={yrs.maxYear} />
                     <div className="view-toggle">
                       <button className={"vt-btn" + (folderBy === "species" ? " on" : "")} onClick={() => { setFolderBy("species"); setSpeciesFolder(null); }}>종별</button>
                       <button className={"vt-btn" + (folderBy === "line" ? " on" : "")} onClick={() => { setFolderBy("line"); setSpeciesFolder(null); }}>혈통별</button>
@@ -3043,7 +2982,7 @@ function App() {
           preset={(!modal.editId && speciesFolder && !speciesFolder.endsWith("미지정"))
             ? (folderBy === "line" ? { line: speciesFolder } : { species: speciesFolder })
             : null}
-          yearOpts={yearOpts} onSave={saveParent} onClose={() => setModal(null)} />
+          onSave={saveParent} onClose={() => setModal(null)} />
       )}
       {modal?.type === "growthRow" && (
         <GrowthRowForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveGrowthRow} onClose={() => setModal(null)}
@@ -3056,7 +2995,7 @@ function App() {
           existingCodes={data.lines.map((l) => l.code)}
           hasLarvae={modal.editId ? larvaeOf(modal.editId).length > 0 : false}
           onRenumber={() => setModal({ type: "renumber", lineId: modal.editId })}
-          yearOpts={yearOpts} onSave={saveLine} onClose={() => setModal(null)} />
+          onSave={saveLine} onClose={() => setModal(null)} />
       )}
       {modal?.type === "larvaAdd" && (
         <LarvaAddForm
@@ -3197,7 +3136,7 @@ function App() {
       <div className="bnav">
         {[["lines", "라인"], ["parents", "종충"], ["calendar", "캘린더"]].map(([k, label]) => (
           <button key={k} className={"bnav-b" + (!settingsOpen && view.name === "list" && tab === k ? " on" : "")}
-            onClick={() => { setSettingsOpen(false); setFilter("전체"); setYearFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
+            onClick={() => { setSettingsOpen(false); setFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
             <span className="bnav-ic"><img src={"icons/tab-" + k + ".png?v=2"} alt={label} /></span>
             <span className="bnav-l">{label}</span>
           </button>
