@@ -167,6 +167,7 @@ max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 44px rgba(0
 .rec-body{overflow:auto;padding:6px 15px 15px}
 .rec-body table{min-width:100%}
 .rec-body th{position:sticky;top:0;background:var(--surf);z-index:1}
+.pud-tag{font-size:11px;margin-left:3px;vertical-align:middle}
 .th-s{font-size:9px;font-weight:400;color:#6E6559}
 .hw{color:var(--dim);font-weight:400}
 .fd{font-size:11px;color:var(--gold-l);opacity:.8;font-weight:400;margin-top:2px;white-space:nowrap;line-height:1.35}
@@ -236,7 +237,8 @@ function normBreeder(br){
       } else head=num(hd);
       return {code:r[0]||"",sex:String(r[1]||""),weights:Array.isArray(r[2])?r[2]:[],adult:num(r[3]),
               head:head,pupa:num(r[5]),
-              feeds:Array.isArray(r[6])?r[6]:[],sizes:Array.isArray(r[7])?r[7]:[]};
+              feeds:Array.isArray(r[6])?r[6]:[],sizes:Array.isArray(r[7])?r[7]:[],
+              pudding:r[8]===1||r[8]===true};
     })
   };
 }
@@ -565,7 +567,8 @@ function openRecords(bi){
   br.larvae.forEach(function(l){
     var sx=sexOf(l.sex);
     var isBest=(r.best.m&&r.best.m.code===l.code&&sx==="m")||(r.best.f&&r.best.f.code===l.code&&sx==="f");
-    h+='<tr class="'+(isBest?"best":"")+'"><td class="mono">'+(isBest?'<span class="star">★</span> ':"")+esc(l.code)+'</td>'
+    h+='<tr class="'+(isBest?"best":"")+'"><td class="mono">'+(isBest?'<span class="star">★</span> ':"")+esc(l.code)
+      +(l.pudding?'<span class="pud-tag" title="첫 병 전 푸딩컵 사용">🍮</span>':"")+'</td>'
       +'<td>'+(sx==="m"?'<span class="sx-m">♂</span>':sx==="f"?'<span class="sx-f">♀</span>':'<span style="color:var(--dim)">—</span>')+'</td>'
       +rounds.map(function(_,i){
         var w=num(l.weights[i]);
@@ -578,7 +581,9 @@ function openRecords(bi){
       +'<td class="mono">'+(l.pupa!=null?n1(l.pupa):"·")+'</td>'
       +'<td class="mono">'+(l.adult!=null?n1(l.adult):"·")+'</td></tr>';
   });
-  h+='</table><div class="rec-note">★ = 팀 스코어에 반영되는 선발 개체</div></div>';
+  var anyPud=br.larvae.some(function(l){return l.pudding;});
+  h+='</table><div class="rec-note">★ = 팀 스코어에 반영되는 선발 개체'
+    +(anyPud?' &nbsp;·&nbsp; 🍮 = 첫 병 전 푸딩컵 사용':"")+'</div></div>';
   var d=document.createElement("div");
   d.className="rec-ov";d.id="recOv";d.innerHTML='<div class="rec-box">'+h+'</div>';
   d.onclick=function(e){if(e.target===d)closeRecords();};
