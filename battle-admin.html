@@ -99,9 +99,11 @@ border-radius:9px;padding:10px 11px;font-size:16px;font-family:ui-monospace,Menl
 .lc-in:focus{outline:none;border-color:var(--gold);background:#FFFDF8}
 .lc-in.bad{border-color:var(--red);background:#FDF4F2}
 .lc-in.txt{font-family:inherit;font-size:15px}
-.lc-pud{display:flex;align-items:center;gap:8px;margin-top:2px;padding:8px 2px;cursor:pointer;font-size:13px;color:var(--dim)}
+.lc-pud{display:flex;align-items:center;gap:7px;margin-top:2px;padding:8px 2px;cursor:pointer;font-size:13px;color:var(--dim)}
 .lc-pud input{width:18px;height:18px;accent-color:var(--gold);cursor:pointer;flex:none}
+.lc-pud .pud-ico{flex:none}
 .lc-pud b{color:var(--gold-d);font-weight:800}
+.pud-ico{vertical-align:middle;display:inline-block}
 .sxseg{flex:1;display:flex;gap:6px}
 .sxseg button{flex:1;border:1px solid var(--line);background:var(--surf);border-radius:9px;padding:9px 0;
 font-size:15px;font-weight:700;color:#C4BDB1;cursor:pointer;font-family:inherit}
@@ -147,6 +149,21 @@ var PAGE_URL = location.origin + location.pathname;
 var TEAM_COLORS = { A: "#C43B32", B: "#3E7FB0" };
 
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+var PUD_GRID=["..eeeeeeeeee..",".e..........e.",".ewwwwwwwwwwe.",".ewwgwwwwgwwe.",
+".ewwwwwgwwwwe.",".ewgwwwwwwgwe.",".ewwwwwwwwwwe.","..ewwgwwwgwe..",
+"..ewwwwwwwwe..","...ewwgwwwe...","...ewwwwwwe...","....eeeeee...."];
+function puddingIcon(px,edge){
+  px=px||2;edge=edge||"#A8884F";
+  var cols=14,rows=12,rects="";
+  for(var y=0;y<rows;y++)for(var x=0;x<cols;x++){
+    var ch=PUD_GRID[y][x],col=null;
+    if(ch==="e")col=edge; else if(ch==="w")col="#F4F1EB"; else if(ch==="g")col="#CDBD9C";
+    if(!col)continue;
+    rects+='<rect x="'+(x*px)+'" y="'+(y*px)+'" width="'+px+'" height="'+px+'" fill="'+col+'"/>';
+  }
+  return '<svg width="'+(cols*px)+'" height="'+(rows*px)+'" viewBox="0 0 '+(cols*px)+' '+(rows*px)
+    +'" shape-rendering="crispEdges" class="pud-ico">'+rects+'</svg>';
+}
 function $(id){return document.getElementById(id);}
 function num(v){var n=parseFloat(v);return isFinite(n)&&n>0?n:null;}
 var toastT=null;
@@ -425,7 +442,7 @@ function renderForm(){
           +'<input class="lc-in txt" list="dl-size" id="l-v-'+i+'-'+j+'" value="'+esc(l.size[CUR]||"")+'" placeholder="1400cc"/></div>';
         if(CUR===0){                            /* 첫 병에서만 푸딩컵 사용 여부 */
           h+='<label class="lc-pud"><input type="checkbox" id="l-p-'+i+'-'+j+'"'+(l.pudding?" checked":"")+'/>'
-            +'<span>첫 병 전 <b>푸딩컵</b> 사용</span></label>';
+            +puddingIcon(2)+'<span>첫 병 전 <b>푸딩컵</b> 사용</span></label>';
         }
       }else{
         h+='<div class="lc-f"><span class="lc-l">두폭</span>'
