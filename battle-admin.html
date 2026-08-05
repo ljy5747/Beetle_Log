@@ -91,7 +91,7 @@ details[open] .lsum .arw{transform:rotate(180deg)}
 .lc-h{display:flex;align-items:center;margin-bottom:8px}
 .lc-n{font-size:10.5px;font-weight:800;color:var(--gold-d);letter-spacing:.08em}
 .lc-x{margin-left:auto;background:none;border:none;color:#C9C3B8;font-size:14px;cursor:pointer;padding:0 2px}
-.lc-f{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.lc-f{display:flex;align-items:center;gap:9px;margin-bottom:7px;flex-wrap:wrap}
 .lc-f:last-child{margin-bottom:0}
 .lc-l{flex:none;width:76px;font-size:12px;color:var(--dim);font-weight:700}
 .lc-in{flex:1;min-width:0;background:var(--surf);border:1px solid var(--line);color:var(--text);
@@ -99,7 +99,8 @@ border-radius:9px;padding:10px 11px;font-size:16px;font-family:ui-monospace,Menl
 .lc-in:focus{outline:none;border-color:var(--gold);background:#FFFDF8}
 .lc-in.bad{border-color:var(--red);background:#FDF4F2}
 .lc-in.txt{font-family:inherit;font-size:15px}
-.oxseg{flex:1;display:flex;gap:6px}
+.lc-pl{flex:none;font-size:12px;color:var(--dim);font-weight:700;margin-left:4px}
+.oxseg{flex:none;display:flex;gap:6px;width:88px}
 .oxseg button{flex:1;border:1px solid var(--line);background:var(--surf);border-radius:9px;padding:9px 0;
 font-size:15px;font-weight:700;color:#C4BDB1;cursor:pointer;font-family:inherit}
 .oxseg button.on[data-p="O"]{background:#FCFAF5;color:var(--gold-d);border-color:var(--gold)}
@@ -417,14 +418,15 @@ function renderForm(){
         +'<div class="sxseg" id="l-s-'+i+'-'+j+'" data-v="'+esc(l.sex)+'">'
         +'<button data-s=""'+(l.sex===""?' class="on"':"")+'>?</button>'
         +'<button data-s="수"'+(l.sex==="수"?' class="on"':"")+'>♂</button>'
-        +'<button data-s="암"'+(l.sex==="암"?' class="on"':"")+'>♀</button></div></div>';
-      if(isL){
-        if(CUR===0){                            /* 첫 병에서만: 푸딩 O/X */
-          h+='<div class="lc-f"><span class="lc-l">푸딩</span>'
+        +'<button data-s="암"'+(l.sex==="암"?' class="on"':"")+'>♀</button></div>'
+        +(isL&&CUR===0                          /* 첫 병에서만: 성별 오른쪽에 푸딩 O/X */
+          ? '<span class="lc-pl">푸딩</span>'
             +'<div class="oxseg" id="l-p-'+i+'-'+j+'" data-v="'+(l.pudding?"O":"X")+'">'
             +'<button data-p="O"'+(l.pudding?' class="on"':"")+'>O</button>'
-            +'<button data-p="X"'+(!l.pudding?' class="on"':"")+'>X</button></div></div>';
-        }
+            +'<button data-p="X"'+(!l.pudding?' class="on"':"")+'>X</button></div>'
+          : "")
+        +'</div>';
+      if(isL){
         h+='<div class="lc-f"><span class="lc-l">'+esc(S.rounds[CUR].name)+' 무게</span>'
           +'<input class="lc-in" inputmode="decimal" id="l-a-'+i+'-'+j+'" value="'+esc(l.w[CUR]==null?"":l.w[CUR])+'" placeholder="g"/></div>'
           +'<div class="lc-f"><span class="lc-l">균사</span>'
