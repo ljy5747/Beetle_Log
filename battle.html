@@ -167,8 +167,8 @@ max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 44px rgba(0
 .rec-body{overflow:auto;padding:6px 15px 15px}
 .rec-body table{min-width:100%}
 .rec-body th{position:sticky;top:0;background:var(--surf);z-index:1}
-.pud-tag{display:inline-block;margin-left:4px;font-size:9.5px;font-weight:800;color:var(--gold-l);
-background:#2A2114;border:1px solid #A8884F55;border-radius:4px;padding:0 4px;vertical-align:middle;letter-spacing:.02em}
+.pud-o{color:var(--gold-l);font-weight:800}
+.pud-x{color:#5A5349;font-weight:400}
 .th-s{font-size:9px;font-weight:400;color:#6E6559}
 .hw{color:var(--dim);font-weight:400}
 .fd{font-size:11px;color:var(--gold-l);opacity:.8;font-weight:400;margin-top:2px;white-space:nowrap;line-height:1.35}
@@ -561,6 +561,7 @@ function openRecords(bi){
   var h='<div class="rec-head"><div class="rec-t">'+esc(br.name)+' · 개체별 기록</div>'
     +'<button class="rec-x" onclick="closeRecords()">✕</button></div>'
     +'<div class="rec-body"><table><tr><th>번호</th><th>성별</th>'
+    +'<th>푸딩<br/><span class="th-s">O/X</span></th>'
     +rounds.map(function(rd){return '<th>'+esc(rd.name)+'<br/><span class="th-s">무게 g</span></th>';}).join("")
     +'<th>두폭<br/><span class="th-s">mm</span></th>'
     +'<th>용<br/><span class="th-s">무게 g</span></th>'
@@ -568,9 +569,9 @@ function openRecords(bi){
   br.larvae.forEach(function(l){
     var sx=sexOf(l.sex);
     var isBest=(r.best.m&&r.best.m.code===l.code&&sx==="m")||(r.best.f&&r.best.f.code===l.code&&sx==="f");
-    h+='<tr class="'+(isBest?"best":"")+'"><td class="mono">'+(isBest?'<span class="star">★</span> ':"")+esc(l.code)
-      +(l.pudding?'<span class="pud-tag" title="첫 병 전 푸딩 사용">푸딩</span>':"")+'</td>'
+    h+='<tr class="'+(isBest?"best":"")+'"><td class="mono">'+(isBest?'<span class="star">★</span> ':"")+esc(l.code)+'</td>'
       +'<td>'+(sx==="m"?'<span class="sx-m">♂</span>':sx==="f"?'<span class="sx-f">♀</span>':'<span style="color:var(--dim)">—</span>')+'</td>'
+      +'<td class="mono">'+(l.pudding?'<span class="pud-o">O</span>':'<span class="pud-x">X</span>')+'</td>'
       +rounds.map(function(_,i){
         var w=num(l.weights[i]);
         var fd=(l.feeds||[])[i]||"",sz=(l.sizes||[])[i]||"";
@@ -582,9 +583,7 @@ function openRecords(bi){
       +'<td class="mono">'+(l.pupa!=null?n1(l.pupa):"·")+'</td>'
       +'<td class="mono">'+(l.adult!=null?n1(l.adult):"·")+'</td></tr>';
   });
-  var anyPud=br.larvae.some(function(l){return l.pudding;});
-  h+='</table><div class="rec-note">★ = 팀 스코어에 반영되는 선발 개체'
-    +(anyPud?' &nbsp;·&nbsp; <span class="pud-tag">푸딩</span> = 첫 병 전 푸딩 사용':"")+'</div></div>';
+  h+='</table><div class="rec-note">★ = 팀 스코어에 반영되는 선발 개체 &nbsp;·&nbsp; 푸딩 = 첫 병 전 푸딩 사용</div></div>';
   var d=document.createElement("div");
   d.className="rec-ov";d.id="recOv";d.innerHTML='<div class="rec-box">'+h+'</div>';
   d.onclick=function(e){if(e.target===d)closeRecords();};
