@@ -99,6 +99,9 @@ border-radius:9px;padding:10px 11px;font-size:16px;font-family:ui-monospace,Menl
 .lc-in:focus{outline:none;border-color:var(--gold);background:#FFFDF8}
 .lc-in.bad{border-color:var(--red);background:#FDF4F2}
 .lc-in.txt{font-family:inherit;font-size:15px}
+.lc-pud{display:flex;align-items:center;gap:8px;margin-top:2px;padding:8px 2px;cursor:pointer;font-size:13px;color:var(--dim)}
+.lc-pud input{width:18px;height:18px;accent-color:var(--gold);cursor:pointer;flex:none}
+.lc-pud b{color:var(--gold-d);font-weight:800}
 .sxseg{flex:1;display:flex;gap:6px}
 .sxseg button{flex:1;border:1px solid var(--line);background:var(--surf);border-radius:9px;padding:9px 0;
 font-size:15px;font-weight:700;color:#C4BDB1;cursor:pointer;font-family:inherit}
@@ -155,8 +158,8 @@ function say(msg){
 }
 
 /*CONV-START*/
-/* 저장형식 [code,sex,weights[],adult,head,pupa,feeds[],sizes[]] ↔ 편집형식
-   · 무게·균사·용량은 라운드별 / 두폭·용무게·체장은 1회 측정 */
+/* 저장형식 [code,sex,weights[],adult,head,pupa,feeds[],sizes[],pudding] ↔ 편집형식
+   · 무게·균사·용량은 라운드별 / 두폭·용무게·체장은 1회 / pudding=첫병 전 푸딩컵 사용 여부 */
 function larvaFromData(r,nR){
   var w=Array.isArray(r[2])?r[2]:[];
   var fd=Array.isArray(r[6])?r[6]:[];
@@ -167,7 +170,8 @@ function larvaFromData(r,nR){
   } else head=num(hd);
   var o={code:r[0]||"",sex:r[1]==="수"||r[1]==="암"?r[1]:"",w:[],feed:[],size:[],
     head:head!=null?String(head):"",
-    pupa:r[5]!=null?String(r[5]):"",adult:r[3]!=null?String(r[3]):""};
+    pupa:r[5]!=null?String(r[5]):"",adult:r[3]!=null?String(r[3]):"",
+    pudding:r[8]===1||r[8]===true};
   for(var i=0;i<nR;i++){
     o.w.push(w[i]!=null?String(w[i]):"");
     o.feed.push(fd[i]||"");
@@ -184,11 +188,13 @@ function larvaToData(o,nR){
     if(f||z)any=true;
   }
   var out=[o.code||"",o.sex||"",w,num(o.adult),num(o.head),num(o.pupa)];
-  if(any)out.push(fd,sz);                      /* 균사·용량 없으면 저장 안 함 (용량 절약) */
+  /* 푸딩 체크가 있으면 index 8까지 채워야 하므로 feeds/sizes도 함께 저장 */
+  if(any||o.pudding)out.push(fd,sz);
+  if(o.pudding)out.push(1);                     /* index 8: 푸딩컵 사용 */
   return out;
 }
 function blankLarva(code,nR){
-  var o={code:code||"",sex:"",w:[],feed:[],size:[],head:"",pupa:"",adult:""};
+  var o={code:code||"",sex:"",w:[],feed:[],size:[],head:"",pupa:"",adult:"",pudding:false};
   for(var i=0;i<nR;i++){o.w.push("");o.feed.push("");o.size.push("");}
   return o;
 }
@@ -417,6 +423,10 @@ function renderForm(){
           +'<input class="lc-in txt" list="dl-feed" id="l-f-'+i+'-'+j+'" value="'+esc(l.feed[CUR]||"")+'" placeholder="국균 등"/></div>'
           +'<div class="lc-f"><span class="lc-l">용량</span>'
           +'<input class="lc-in txt" list="dl-size" id="l-v-'+i+'-'+j+'" value="'+esc(l.size[CUR]||"")+'" placeholder="1400cc"/></div>';
+        if(CUR===0){                            /* 첫 병에서만 푸딩컵 사용 여부 */
+          h+='<label class="lc-pud"><input type="checkbox" id="l-p-'+i+'-'+j+'"'+(l.pudding?" checked":"")+'/>'
+            +'<span>첫 병 전 <b>푸딩컵</b> 사용</span></label>';
+        }
       }else{
         h+='<div class="lc-f"><span class="lc-l">두폭</span>'
           +'<input class="lc-in" inputmode="decimal" id="l-a-'+i+'-'+j+'" value="'+esc(l.head)+'" placeholder="mm"/></div>'
@@ -558,11 +568,13 @@ function readForm(){
     var ls=br.larvae.map(function(l,j){
       var o={code:$("l-c-"+i+"-"+j).value.trim(),sex:$("l-s-"+i+"-"+j).dataset.v,
              w:l.w.slice(),feed:l.feed.slice(),size:l.size.slice(),
-             head:l.head,pupa:l.pupa,adult:l.adult};
+             head:l.head,pupa:l.pupa,adult:l.adult,pudding:l.pudding};
       if(MODE==="larva"){
         o.w[CUR]=$("l-a-"+i+"-"+j).value.trim();
         o.feed[CUR]=$("l-f-"+i+"-"+j).value.trim();
         o.size[CUR]=$("l-v-"+i+"-"+j).value.trim();
+        var pud=$("l-p-"+i+"-"+j);            /* 첫 병일 때만 존재 */
+        if(pud)o.pudding=pud.checked;
       }else{
         o.head=$("l-a-"+i+"-"+j).value.trim();
         o.pupa=$("l-b-"+i+"-"+j).value.trim();
@@ -596,7 +608,7 @@ function save(){
       line:{male:{size:num(br.line.male.size),photo:br.line.male.photo,blood:br.line.male.blood},
             female:{size:num(br.line.female.size),blood:br.line.female.blood}},
       larvae:br.larvae.filter(function(l){
-        return l.code||l.sex||l.head||l.pupa||l.adult||l.w.some(function(v){return v!=="";})
+        return l.code||l.sex||l.head||l.pupa||l.adult||l.pudding||l.w.some(function(v){return v!=="";})
           ||l.feed.some(function(v){return v!=="";})||l.size.some(function(v){return v!=="";});
       }).map(function(l){return larvaToData(l,nR);})};
   });
