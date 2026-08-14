@@ -996,15 +996,29 @@ function RenumberForm({ line, larvae, onSave, onClose }) {
 
 /* ════════════════════ 유충 일괄 추가 폼 ════════════════════ */
 function LarvaAddForm({ line, existingCodes, onSave, onClose }) {
-  const nextStart = (() => {
-    const nums = existingCodes.map((c) => parseInt((c.match(/(\d+)\s*$/) || [])[1])).filter((n) => isFinite(n));
-    return nums.length ? Math.max(...nums) + 1 : 1;
+  /* 기존 번호에서 접두어와 다음 번호를 이어받음 (예: SK-20 → 접두어 "SK-", 다음 21) */
+  const parsed = existingCodes.map((c) => {
+    const m = String(c).match(/^(.*?)(\d+)\s*$/);
+    return m ? { prefix: m[1], num: parseInt(m[2]), pad: m[2].length } : null;
+  }).filter(Boolean);
+  /* 가장 많이 쓰인 접두어를 기본값으로 */
+  const guessPrefix = (() => {
+    if (!parsed.length) return "";
+    const cnt = {};
+    parsed.forEach((p) => { cnt[p.prefix] = (cnt[p.prefix] || 0) + 1; });
+    return Object.keys(cnt).reduce((a, b) => (cnt[b] > cnt[a] ? b : a));
   })();
-  const [f, setF] = useState({ prefix: "", start: String(nextStart), count: "1", sex: "미구분", memo: "" });
+  /* 그 접두어를 쓰는 번호들 중 가장 큰 값 다음부터 */
+  const sameGroup = parsed.filter((p) => p.prefix === guessPrefix);
+  const nextStart = sameGroup.length ? Math.max(...sameGroup.map((p) => p.num)) + 1 : 1;
+  const [f, setF] = useState({ prefix: guessPrefix, start: String(nextStart), count: "1", sex: "미구분", memo: "" });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const start = parseInt(f.start), count = parseInt(f.count);
   const valid = isFinite(start) && start >= 0 && isFinite(count) && count >= 1 && count <= 100;
-  const codes = valid ? Array.from({ length: count }, (_, i) => `${f.prefix}${pad(start + i)}`) : [];
+  /* 기존 번호와 같은 자릿수로 맞춤 (01 / 001 등) */
+  const padLen = sameGroup.length ? Math.max(2, ...sameGroup.map((p) => p.pad)) : 2;
+  const padN = (n) => String(n).padStart(padLen, "0");
+  const codes = valid ? Array.from({ length: count }, (_, i) => `${f.prefix}${padN(start + i)}`) : [];
   const dup = codes.find((c) => existingCodes.includes(c));
   const save = () => {
     if (!valid) return alert("시작 번호와 마릿수를 확인해주세요 (1~100마리)");
