@@ -222,9 +222,13 @@ const allFlags = (ind) => {
 const larvaDays = (ind) => {
   const recs = sortedRecs(ind);
   const s = recs.length ? recs[0].date : null;
+  if (!s) return null;
   const e = ind.pupation?.prepupaDate || ind.pupation?.pupaDate;
-  return s && e ? daysBetween(s, e) : null;
+  /* 아직 용화 전이면 오늘까지 경과 일수 (사육 중인 기간) */
+  return e ? daysBetween(s, e) : daysBetween(s, today());
 };
+/* 용화가 끝나 확정된 기간인지 (아직 진행 중이면 false) */
+const larvaDaysDone = (ind) => !!(ind.pupation?.prepupaDate || ind.pupation?.pupaDate);
 const lastDelta = (ind) => {
   const s = sortedRecs(ind).map((r) => num(r.weight)).filter(Boolean);
   return s.length >= 2 ? s[s.length - 1] - s[s.length - 2] : null;
@@ -819,7 +823,7 @@ function GrowthRowForm({ initial, brands, onSave, onClose, onDelete }) {
     ...(initial || {}),
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const save = () => { if (!f.date) return alert("날짜는 필수입니다"); onSave(f); };
+  const save = () => { if (!f.date) return alert("날짜는 필수입니다"); const { nextDays, ...rest } = f; onSave(rest); };
   return (
     <Modal title={initial ? "사육 이력 수정" : "사육 이력 추가"} onClose={onClose} onSave={save}>
       <div className="row">
@@ -1094,7 +1098,7 @@ function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
     ...(initial || {}),
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const save = () => { if (!f.date) return alert("날짜는 필수입니다"); onSave(f); };
+  const save = () => { if (!f.date) return alert("날짜는 필수입니다"); const { nextDays, ...rest } = f; onSave(rest); };
   return (
     <Modal title={initial ? "교체 기록 수정" : "교체 기록"} onClose={onClose} onSave={save}>
       <div className="row">
@@ -1135,9 +1139,20 @@ function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
       <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
       <F label="다음 교체 예정일">
         <input type="date" className="in" value={f.nextDate} onChange={(e) => set("nextDate", e.target.value)} />
+        <div className="row" style={{ marginTop: 8, alignItems: "center", gap: 8 }}>
+          <input className="in mono" inputMode="numeric" style={{ flex: "0 0 96px" }}
+            value={f.nextDays || ""} placeholder="일수"
+            onChange={(e) => {
+              const v = e.target.value.replace(/[^0-9]/g, "");
+              setF((p) => ({ ...p, nextDays: v, nextDate: v ? addDays(p.date || today(), parseInt(v)) : p.nextDate }));
+            }} />
+          <span className="hint" style={{ margin: 0 }}>
+            일 뒤{f.nextDays ? <> → <b className="mono">{addDays(f.date || today(), parseInt(f.nextDays))}</b></> : " (숫자만 입력하면 자동 계산)"}
+          </span>
+        </div>
         <div className="chiprow">
           {[40, 90, 100, 120].map((d) => (
-            <button key={d} className="chipbtn" onClick={() => set("nextDate", addDays(f.date || today(), d))}>+{d}일</button>
+            <button key={d} className="chipbtn" onClick={() => setF((p) => ({ ...p, nextDays: String(d), nextDate: addDays(p.date || today(), d) }))}>+{d}일</button>
           ))}
         </div>
         <div className="hint">예정일을 정하면 캘린더 탭에 자동으로 표시돼요</div>
@@ -1167,7 +1182,8 @@ function BulkBottleForm({ larvae, brands, onSave, onClose }) {
   const save = () => {
     if (!f.date) return alert("날짜는 필수입니다");
     if (picked.size === 0) return alert("적용할 유충을 1마리 이상 선택해주세요");
-    onSave([...picked], f);
+    const { nextDays, ...rest } = f;
+    onSave([...picked], rest);
   };
   return (
     <Modal title="일괄 교체" onClose={onClose} onSave={save}>
@@ -1204,9 +1220,20 @@ function BulkBottleForm({ larvae, brands, onSave, onClose }) {
           <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
           <F label="다음 교체 예정일">
             <input type="date" className="in" value={f.nextDate} onChange={(e) => set("nextDate", e.target.value)} />
+            <div className="row" style={{ marginTop: 8, alignItems: "center", gap: 8 }}>
+              <input className="in mono" inputMode="numeric" style={{ flex: "0 0 96px" }}
+                value={f.nextDays || ""} placeholder="일수"
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, "");
+                  setF((p) => ({ ...p, nextDays: v, nextDate: v ? addDays(p.date || today(), parseInt(v)) : p.nextDate }));
+                }} />
+              <span className="hint" style={{ margin: 0 }}>
+                일 뒤{f.nextDays ? <> → <b className="mono">{addDays(f.date || today(), parseInt(f.nextDays))}</b></> : " (숫자만 입력)"}
+              </span>
+            </div>
             <div className="chiprow">
               {[40, 90, 100, 120].map((d) => (
-                <button key={d} className="chipbtn" onClick={() => set("nextDate", addDays(f.date || today(), d))}>+{d}일</button>
+                <button key={d} className="chipbtn" onClick={() => setF((p) => ({ ...p, nextDays: String(d), nextDate: addDays(p.date || today(), d) }))}>+{d}일</button>
               ))}
             </div>
           </F>
@@ -2855,7 +2882,7 @@ function App() {
               <div className="stat"><div className="s-l">성충 총장</div><div className="s-v mono">{num(cur.eclosion?.totalLength) ? n1(num(cur.eclosion.totalLength)) + "mm" : "—"}</div></div>
               <div className="stat hl"><div className="s-l">환원율</div><div className="s-v mono">{red ? n2(red) : "—"}</div></div>
               <div className="stat"><div className="s-l">두폭</div><div className="s-v mono">{lastHeadWidth(cur) ? n1(lastHeadWidth(cur)) + "mm" : "—"}</div></div>
-              <div className="stat"><div className="s-l">유충 기간</div><div className="s-v mono">{ld != null ? ld + "일" : "—"}</div></div>
+              <div className="stat"><div className="s-l">유충 기간{ld != null && !larvaDaysDone(cur) ? " (진행)" : ""}</div><div className="s-v mono">{ld != null ? ld + "일" : "—"}</div></div>
             </div>
 
             {sortedRecs(cur).filter((r) => num(r.weight)).length >= 2 && (
