@@ -196,6 +196,8 @@ font-size:10px;font-weight:700;color:var(--dim);letter-spacing:.08em;text-transf
 .r-next b{color:var(--text)}
 .r-memo{font-size:12.5px;color:var(--dim);margin-top:8px;border-top:1px dashed var(--line);padding-top:8px;white-space:pre-wrap}
 .r-gap{font-size:11.5px;color:var(--dim);font-weight:600;background:var(--surf2);border-radius:4px;padding:1px 7px;margin-left:2px}
+/* 현재 먹고 있는 병 — 날마다 카운팅 */
+.r-gap.on{color:var(--gold-d);background:color-mix(in srgb,var(--gold) 14%,transparent);font-weight:700}
 .spark-empty{font-size:11px;color:var(--dim);padding:8px 0}
 .spark-range{font-size:11px;color:var(--dim);margin-top:4px}
 /* 스파크라인 양 끝 무게 (선만으론 변화를 알 수 없어서) */

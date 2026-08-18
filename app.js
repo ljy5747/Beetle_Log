@@ -2966,14 +2966,20 @@ function App() {
             {recs.map((r, idx) => {
               const prev = recs[idx - 1];
               const d = num(r.weight) && num(prev?.weight) ? num(r.weight) - num(prev.weight) : null;
-              const gap = prev ? daysBetween(prev.date, r.date) : null;
               const isLast = idx === recs.length - 1;
+              /* 이 병을 먹은 기간 = 이 기록일 ~ 다음 교체일 (마지막 병은 오늘까지 진행 중) */
+              const next = recs[idx + 1];
+              const eaten = next ? daysBetween(r.date, next.date)
+                : (cur.status === "유충" ? daysBetween(r.date, today()) : null);
+              const eating = !next && cur.status === "유충";
               return (
                 <div key={r.id} className="rec" onClick={() => setModal({ type: "bottle", indId: cur.id, editId: r.id, initial: r })}>
                   <div className="r-top">
                     <span className="mono r-date">{r.date}</span>
                     {r.instar && <span className="r-ins">{r.instar}</span>}
-                    {gap != null && <span className="r-gap">먹은 기간 {gap}일</span>}
+                    {eaten != null && eaten >= 0 && (
+                      <span className={"r-gap" + (eating ? " on" : "")}>{eating ? `${eaten}일째 섭식 중` : `${eaten}일 섭식`}</span>
+                    )}
                     {num(r.weight) && <span className="mono r-w">{n1(num(r.weight))}g{d != null && <em className={d >= 0 ? "up" : "down"}> {d >= 0 ? "▲" : "▼"}{n1(Math.abs(d))}</em>}</span>}
                   </div>
                   <div className="r-mid">{[r.feedType, r.feedBrand, ccLabel(r.bottleSize), r.pudding ? "푸딩컵" : null, num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
