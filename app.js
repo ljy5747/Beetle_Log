@@ -1,7 +1,7 @@
 /* ════════ 앱 본체 — 기능 추가/수정은 여기서 ════════ */
 const { useState, useEffect, useRef } = React;
 /* 설정값과 CSS는 data.js / styles.js 에서 불러옵니다 */
-const { KEY, SUPABASE_URL, SUPABASE_KEY, SPECIES, INSTARS, FEED_TYPES, BOTTLES, FLAGS, GENS, FEED_PRODUCTS, STATUS_COLOR, STATUSES } = window.APP_DATA;
+const { KEY, SUPABASE_URL, SUPABASE_KEY, SPECIES, SPECIES_TREE, INSTARS, FEED_TYPES, BOTTLES, FLAGS, GENS, FEED_PRODUCTS, STATUS_COLOR, STATUSES } = window.APP_DATA;
 const CSS = window.APP_CSS;
 
 
@@ -323,6 +323,7 @@ function LineParentCard({ p, role, onOpen }) {
     num(p.jawLength) && ["턱", n1(num(p.jawLength)) + "mm"],
     num(p.jawWidth) && ["악폭", n1(num(p.jawWidth)) + "mm"],
     num(p.jawThick) && ["악후", n1(num(p.jawThick)) + "mm"],
+    num(p.headWidth) && ["두폭", n1(num(p.headWidth)) + "mm"],
     num(p.thoraxWidth) && ["흉폭", n1(num(p.thoraxWidth)) + "mm"],
     ratio && ["턱비율", n1(ratio) + "%"],
   ].filter(Boolean);
@@ -649,6 +650,54 @@ function Modal({ title, onClose, onSave, children }) {
 }
 
 /* 단순 목록 펼침 선택 (종 등): 탭하면 목록 펼침, 맨 아래 직접 입력 */
+/* ════════════════════ 종 선택 (중분류 2단계) ════════════════════
+   왕사슴벌레·넓적사슴벌레는 체장/극태/와일드/미분류를 한 번 더 고름 */
+function SpeciesPicker({ value, onChange, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const [group, setGroup] = useState(null); /* 중분류 고르는 중인 종 */
+  const [manual, setManual] = useState(false);
+  if (manual) {
+    return (
+      <div>
+        <input className="in" value={value} autoFocus onChange={(e) => onChange(e.target.value)} placeholder="직접 입력" />
+        <button className="btn tiny mt" onClick={() => { setManual(false); setOpen(true); }}>← 목록에서 선택</button>
+      </div>
+    );
+  }
+  const pick = (v) => { onChange(v); setOpen(false); setGroup(null); };
+  return (
+    <div>
+      <button className="picker-btn" onClick={() => { setOpen(!open); setGroup(null); }}>
+        <span className={value ? "" : "dim"}>{value || placeholder || "탭하여 선택"}</span>
+        <span className="picker-arrow">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div className="picker-panel">
+          <div className="picker-items" style={{ padding: "11px 12px" }}>
+            {group ? (
+              <>
+                <button className="picker-item back" onClick={() => setGroup(null)}>‹ {group.name}</button>
+                {group.sub.map((sv) => {
+                  const full = `${group.name}(${sv})`;
+                  return <button key={sv} className={"picker-item" + (value === full ? " on" : "")} onClick={() => pick(full)}>{sv}</button>;
+                })}
+              </>
+            ) : (
+              SPECIES_TREE.map((sp) => (
+                <button key={sp.name} className={"picker-item" + (value === sp.name ? " on" : "") + (sp.sub ? " has-sub" : "")}
+                  onClick={() => (sp.sub ? setGroup(sp) : pick(sp.name))}>
+                  {sp.name}{sp.sub && <span className="picker-more">›</span>}
+                </button>
+              ))
+            )}
+          </div>
+          <button className="picker-manual" onClick={() => { setManual(true); setOpen(false); }}>직접 입력하기</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SimplePicker({ options, value, onChange, placeholder }) {
   const [open, setOpen] = useState(false);
   const [manual, setManual] = useState(false);
@@ -684,7 +733,7 @@ function SimplePicker({ options, value, onChange, placeholder }) {
 function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClose }) {
   const [f, setF] = useState({
     code: "", sex: "수컷 ♂", species: "", line: "", origin: "", gen: "",
-    totalLength: "", jawLength: "", jawWidth: "", jawThick: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
+    totalLength: "", jawLength: "", jawWidth: "", jawThick: "", headWidth: "", thoraxWidth: "", eclosionDate: "", source: "", memo: "", photo: "",
     sireId: "", damId: "",
     ...(preset || {}), /* 종/혈통 폴더 안에서 추가하면 그 값이 미리 채워짐 */
     ...(initial || {}),
@@ -705,6 +754,7 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
   /* 측정 항목은 필요한 것만 켜서 입력 (값이 이미 있거나 극태면 자동으로 켜짐) */
   const [msOn, setMsOn] = useState({
     jaw: !!(initial && initial.jawLength),
+    head: !!(initial && initial.headWidth),
     thorax: !!(initial && initial.thoraxWidth),
     jawwt: !!(initial && (initial.jawWidth || initial.jawThick)) || (initial ? false : false),
   });
@@ -742,7 +792,7 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
           </select>
         </F>
       </div>
-      <F label="종"><SimplePicker options={SPECIES} value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
+      <F label="종"><SpeciesPicker value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
       <div className="row">
         <F label="혈통 / 계보" half><input className="in" value={f.line} onChange={(e) => set("line", e.target.value)} /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
@@ -758,7 +808,7 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
       <F label="총장(체장) mm"><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
       {/* 필요한 항목만 켜서 입력 */}
       <div className="chiprow" style={{ marginTop: -4, marginBottom: 12 }}>
-        {[["jaw", "턱 길이"], ["thorax", "흉폭"], ["jawwt", "악폭·악후"]].map(([k, label]) => (
+        {[["jaw", "턱 길이"], ["head", "두폭"], ["thorax", "흉폭"], ["jawwt", "악폭·악후"]].map(([k, label]) => (
           <button key={k} className={"chipbtn" + (msOn[k] ? " on" : "")}
             onClick={() => setMsOn((p) => ({ ...p, [k]: !p[k] }))}>{msOn[k] ? "− " : "+ "}{label}</button>
         ))}
@@ -781,6 +831,9 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
             <F label="악후 mm" half><input className="in mono" inputMode="decimal" value={f.jawThick} onChange={(e) => set("jawThick", e.target.value)} /></F>
           </div>
         </>
+      )}
+      {msOn.head && (
+        <F label="두폭 mm"><input className="in mono" inputMode="decimal" value={f.headWidth} onChange={(e) => set("headWidth", e.target.value)} /></F>
       )}
       {msOn.thorax && (
         <F label="흉폭 mm"><input className="in mono" inputMode="decimal" value={f.thoraxWidth} onChange={(e) => set("thoraxWidth", e.target.value)} /></F>
@@ -913,7 +966,7 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
         </F>
       </div>
       <div className="row">
-        <F label="종" half><SimplePicker options={SPECIES} value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
+        <F label="종" half><SpeciesPicker value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
       <F label="누대수">
@@ -1358,7 +1411,7 @@ function exportXLSX(data) {
   });
   const sheetP = data.parents.map((p) => ({
     "관리번호": p.code, "성별": p.sex, "종": p.species, "혈통": p.line, "누대수": p.gen, "산지": p.origin,
-    "총장(mm)": p.totalLength, "턱 길이(mm)": p.jawLength, "악폭(mm)": p.jawWidth || "", "악후(mm)": p.jawThick || "", "흉폭(mm)": p.thoraxWidth,
+    "총장(mm)": p.totalLength, "턱 길이(mm)": p.jawLength, "악폭(mm)": p.jawWidth || "", "악후(mm)": p.jawThick || "", "두폭(mm)": p.headWidth || "", "흉폭(mm)": p.thoraxWidth,
     "우화일": p.eclosionDate, "입수처": p.source, "상태": p.status || "생존", "메모": p.memo,
   }));
   const wb = XLSX.utils.book_new();
@@ -1448,7 +1501,7 @@ async function downloadTemplate() {
   guide.getColumn(1).width = 80;
 
   /* 성충 */
-  const pHeaders = ["관리번호", "성별(수컷/암컷)", "종", "혈통", "누대수", "산지", "총장(mm)", "턱길이(mm)", "악폭(mm)", "악후(mm)", "흉폭(mm)", "우화일(YYYY-MM-DD)", "입수처", "상태(생존/사망)", "메모"];
+  const pHeaders = ["관리번호", "성별(수컷/암컷)", "종", "혈통", "누대수", "산지", "총장(mm)", "턱길이(mm)", "악폭(mm)", "악후(mm)", "두폭(mm)", "흉폭(mm)", "우화일(YYYY-MM-DD)", "입수처", "상태(생존/사망)", "메모"];
   const pWs = makeSheet("성충", pHeaders);
   pWs.addRow(rowFor(pHeaders, { "관리번호": "P-01", "성별(수컷/암컷)": "수컷", "종": "왕사슴벌레(극태)", "누대수": "WD", "총장(mm)": 85.5, "입수처": "샵명", "상태(생존/사망)": "생존" }));
   pWs.addRow(rowFor(pHeaders, { "관리번호": "P-02", "성별(수컷/암컷)": "암컷", "종": "왕사슴벌레(극태)", "누대수": "WD", "총장(mm)": 52.0, "상태(생존/사망)": "생존" }));
@@ -1539,6 +1592,7 @@ function parseImportXLSX(arrayBuffer, data) {
         line: keep(row["혈통"], existing.line), gen: keep(row["누대수"], existing.gen), origin: keep(row["산지"], existing.origin),
         totalLength: keep(row["총장(mm)"], existing.totalLength), jawLength: keep(row["턱길이(mm)"], existing.jawLength),
         jawWidth: keep(row["악폭(mm)"], existing.jawWidth), jawThick: keep(row["악후(mm)"], existing.jawThick),
+        headWidth: keep(row["두폭(mm)"], existing.headWidth),
         thoraxWidth: keep(row["흉폭(mm)"], existing.thoraxWidth), eclosionDate: keepD(row["우화일(YYYY-MM-DD)"], existing.eclosionDate),
         status: str(row["상태(생존/사망)"]) === "사망" ? "사망" : str(row["상태(생존/사망)"]) === "생존" ? "생존" : existing.status,
         source: keep(row["입수처"], existing.source), memo: keep(row["메모"], existing.memo),
@@ -1550,7 +1604,7 @@ function parseImportXLSX(arrayBuffer, data) {
         id: uid(), code, sex: sexNorm(row["성별(수컷/암컷)"]), species,
         line: str(row["혈통"]), gen: str(row["누대수"]), origin: str(row["산지"]),
         totalLength: str(row["총장(mm)"]), jawLength: str(row["턱길이(mm)"]),
-        jawWidth: str(row["악폭(mm)"]), jawThick: str(row["악후(mm)"]), thoraxWidth: str(row["흉폭(mm)"]),
+        jawWidth: str(row["악폭(mm)"]), jawThick: str(row["악후(mm)"]), headWidth: str(row["두폭(mm)"]), thoraxWidth: str(row["흉폭(mm)"]),
         eclosionDate: dstr(row["우화일(YYYY-MM-DD)"]), source: str(row["입수처"]), memo: str(row["메모"]),
         status: str(row["상태(생존/사망)"]) === "사망" ? "사망" : "생존", photo: "", growthRecords: [],
       });
@@ -2786,7 +2840,7 @@ function App() {
                   <div><div className="s-l">악폭</div><div className="s-v mono">{num(p.jawWidth) ? n1(num(p.jawWidth)) + "mm" : "—"}</div></div>
                   <div><div className="s-l">악후</div><div className="s-v mono">{num(p.jawThick) ? n1(num(p.jawThick)) + "mm" : "—"}</div></div>
                   <div><div className="s-l">턱 비율</div><div className="s-v mono">{num(p.totalLength) && num(p.jawLength) ? n1(num(p.jawLength) / num(p.totalLength) * 100) + "%" : "—"}</div></div>
-                  <div />
+                  <div><div className="s-l">두폭</div><div className="s-v mono">{num(p.headWidth) ? n1(num(p.headWidth)) + "mm" : "—"}</div></div>
                 </div>
               )}
               {(p.source || p.memo) && <div className="bc-line" />}

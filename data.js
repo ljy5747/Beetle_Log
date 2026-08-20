@@ -7,7 +7,17 @@ window.APP_DATA = {
   /* ── 클라우드 동기화 (Supabase) ── */
   SUPABASE_URL: "https://qybgsztoegkzqsdipili.supabase.co",
   SUPABASE_KEY: "sb_publishable_IwNmQESmOgj-DHR0sxOIlw_4EKsa4wu",
-  SPECIES: ["왕사슴벌레(체장)", "왕사슴벌레(극태)", "왕사슴벌레(와일드)", "넓적사슴벌레(체장)", "넓적사슴벌레(단치)", "애사슴벌레", "홍다리사슴벌레", "두점박이사슴벌레", "톱사슴벌레", "(걍)사슴벌레", "장수풍뎅이"],
+  /* 종 목록. sub가 있으면 중분류(체장/극태 등)를 한 번 더 고름 */
+  SPECIES_TREE: [
+    { name: "왕사슴벌레", sub: ["체장", "극태", "와일드", "미분류"] },
+    { name: "넓적사슴벌레", sub: ["체장", "극태", "와일드", "미분류"] },
+    { name: "애사슴벌레" },
+    { name: "홍다리사슴벌레" },
+    { name: "두점박이사슴벌레" },
+    { name: "톱사슴벌레" },
+    { name: "(걍)사슴벌레" },
+    { name: "장수풍뎅이" },
+  ],
   INSTARS: ["1령", "2령", "3령 초기", "3령 중기", "3령 후기"],
   FEED_TYPES: ["균사", "발효톱밥", "기타"],
   BOTTLES: ["500", "800", "1100", "1400", "2300", "3200"],
@@ -35,4 +45,14 @@ window.APP_DATA = {
   },
   STATUS_COLOR: { "유충": "#6B8E4E", "용화": "#A8884F", "우화": "#9A6A3A", "사망": "#9A9088", "분양": "#6E8494" },
   get STATUSES() { return Object.keys(this.STATUS_COLOR); },
+  /* 전체 종 이름 목록 (중분류 포함) — 엑셀 드롭다운 등에서 사용 */
+  get SPECIES() {
+    const out = [];
+    this.SPECIES_TREE.forEach((s) => {
+      if (s.sub) s.sub.forEach((v) => out.push(`${s.name}(${v})`));
+      else out.push(s.name);
+    });
+    return out;
+  },
+
 };
