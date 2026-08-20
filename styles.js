@@ -171,7 +171,9 @@ box-shadow:0 2px 14px rgba(23,21,19,.07);text-align:center}
 .bc-species{font-family:var(--serif);font-size:27px;font-weight:700;margin-top:12px;letter-spacing:.01em}
 .bc-sub{font-size:12px;color:var(--dim);margin-top:8px;letter-spacing:.04em}
 .bc-line{height:1px;background:var(--line);margin:18px 0}
-.bc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+/* 항목 수가 적으면 가운데로 모이도록 (4칸 고정이 아니라 유연 배치) */
+.bc-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 6px}
+.bc-grid > div{flex:1 1 22%;min-width:64px;max-width:25%;text-align:center}
 .bc-grid .s-v{font-size:15px}
 .bc-foot{font-size:12.5px;color:var(--dim);margin-top:9px;white-space:pre-wrap}
 .bc-qr{font-size:10px;color:#BCB5A9;margin-top:20px;letter-spacing:.1em;text-transform:uppercase}
