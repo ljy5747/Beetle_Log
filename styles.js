@@ -115,6 +115,14 @@ vertical-align:middle;position:relative;top:-1.5px;-webkit-text-stroke:.4px curr
 .card.dead{opacity:.5;background:var(--surf2)}
 .card.dead .card-val,.card.dead .card-sub{color:var(--dim)}
 /* 방금 저장한 유충 카드를 잠깐 강조 */
+/* ═══════════ 직접 정렬 (길게 눌러 이동) ═══════════ */
+.sortable.dragging{touch-action:none} /* 드래그 중엔 화면 스크롤 막기 */
+.s-item{transition:transform .12s, opacity .12s}
+.s-item.drag > *{opacity:.55;transform:scale(.97);
+box-shadow:0 8px 22px rgba(23,21,19,.18)}
+.s-item.over > *{border-color:var(--gold) !important;
+box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 30%,transparent)}
+
 .card.just-saved{border-color:var(--gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 22%,transparent);
 transition:box-shadow .3s,border-color .3s}
 .card.crown{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}

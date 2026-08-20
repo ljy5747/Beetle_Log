@@ -257,6 +257,71 @@ function Spark({ ind, w = 96, h = 30, big }) {
   );
 }
 
+/* ════════════════════ 직접 정렬 (길게 눌러 위아래로 이동) ════════════════════
+   ord 값이 있으면 그 순서, 없으면 뒤쪽에 번호순으로 */
+const byOrder = (arr) => [...arr].sort((a, b) => {
+  const ao = a.ord, bo = b.ord;
+  if (ao != null && bo != null) return ao - bo;
+  if (ao != null) return -1;
+  if (bo != null) return 1;
+  return String(a.code || "").localeCompare(String(b.code || ""), "ko", { numeric: true });
+});
+
+/* 길게 누르면 드래그로 순서를 바꿀 수 있는 목록 */
+function Sortable({ items, onReorder, children }) {
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+  const ref = useRef({ timer: null, startY: 0, moved: false });
+
+  const cancel = () => { clearTimeout(ref.current.timer); ref.current.timer = null; };
+  const onDown = (id) => (e) => {
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    ref.current.startY = y; ref.current.moved = false;
+    ref.current.timer = setTimeout(() => {
+      setDragId(id);
+      try { navigator.vibrate && navigator.vibrate(18); } catch (err) {}
+    }, 450);
+  };
+  const onMove = (e) => {
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    if (!dragId) { /* 아직 대기 중인데 움직이면 길게누르기 취소 (스크롤로 간주) */
+      if (Math.abs(y - ref.current.startY) > 8) cancel();
+      return;
+    }
+    e.preventDefault && e.preventDefault();
+    /* 현재 손가락 위치에 있는 카드 찾기 */
+    const el = document.elementFromPoint(e.touches ? e.touches[0].clientX : e.clientX, y);
+    const card = el && el.closest && el.closest("[data-sid]");
+    if (card) setOverId(card.getAttribute("data-sid"));
+  };
+  const onUp = () => {
+    cancel();
+    if (dragId && overId && dragId !== overId) {
+      const ids = items.map((x) => x.id);
+      const from = ids.indexOf(dragId), to = ids.indexOf(overId);
+      if (from >= 0 && to >= 0) {
+        const next = [...ids];
+        next.splice(to, 0, next.splice(from, 1)[0]);
+        onReorder(next);
+      }
+    }
+    setDragId(null); setOverId(null);
+  };
+  return (
+    <div className={"sortable" + (dragId ? " dragging" : "")}
+      onTouchMove={onMove} onTouchEnd={onUp} onTouchCancel={onUp}
+      onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}>
+      {items.map((it) => (
+        <div key={it.id} data-sid={it.id}
+          className={"s-item" + (dragId === it.id ? " drag" : "") + (dragId && overId === it.id && overId !== dragId ? " over" : "")}
+          onTouchStart={onDown(it.id)} onMouseDown={onDown(it.id)}>
+          {children(it, !!dragId)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ════════════════════ 유충 카드 (라인 목록 / 교체 대상 목록에서 공용) ════════════════════ */
 function LarvaCard({ ind, crownM, crownF, lineCode, onOpen, onBottle }) {
   const lr = latestRec(ind), mw = maxWeight(ind), dl = lastDelta(ind);
@@ -2526,7 +2591,11 @@ function App() {
               </div>
             )}
 
-            {[...data.lines].sort((a, b) => a.code.localeCompare(b.code, "ko", { numeric: true })).map((L) => {
+            <Sortable items={byOrder(data.lines)} onReorder={(ids) => {
+              const idx = Object.fromEntries(ids.map((id, i) => [id, i]));
+              persist({ ...data, lines: data.lines.map((l) => ({ ...l, ord: idx[l.id] })) });
+              say("순서가 바뀌었어요");
+            }}>{(L) => {
               const kids = larvaeOf(L.id);
               const cnt = STATUSES.map((s) => [s, kids.filter((i) => i.status === s).length]).filter(([, n]) => n > 0);
               const dd = lineDday(L.id);
@@ -2564,7 +2633,7 @@ function App() {
                   </div>
                 </div>
               );
-            })}
+            }}</Sortable>
           </>}
 
           {tab === "parents" && <>
@@ -2634,7 +2703,11 @@ function App() {
                     <span className="grp-name serif">{speciesFolder}</span>
                     <span className="grp-cnt">{list.length}마리 · ♂︎{males} ♀︎{females}</span>
                   </div>
-                  {list.map((p) => {
+                  <Sortable items={byOrder(list)} onReorder={(ids) => {
+                    const idx = Object.fromEntries(ids.map((id, i) => [id, i]));
+                    persist({ ...data, parents: data.parents.map((x) => (idx[x.id] != null ? { ...x, ord: idx[x.id] } : x)) });
+                    say("순서가 바뀌었어요");
+                  }}>{(p) => {
                     const myLines = data.lines.filter((l) => l.fatherId === p.id || l.motherId === p.id).length;
                     const dead = p.status === "사망";
                     return (
@@ -2655,7 +2728,7 @@ function App() {
                         <SpeciesPhoto photo={p.photo} species={p.species} className="card-thumb" />
                       </div>
                     );
-                  })}
+                  }}</Sortable>
                 </>
               );
             })()}
