@@ -2829,20 +2829,27 @@ function App() {
                 </div>
               ) : null}
               <div className="bc-line" />
-              <div className="bc-grid">
-                <div><div className="s-l">총장</div><div className="s-v mono">{num(p.totalLength) ? n1(num(p.totalLength)) + "mm" : "—"}</div></div>
-                <div><div className="s-l">턱 길이</div><div className="s-v mono">{num(p.jawLength) ? n1(num(p.jawLength)) + "mm" : "—"}</div></div>
-                <div><div className="s-l">흉폭</div><div className="s-v mono">{num(p.thoraxWidth) ? n1(num(p.thoraxWidth)) + "mm" : "—"}</div></div>
-                <div><div className="s-l">우화일</div><div className="s-v mono">{p.eclosionDate ? shortDate(p.eclosionDate) : "—"}</div></div>
-              </div>
-              {(num(p.jawWidth) || num(p.jawThick)) && (
-                <div className="bc-grid" style={{ marginTop: 8 }}>
-                  <div><div className="s-l">악폭</div><div className="s-v mono">{num(p.jawWidth) ? n1(num(p.jawWidth)) + "mm" : "—"}</div></div>
-                  <div><div className="s-l">악후</div><div className="s-v mono">{num(p.jawThick) ? n1(num(p.jawThick)) + "mm" : "—"}</div></div>
-                  <div><div className="s-l">턱 비율</div><div className="s-v mono">{num(p.totalLength) && num(p.jawLength) ? n1(num(p.jawLength) / num(p.totalLength) * 100) + "%" : "—"}</div></div>
-                  <div><div className="s-l">두폭</div><div className="s-v mono">{num(p.headWidth) ? n1(num(p.headWidth)) + "mm" : "—"}</div></div>
-                </div>
-              )}
+              {(() => {
+                /* 체장·우화일은 기본 표시, 나머지는 값이 있을 때만 */
+                const ratio = num(p.totalLength) && num(p.jawLength) ? n1(num(p.jawLength) / num(p.totalLength) * 100) + "%" : null;
+                const cells = [
+                  ["체장", num(p.totalLength) ? n1(num(p.totalLength)) + "mm" : "—"],
+                  num(p.jawLength) && ["턱 길이", n1(num(p.jawLength)) + "mm"],
+                  num(p.headWidth) && ["두폭", n1(num(p.headWidth)) + "mm"],
+                  num(p.thoraxWidth) && ["흉폭", n1(num(p.thoraxWidth)) + "mm"],
+                  ratio && ["턱 비율", ratio],
+                  num(p.jawWidth) && ["악폭", n1(num(p.jawWidth)) + "mm"],
+                  num(p.jawThick) && ["악후", n1(num(p.jawThick)) + "mm"],
+                  ["우화일", p.eclosionDate ? shortDate(p.eclosionDate) : "—"],
+                ].filter(Boolean);
+                return (
+                  <div className="bc-grid">
+                    {cells.map(([k, v]) => (
+                      <div key={k}><div className="s-l">{k}</div><div className="s-v mono">{v}</div></div>
+                    ))}
+                  </div>
+                );
+              })()}
               {(p.source || p.memo) && <div className="bc-line" />}
               {p.source && <div className="bc-foot">입수처 · {p.source}</div>}
               {p.memo && <div className="bc-foot">{p.memo}</div>}
