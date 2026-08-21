@@ -267,58 +267,28 @@ const byOrder = (arr) => [...arr].sort((a, b) => {
   return String(a.code || "").localeCompare(String(b.code || ""), "ko", { numeric: true });
 });
 
-/* 길게 누르면 드래그로 순서를 바꿀 수 있는 목록 */
-function Sortable({ items, onReorder, children }) {
-  const [dragId, setDragId] = useState(null);
-  const [overId, setOverId] = useState(null);
-  const ref = useRef({ timer: null, startY: 0, moved: false });
-
-  const cancel = () => { clearTimeout(ref.current.timer); ref.current.timer = null; };
-  const onDown = (id) => (e) => {
-    const y = e.touches ? e.touches[0].clientY : e.clientY;
-    ref.current.startY = y; ref.current.moved = false;
-    ref.current.timer = setTimeout(() => {
-      setDragId(id);
-      try { navigator.vibrate && navigator.vibrate(18); } catch (err) {}
-    }, 450);
+/* 순서 편집 목록 — '순서 편집' 버튼을 눌렀을 때만 동작 (오작동 방지) */
+function Sortable({ items, editing, onReorder, children }) {
+  const move = (idx, dir) => {
+    const to = idx + dir;
+    if (to < 0 || to >= items.length) return;
+    const ids = items.map((x) => x.id);
+    ids.splice(to, 0, ids.splice(idx, 1)[0]);
+    onReorder(ids);
   };
-  const onMove = (e) => {
-    const y = e.touches ? e.touches[0].clientY : e.clientY;
-    if (!dragId) { /* 아직 대기 중인데 움직이면 길게누르기 취소 (스크롤로 간주) */
-      if (Math.abs(y - ref.current.startY) > 8) cancel();
-      return;
-    }
-    e.preventDefault && e.preventDefault();
-    /* 현재 손가락 위치에 있는 카드 찾기 */
-    const el = document.elementFromPoint(e.touches ? e.touches[0].clientX : e.clientX, y);
-    const card = el && el.closest && el.closest("[data-sid]");
-    if (card) setOverId(card.getAttribute("data-sid"));
-  };
-  const onUp = () => {
-    cancel();
-    if (dragId && overId && dragId !== overId) {
-      const ids = items.map((x) => x.id);
-      const from = ids.indexOf(dragId), to = ids.indexOf(overId);
-      if (from >= 0 && to >= 0) {
-        const next = [...ids];
-        next.splice(to, 0, next.splice(from, 1)[0]);
-        onReorder(next);
-      }
-    }
-    setDragId(null); setOverId(null);
-  };
+  if (!editing) return <>{items.map((it) => <div key={it.id}>{children(it)}</div>)}</>;
   return (
-    <div className={"sortable" + (dragId ? " dragging" : "")}
-      onTouchMove={onMove} onTouchEnd={onUp} onTouchCancel={onUp}
-      onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}>
-      {items.map((it) => (
-        <div key={it.id} data-sid={it.id}
-          className={"s-item" + (dragId === it.id ? " drag" : "") + (dragId && overId === it.id && overId !== dragId ? " over" : "")}
-          onTouchStart={onDown(it.id)} onMouseDown={onDown(it.id)}>
-          {children(it, !!dragId)}
+    <>
+      {items.map((it, i) => (
+        <div key={it.id} className="s-row">
+          <div className="s-body">{children(it)}</div>
+          <div className="s-btns">
+            <button className="s-mv" disabled={i === 0} onClick={() => move(i, -1)}>▲</button>
+            <button className="s-mv" disabled={i === items.length - 1} onClick={() => move(i, 1)}>▼</button>
+          </div>
         </div>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -2018,6 +1988,7 @@ function App() {
   const [filter, setFilter] = useState("전체");
   const [tab, setTab] = useState("lines");
   const [speciesFolder, setSpeciesFolder] = useState(null);
+  const [orderEdit, setOrderEdit] = useState(false);
   const [theme, setTheme] = useState("brown");
   const [snaps, setSnaps] = useState([]);
   const [folderBy, setFolderBy] = useState("species");
@@ -2087,6 +2058,7 @@ function App() {
   };
   /* 새 화면으로 이동 (뒤로가기면 이전 위치 복원, 아니면 맨 위) */
   const goView = (next, restore) => {
+    setOrderEdit(false); /* 화면 이동 시 편집 모드 해제 */
     rememberScroll();
     setView(next);
     const y = restore ? (scrollMem.current[viewKey(next)] || 0) : 0;
@@ -2591,7 +2563,15 @@ function App() {
               </div>
             )}
 
-            <Sortable items={byOrder(data.lines)} onReorder={(ids) => {
+            {data.lines.length > 1 && (
+              <div className="order-bar">
+                <button className={"btn tiny" + (orderEdit ? " primary" : "")} onClick={() => setOrderEdit(!orderEdit)}>
+                  {orderEdit ? "✓ 순서 편집 완료" : "↕ 순서 편집"}
+                </button>
+              </div>
+            )}
+
+            <Sortable items={byOrder(data.lines)} editing={orderEdit} onReorder={(ids) => {
               const idx = Object.fromEntries(ids.map((id, i) => [id, i]));
               persist({ ...data, lines: data.lines.map((l) => ({ ...l, ord: idx[l.id] })) });
               say("순서가 바뀌었어요");
@@ -2703,7 +2683,14 @@ function App() {
                     <span className="grp-name serif">{speciesFolder}</span>
                     <span className="grp-cnt">{list.length}마리 · ♂︎{males} ♀︎{females}</span>
                   </div>
-                  <Sortable items={byOrder(list)} onReorder={(ids) => {
+                  {list.length > 1 && (
+                    <div className="order-bar">
+                      <button className={"btn tiny" + (orderEdit ? " primary" : "")} onClick={() => setOrderEdit(!orderEdit)}>
+                        {orderEdit ? "✓ 순서 편집 완료" : "↕ 순서 편집"}
+                      </button>
+                    </div>
+                  )}
+                  <Sortable items={byOrder(list)} editing={orderEdit} onReorder={(ids) => {
                     const idx = Object.fromEntries(ids.map((id, i) => [id, i]));
                     persist({ ...data, parents: data.parents.map((x) => (idx[x.id] != null ? { ...x, ord: idx[x.id] } : x)) });
                     say("순서가 바뀌었어요");

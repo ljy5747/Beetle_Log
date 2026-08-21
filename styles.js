@@ -115,13 +115,16 @@ vertical-align:middle;position:relative;top:-1.5px;-webkit-text-stroke:.4px curr
 .card.dead{opacity:.5;background:var(--surf2)}
 .card.dead .card-val,.card.dead .card-sub{color:var(--dim)}
 /* 방금 저장한 유충 카드를 잠깐 강조 */
-/* ═══════════ 직접 정렬 (길게 눌러 이동) ═══════════ */
-.sortable.dragging{touch-action:none} /* 드래그 중엔 화면 스크롤 막기 */
-.s-item{transition:transform .12s, opacity .12s}
-.s-item.drag > *{opacity:.55;transform:scale(.97);
-box-shadow:0 8px 22px rgba(23,21,19,.18)}
-.s-item.over > *{border-color:var(--gold) !important;
-box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 30%,transparent)}
+
+/* ═══════════ 순서 편집 ═══════════ */
+.order-bar{display:flex;justify-content:flex-end;margin-bottom:10px}
+.s-row{display:flex;align-items:stretch;gap:8px}
+.s-body{flex:1;min-width:0;pointer-events:none;opacity:.85} /* 편집 중엔 카드 탭 막기 */
+.s-btns{display:flex;flex-direction:column;justify-content:center;gap:5px;padding-bottom:10px}
+.s-mv{width:40px;height:34px;border:1px solid var(--line);background:var(--surf);color:var(--text);
+border-radius:7px;font-size:13px;cursor:pointer;font-family:inherit}
+.s-mv:disabled{color:var(--line);cursor:default}
+.s-mv:active:not(:disabled){background:var(--surf2)}
 
 .card.just-saved{border-color:var(--gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 22%,transparent);
 transition:box-shadow .3s,border-color .3s}
