@@ -45,10 +45,10 @@ var XLSX = window.XLSX;
 /* 앱(app.js)이 뜨기 전에 뒤로가기를 누르면 페이지를 벗어나 새로고침이 일어나므로,
    문서 단계에서 미리 히스토리 트랩을 깔아둠. 앱이 준비되면 앱의 핸들러가 이어받음 */
 try {
-  history.pushState({ blEarly: 1 }, "");
+  for (var i = 0; i < 4; i++) history.pushState({ blEarly: 1 }, "");
   window.addEventListener("popstate", function () {
     if (window.__blAppReady) return;              /* 앱이 준비됐으면 앱이 처리 */
-    try { history.pushState({ blEarly: 1 }, ""); } catch (e) {}
+    try { history.pushState({ blEarly: 1 }, ""); history.pushState({ blEarly: 1 }, ""); } catch (e) {}
   });
 } catch (e) {}
 </script>

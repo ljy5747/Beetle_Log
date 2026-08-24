@@ -2048,7 +2048,6 @@ function App() {
 
   /* ── 뒤로가기 (갤럭시 시스템 뒤로가기 + 아이폰 엣지 스와이프) ── */
   const backRef = useRef({});
-  const exitRef = useRef(0); /* 첫 화면에서 뒤로가기 누른 시각 (두 번 눌러 종료) */
   backRef.current = { modal, view, settingsOpen, data };
   /* ── 화면별 스크롤 위치 기억 (뒤로 가면 보던 자리로) ── */
   const scrollMem = useRef({});
@@ -2093,24 +2092,26 @@ function App() {
   useEffect(() => {
     /* 히스토리에 '트랩'을 여러 칸 깔아둠.
        한 칸만 두면 뒤로가기를 빠르게 연타할 때 복구보다 먼저 통과해 앱을 벗어남 */
-    const TRAP = 5;
-    const fill = () => { try { for (let i = 0; i < TRAP; i++) history.pushState({ bl: 1 }, ""); } catch (e) {} };
-    fill();
+    /* 뒤로가기로 앱이 종료되지 않도록 히스토리를 넉넉히 채워두고, 항상 다시 채움 */
+    const TRAP = 12;
+    const fill = (n) => { try { for (let i = 0; i < n; i++) history.pushState({ bl: 1 }, ""); } catch (e) {} };
+    fill(TRAP);
     window.__blAppReady = true; /* index.html의 조기 핸들러는 이제 물러남 */
     /* 중복 방지: iOS가 자체 뒤로가기 + 우리 감지를 둘 다 실행해 두 번 가는 것 차단 */
     const gate = { t: 0 };
     const doBack = () => {
-      const now = Date.now(); if (now - gate.t < 350) return; gate.t = now;
-      const moved = goBackStep();
-      if (!moved) {
-        /* 첫 화면 — 한 번 더 누르면 종료 (실수로 나가는 것 방지) */
-        if (now - exitRef.current < 2000) { exitRef.current = 0; try { history.go(-(TRAP + 2)); } catch (e) {} return; }
-        exitRef.current = now;
-        say("한 번 더 누르면 앱을 나갑니다");
-      }
+      const now = Date.now(); if (now - gate.t < 300) return; gate.t = now;
+      goBackStep(); /* 첫 화면이면 아무 일도 하지 않음 (홈 버튼으로 나가기) */
     };
-    const onPop = () => { doBack(); try { history.pushState({ bl: 1 }, ""); } catch (e) {} };
+    const onPop = () => {
+      doBack();
+      /* 소비된 만큼 넉넉히 보충 — 연타·중복 이벤트로도 히스토리가 바닥나지 않게 */
+      fill(4);
+    };
     window.addEventListener("popstate", onPop);
+    /* 화면이 되돌아왔을 때도 히스토리 보충 (백그라운드 복귀 등) */
+    const onShow = () => fill(2);
+    window.addEventListener("pageshow", onShow);
     /* 아이폰 홈화면 앱(standalone)은 좌측 엣지 스와이프 제스처가 없어서 직접 감지 */
     let sx = null, sy = null;
     const ts = (e) => { const t = e.touches[0]; if (t.clientX < 28) { sx = t.clientX; sy = t.clientY; } else { sx = null; } };
@@ -2135,6 +2136,7 @@ function App() {
     }
     return () => {
       window.removeEventListener("popstate", onPop);
+      window.removeEventListener("pageshow", onShow);
       if (standalone) { document.removeEventListener("touchstart", ts); document.removeEventListener("touchmove", tm); document.removeEventListener("touchend", te); }
     };
   }, []);
