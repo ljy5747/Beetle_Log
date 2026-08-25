@@ -2049,6 +2049,18 @@ function App() {
   /* ── 뒤로가기 (갤럭시 시스템 뒤로가기 + 아이폰 엣지 스와이프) ── */
   const backRef = useRef({});
   backRef.current = { modal, view, settingsOpen, data };
+  /* 모달·설정이 열릴 때도 히스토리를 한 칸 쌓아, 뒤로가기로 닫히게 함 */
+  const layerRef = useRef({ modal: false, settings: false });
+  useEffect(() => {
+    const openNow = !!modal, was = layerRef.current.modal;
+    if (openNow && !was) { try { history.pushState({ bl: 1, layer: "modal" }, ""); } catch (e) {} }
+    layerRef.current.modal = openNow;
+  }, [modal]);
+  useEffect(() => {
+    const openNow = !!settingsOpen, was = layerRef.current.settings;
+    if (openNow && !was) { try { history.pushState({ bl: 1, layer: "settings" }, ""); } catch (e) {} }
+    layerRef.current.settings = openNow;
+  }, [settingsOpen]);
   /* ── 화면별 스크롤 위치 기억 (뒤로 가면 보던 자리로) ── */
   const scrollMem = useRef({});
   const viewKey = (v) => v.name + (v.id ? ":" + v.id : "") + (v.name === "list" ? ":" + tab : "");
@@ -2056,10 +2068,12 @@ function App() {
   const rememberScroll = () => {
     try { scrollMem.current[viewKey(view)] = window.scrollY || 0; } catch (e) {}
   };
-  /* 새 화면으로 이동 (뒤로가기면 이전 위치 복원, 아니면 맨 위) */
-  const goView = (next, restore) => {
+  /* 새 화면으로 이동. fromBack=true면 뒤로가기로 온 것이라 히스토리를 쌓지 않음 */
+  const goView = (next, restore, fromBack) => {
     setOrderEdit(false); /* 화면 이동 시 편집 모드 해제 */
     rememberScroll();
+    /* 화면마다 히스토리를 정직하게 한 칸씩 쌓아 브라우저 뒤로가기가 그대로 동작하게 */
+    if (!fromBack) { try { history.pushState({ bl: 1, view: next }, ""); } catch (e) {} }
     setView(next);
     const y = restore ? (scrollMem.current[viewKey(next)] || 0) : 0;
     let tries = 0;
@@ -2080,38 +2094,28 @@ function App() {
     if (b.settingsOpen) { setSettingsOpen(false); return true; }
     if (b.view.name === "detail") {
       const ind = b.data && b.data.individuals.find((i) => i.id === b.view.id);
-      goView(ind && ind.lineId ? { name: "lineDetail", id: ind.lineId } : { name: "list" }, true);
+      goView(ind && ind.lineId ? { name: "lineDetail", id: ind.lineId } : { name: "list" }, true, true);
       return true;
     }
-    if (b.view.name === "dueList") { goView({ name: "list" }, true); return true; }
+    if (b.view.name === "dueList") { goView({ name: "list" }, true, true); return true; }
     if (b.view.name === "lineDetail" || b.view.name === "parentDetail") {
-      setFilter("전체"); goView({ name: "list" }, true); return true;
+      setFilter("전체"); goView({ name: "list" }, true, true); return true;
     }
     return false; /* 이미 맨 처음 화면 */
   };
   useEffect(() => {
-    /* 히스토리에 '트랩'을 여러 칸 깔아둠.
-       한 칸만 두면 뒤로가기를 빠르게 연타할 때 복구보다 먼저 통과해 앱을 벗어남 */
-    /* 뒤로가기로 앱이 종료되지 않도록 히스토리를 넉넉히 채워두고, 항상 다시 채움 */
-    const TRAP = 12;
-    const fill = (n) => { try { for (let i = 0; i < n; i++) history.pushState({ bl: 1 }, ""); } catch (e) {} };
-    fill(TRAP);
+    /* 첫 화면을 히스토리의 뿌리로 표시. 이후 화면 진입마다 goView가 한 칸씩 쌓음 */
+    try { history.replaceState({ bl: 1, root: 1 }, ""); } catch (e) {}
     window.__blAppReady = true; /* index.html의 조기 핸들러는 이제 물러남 */
     /* 중복 방지: iOS가 자체 뒤로가기 + 우리 감지를 둘 다 실행해 두 번 가는 것 차단 */
     const gate = { t: 0 };
     const doBack = () => {
       const now = Date.now(); if (now - gate.t < 300) return; gate.t = now;
-      goBackStep(); /* 첫 화면이면 아무 일도 하지 않음 (홈 버튼으로 나가기) */
+      goBackStep();
     };
-    const onPop = () => {
-      doBack();
-      /* 소비된 만큼 넉넉히 보충 — 연타·중복 이벤트로도 히스토리가 바닥나지 않게 */
-      fill(4);
-    };
+    /* 브라우저가 히스토리를 한 칸 되돌리면 우리도 화면을 한 단계 되돌림 (다시 밀어넣지 않음) */
+    const onPop = () => { doBack(); };
     window.addEventListener("popstate", onPop);
-    /* 화면이 되돌아왔을 때도 히스토리 보충 (백그라운드 복귀 등) */
-    const onShow = () => fill(2);
-    window.addEventListener("pageshow", onShow);
     /* 아이폰 홈화면 앱(standalone)은 좌측 엣지 스와이프 제스처가 없어서 직접 감지 */
     let sx = null, sy = null;
     const ts = (e) => { const t = e.touches[0]; if (t.clientX < 28) { sx = t.clientX; sy = t.clientY; } else { sx = null; } };
@@ -2136,7 +2140,6 @@ function App() {
     }
     return () => {
       window.removeEventListener("popstate", onPop);
-      window.removeEventListener("pageshow", onShow);
       if (standalone) { document.removeEventListener("touchstart", ts); document.removeEventListener("touchmove", tm); document.removeEventListener("touchend", te); }
     };
   }, []);
