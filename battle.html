@@ -93,6 +93,18 @@ font-family:"Times New Roman",Georgia,serif;font-style:italic;font-size:19px}
 .rname b{font-size:14.5px;display:flex;align-items:center;gap:6px}
 .rname b i{width:7px;height:7px;border-radius:50%;flex:none}
 .rname span{font-size:11.5px;color:var(--dim);display:block;margin-top:2px}
+.rsep{color:#3A342C;margin:0 4px}
+.rnone{color:#5A5349}
+.rcrown{flex:none;width:26px;text-align:right;font-size:17px;line-height:1}
+.rrow.top .rname b{font-size:18px}
+.rrow.top .rname span{font-size:12.5px;margin-top:3px}
+.rrow.top .rk{font-size:18px;width:24px}
+.rrow.top{padding:12px 0}
+.rrow.t1 .rk{color:#E8C77A}
+.rrow.t2 .rk{color:#CFCFCF}
+.rrow.t3 .rk{color:#D2A277}
+.rank-note{font-size:10.5px;color:#6E6559;text-align:center;margin-top:11px;padding-top:9px;border-top:1px solid var(--line2);line-height:1.7}
+.rank-note b{color:var(--gold-l)}
 .rval{flex:none;text-align:right;font-size:17px;font-weight:700}
 .rval small{font-size:11.5px;color:var(--dim);font-weight:400}
 .badge{font-size:10px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:0 6px;color:var(--dim)}
@@ -276,6 +288,38 @@ function breederScore(best){
   var vs=[best.m?best.m.v:null,best.f?best.f.v:null].filter(function(v){return v!=null;});
   return vs.length?avg(vs):null;
 }
+/* ── 브리더 랭킹: 성별 평균 → 각각 등수 → 수컷 등수 ×1.5 + 암컷 등수 (낮을수록 상위) ── */
+var MALE_W=1.5;
+function sexAvg(larvae,metric,sex){
+  var vs=[];
+  larvae.forEach(function(l){
+    if(sexOf(l.sex)!==sex)return;
+    var v=metric(l); if(v!=null)vs.push(v);
+  });
+  return vs.length?avg(vs):null;
+}
+function rankBySexAvg(rows,sex){
+  var key=sex+"Avg",rk=sex+"Rank";
+  var have=rows.filter(function(r){return r[key]!=null;});
+  have.slice().sort(function(a,b){return b[key]-a[key];})      /* 평균 높은 순 */
+    .forEach(function(r,idx,arr){
+      var prev=arr[idx-1];
+      r[rk]=(prev&&Math.abs(prev[key]-r[key])<1e-9)?prev[rk]:idx+1;  /* 동점 = 공동 등수 */
+    });
+  rows.forEach(function(r){if(r[key]==null)r[rk]=null;});
+}
+function computeBreederRanks(rows,metric){
+  rows.forEach(function(r){
+    r.mAvg=sexAvg(r.br.larvae,metric,"m");
+    r.fAvg=sexAvg(r.br.larvae,metric,"f");
+  });
+  rankBySexAvg(rows,"m");
+  rankBySexAvg(rows,"f");
+  rows.forEach(function(r){
+    r.rankPts=(r.mRank!=null&&r.fRank!=null)?(r.mRank*MALE_W+r.fRank):null;
+  });
+  return rows;
+}
 function teamStats(rows){
   var pool=[],males=[];
   rows.forEach(function(r){
@@ -395,7 +439,14 @@ function render(B){
     var best=pickBest(br.larvae,metric);
     return {br:br,best:best,score:breederScore(best)};
   });
-  var ranked=rows.slice().sort(function(a,b){return (b.score||-1)-(a.score||-1);});
+  computeBreederRanks(rows,metric);
+  var ranked=rows.slice().sort(function(a,b){
+    if(a.rankPts==null&&b.rankPts==null)return 0;
+    if(a.rankPts==null)return 1;                 /* 미집계는 항상 뒤로 */
+    if(b.rankPts==null)return -1;
+    if(Math.abs(a.rankPts-b.rankPts)>1e-9)return a.rankPts-b.rankPts;  /* 낮을수록 상위 */
+    return a.mRank-b.mRank;                      /* 동점이면 수컷 등수 우선 */
+  });
 
   var tA=keys[0],tB=keys[1];
   var sA=teamStats(rows.filter(function(r){return r.br.team===tA;}));
@@ -432,18 +483,28 @@ function render(B){
   /* ── 브리더 랭킹 ── */
   html+='<div class="sec-t"><span>브리더 랭킹</span></div><div class="panel">';
   if(!ranked.length)html+='<div style="color:var(--dim);text-align:center;padding:12px 0">참가자 데이터를 기다리는 중…</div>';
+  var CROWN=["👑","🥈","🥉"];
+  var place=0,prevPts=null;
   ranked.forEach(function(r,i){
-    var b=r.best,cnt=r.br.larvae.length;
-    var sub=r.score!=null
-      ? '<span class="sx-m">♂</span> '+(b.m?n1(b.m.v)+unit:"—")+' · <span class="sx-f">♀</span> '+(b.f?n1(b.f.v)+unit:"—")
-      : "데이터 전";
-    html+='<div class="rrow"><div class="rk'+(i===0&&r.score!=null?" g":"")+'">'+(r.score!=null?i+1:"–")+'</div>'
-      +avatarHTML(r.br,32)
-      +'<div class="rname"><b><i style="background:'+bcolor(r.br)+'"></i>'+esc(r.br.name)
-      +' <span class="badge'+(cnt>=10?" full":"")+'">'+cnt+'/10두</span></b>'
-      +'<span>'+esc(tname(r.br.team))+' · '+sub+'</span></div>'
-      +'<div class="rval mono">'+(r.score!=null?n1(r.score)+'<small>'+unit+'</small>':'<small>—</small>')+'</div></div>';
+    var scored=r.rankPts!=null;
+    if(scored){
+      if(prevPts==null||Math.abs(r.rankPts-prevPts)>1e-9)place=i+1;   /* 동점은 같은 순위 */
+      prevPts=r.rankPts;
+    }
+    var top=scored&&place<=3;
+    var sub=scored
+      ? '<span class="sx-m">♂</span> '+r.mRank+'등 <span class="rsep">·</span> <span class="sx-f">♀</span> '+r.fRank+'등'
+      : (r.mRank!=null?'<span class="sx-m">♂</span> '+r.mRank+'등 <span class="rsep">·</span> <span class="sx-f">♀</span> <span class="rnone">-</span>'
+        : r.fRank!=null?'<span class="sx-m">♂</span> <span class="rnone">-</span> <span class="rsep">·</span> <span class="sx-f">♀</span> '+r.fRank+'등'
+        : '<span class="rnone">기록 대기</span>');
+    html+='<div class="rrow'+(top?" top t"+place:"")+'">'
+      +'<div class="rk'+(top?" g":"")+'">'+(scored?place:"–")+'</div>'
+      +avatarHTML(r.br,top?38:32)
+      +'<div class="rname"><b><i style="background:'+bcolor(r.br)+'"></i>'+esc(r.br.name)+'</b>'
+      +'<span>'+sub+'</span></div>'
+      +'<div class="rcrown">'+(top?CROWN[place-1]:"")+'</div></div>';
   });
+  html+='<div class="rank-note">성별 <b>평균 무게</b>로 각각 등수를 매긴 뒤 <b>수컷 등수 ×1.5 + 암컷 등수</b> · 낮을수록 상위</div>';
   html+='</div>';
 
   /* ── 그래프 3종 ── */
