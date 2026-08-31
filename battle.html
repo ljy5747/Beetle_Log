@@ -78,7 +78,7 @@ font-family:"Times New Roman",Georgia,serif;font-style:italic;font-size:19px}
 .av.ph{display:flex;align-items:center;justify-content:center;color:var(--dim);font-weight:800}
 
 /* ── 성별 색 ── */
-.sx-m,.sx-f{display:inline-block;line-height:1;vertical-align:-.06em;font-weight:700}
+.sx-m,.sx-f{display:inline-block;line-height:1;vertical-align:middle;position:relative;top:-.05em;font-weight:700}
 .sx-m{color:#5AA9E6}
 .sx-f{color:#F08CB4}
 .dim{color:var(--dim)}
@@ -461,8 +461,8 @@ function render(B){
     };
     var charts=[
       ["최고 무게 유충","각 브리더의 라운드별 최고 무게",function(br,i){var a=wAt(br,i);return a.length?Math.max.apply(null,a):null;}],
-      ["수컷 유충 평균","♂ 개체들의 라운드별 평균",function(br,i){return avg(wAt(br,i,"m"));}],
-      ["암컷 유충 평균","♀ 개체들의 라운드별 평균",function(br,i){return avg(wAt(br,i,"f"));}],
+      ["수컷 유충 평균","<span class=\"sx-m\">♂</span> 개체들의 라운드별 평균",function(br,i){return avg(wAt(br,i,"m"));}],
+      ["암컷 유충 평균","<span class=\"sx-f\">♀</span> 개체들의 라운드별 평균",function(br,i){return avg(wAt(br,i,"f"));}],
     ];
     charts.forEach(function(c,ci){
       html+='<div class="sec-t"><span>'+c[0]+'</span></div><div class="panel">'
