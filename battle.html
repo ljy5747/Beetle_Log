@@ -78,7 +78,8 @@ font-family:"Times New Roman",Georgia,serif;font-style:italic;font-size:19px}
 .av.ph{display:flex;align-items:center;justify-content:center;color:var(--dim);font-weight:800}
 
 /* ── 성별 색 ── */
-.sx-m,.sx-f{display:inline-block;line-height:1;vertical-align:middle;position:relative;top:-.05em;font-weight:700}
+.sx-m,.sx-f{font-family:"Apple Symbols","Segoe UI Symbol","Noto Sans Symbols2","DejaVu Sans",sans-serif;
+display:inline-block;line-height:1;vertical-align:middle;position:relative;top:-.04em;font-weight:400}
 .sx-m{color:#5AA9E6}
 .sx-f{color:#F08CB4}
 .dim{color:var(--dim)}
@@ -95,9 +96,11 @@ font-family:"Times New Roman",Georgia,serif;font-style:italic;font-size:19px}
 .rname span{font-size:11.5px;color:var(--dim);display:block;margin-top:2px}
 .rsep{color:#3A342C;margin:0 4px}
 .rnone{color:#5A5349}
+.ravg{flex:none;text-align:right;font-size:13px;font-weight:700;color:var(--text);white-space:nowrap}
+.ravg small{font-size:10px;color:var(--dim);margin-left:1px}
+.rrow.top .ravg{font-size:15px}
 .rcrown{flex:none;width:26px;text-align:right;font-size:17px;line-height:1}
 .rrow.top .rname b{font-size:18px}
-.rrow.top .rname span{font-size:12.5px;margin-top:3px}
 .rrow.top .rk{font-size:18px;width:24px}
 .rrow.top{padding:12px 0}
 .rrow.t1 .rk{color:#E8C77A}
@@ -492,16 +495,13 @@ function render(B){
       prevPts=r.rankPts;
     }
     var top=scored&&place<=3;
-    var sub=scored
-      ? '<span class="sx-m">♂</span> '+r.mRank+'등 <span class="rsep">·</span> <span class="sx-f">♀</span> '+r.fRank+'등'
-      : (r.mRank!=null?'<span class="sx-m">♂</span> '+r.mRank+'등 <span class="rsep">·</span> <span class="sx-f">♀</span> <span class="rnone">-</span>'
-        : r.fRank!=null?'<span class="sx-m">♂</span> <span class="rnone">-</span> <span class="rsep">·</span> <span class="sx-f">♀</span> '+r.fRank+'등'
-        : '<span class="rnone">기록 대기</span>');
+    var mv=r.mAvg!=null?n1(r.mAvg):"—", fv=r.fAvg!=null?n1(r.fAvg):"—";
     html+='<div class="rrow'+(top?" top t"+place:"")+'">'
       +'<div class="rk'+(top?" g":"")+'">'+(scored?place:"–")+'</div>'
       +avatarHTML(r.br,top?38:32)
-      +'<div class="rname"><b><i style="background:'+bcolor(r.br)+'"></i>'+esc(r.br.name)+'</b>'
-      +'<span>'+sub+'</span></div>'
+      +'<div class="rname"><b><i style="background:'+bcolor(r.br)+'"></i>'+esc(r.br.name)+'</b></div>'
+      +'<div class="ravg mono"><span class="sx-m">♂</span> '+mv
+      +' <span class="rsep">/</span> <span class="sx-f">♀</span> '+fv+'<small>'+unit+'</small></div>'
       +'<div class="rcrown">'+(top?CROWN[place-1]:"")+'</div></div>';
   });
   html+='<div class="rank-note">성별 <b>평균 무게</b>로 각각 등수를 매긴 뒤 <b>수컷 등수 ×1.5 + 암컷 등수</b> · 낮을수록 상위</div>';
