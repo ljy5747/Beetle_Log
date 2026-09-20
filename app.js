@@ -578,6 +578,10 @@ function snapShrink(data) {
   const lite = JSON.parse(JSON.stringify(data));
   let had = false;
   (lite.parents || []).forEach((p) => { if (p.photo) { p.photo = ""; had = true; } });
+  /* 교체 기록 사진도 제외 (개수가 많아 백업이 커짐) */
+  (lite.individuals || []).forEach((i) => {
+    (i.bottleRecords || []).forEach((r) => { if (r.photo) { r.photo = ""; had = true; } });
+  });
   return { data: lite, noPhoto: had };
 }
 /* 되돌릴 때: 스냅샷에 없는 사진을 현재 데이터에서 같은 개체끼리 복원 */
@@ -587,6 +591,14 @@ function snapMergePhotos(snapData, current) {
   (current.parents || []).forEach((p) => { if (p.photo) { byId[p.id] = p.photo; if (p.code) byCode[ck(p)] = p.photo; } });
   const out = JSON.parse(JSON.stringify(snapData));
   (out.parents || []).forEach((p) => { if (!p.photo) p.photo = byId[p.id] || byCode[ck(p)] || ""; });
+  /* 교체 기록 사진도 현재 데이터에서 같은 기록끼리 복원 */
+  const recPhoto = {};
+  (current.individuals || []).forEach((i) => {
+    (i.bottleRecords || []).forEach((r) => { if (r.photo) recPhoto[i.id + "|" + r.id] = r.photo; });
+  });
+  (out.individuals || []).forEach((i) => {
+    (i.bottleRecords || []).forEach((r) => { if (!r.photo) r.photo = recPhoto[i.id + "|" + r.id] || ""; });
+  });
   return out;
 }
 async function snapSave(data, reason) {
@@ -1182,10 +1194,21 @@ function LarvaEditForm({ initial, lines, onSave, onClose }) {
 function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
   const [f, setF] = useState({
     date: today(), instar: "", weight: "", headWidth: "",
-    feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "", flags: [], pudding: false,
+    feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "", flags: [], pudding: false, photo: "",
     ...(initial || {}),
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const [photoBusy, setPhotoBusy] = useState(false);
+  /* 교체 기록은 개수가 많아 사진을 작게 압축해 저장 */
+  const pickPhoto = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setPhotoBusy(true);
+    try { set("photo", await resizeImage(file, 560, 0.62)); }
+    catch (err) { alert("사진을 불러오지 못했어요"); }
+    setPhotoBusy(false);
+    e.target.value = "";
+  };
   const save = () => { if (!f.date) return alert("날짜는 필수입니다"); const { nextDays, ...rest } = f; onSave(rest); };
   return (
     <Modal title={initial ? "교체 기록 수정" : "교체 기록"} onClose={onClose} onSave={save}>
@@ -1244,6 +1267,19 @@ function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
           ))}
         </div>
         <div className="hint">예정일을 정하면 캘린더 탭에 자동으로 표시돼요</div>
+      </F>
+      <F label="사진">
+        <label className="photo-pick">
+          {f.photo ? (
+            <img src={f.photo} alt="" className="photo-prev sm" />
+          ) : (
+            <div className="photo-empty sm">{photoBusy ? "처리 중…" : "📷 사진 추가 (탭하여 선택)"}</div>
+          )}
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={pickPhoto} />
+        </label>
+        {f.photo && (
+          <button className="btn ghost sm" style={{ marginTop: 8 }} onClick={() => set("photo", "")}>사진 제거</button>
+        )}
       </F>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="식흔 상태 등" /></F>
       {onDelete && (
@@ -3122,6 +3158,7 @@ function App() {
                     {num(r.weight) && <span className="mono r-w">{n1(num(r.weight))}g{d != null && <em className={d >= 0 ? "up" : "down"}> {d >= 0 ? "▲" : "▼"}{n1(Math.abs(d))}</em>}</span>}
                   </div>
                   <div className="r-mid">{[r.feedType, r.feedBrand, ccLabel(r.bottleSize), r.pudding ? "푸딩컵" : null, num(r.headWidth) ? `두폭 ${r.headWidth}` : null].filter(Boolean).join(" · ")}</div>
+                  {r.photo && <img src={r.photo} alt="" className="r-photo" onClick={(e) => { e.stopPropagation(); setModal({ type: "photo", src: r.photo }); }} />}
                   {(r.flags || []).length > 0 && (
                     <div className="flag-show">
                       {r.flags.map((fl) => <span key={fl} className="flag-tag">{fl}</span>)}
@@ -3206,6 +3243,11 @@ function App() {
           initial={data.individuals.find((i) => i.id === modal.indId)}
           lines={data.lines}
           onSave={saveLarvaEdit} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === "photo" && (
+        <div className="overlay" onClick={() => setModal(null)} style={{ alignItems: "center" }}>
+          <img src={modal.src} alt="" className="photo-full" onClick={(e) => e.stopPropagation()} />
+        </div>
       )}
       {modal?.type === "bottle" && (
         <BottleForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveBottle} onClose={() => setModal(null)}

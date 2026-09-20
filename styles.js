@@ -356,6 +356,11 @@ padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
 padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:ui-monospace,"SF Mono",Menlo,monospace}
 .pick-chip.on{background:#FCFAF5;border-color:var(--gold);color:var(--gold-d)}
 .photo-pick{display:block;cursor:pointer}
+.r-photo{width:100%;max-height:150px;object-fit:cover;border-radius:6px;margin-top:8px;
+border:1px solid var(--line);cursor:pointer}
+.photo-full{max-width:94vw;max-height:88vh;border-radius:8px;object-fit:contain}
+.photo-prev.sm{max-height:150px}
+.photo-empty.sm{padding:22px 0;font-size:13px}
 .photo-prev{width:100%;max-height:240px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
 .photo-empty{display:flex;align-items:center;justify-content:center;height:120px;background:var(--surf2);
 border:1px dashed var(--line);border-radius:6px;color:var(--dim);font-size:14px;font-weight:600}
