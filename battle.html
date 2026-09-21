@@ -457,6 +457,16 @@ function render(B){
     mem.forEach(function(b,i){idxInTeam[b.name]=shadeFor(tcolor(k),i,mem.length);});
   });
   var bcolor=function(br){return idxInTeam[br.name]||tcolor(br.team);};
+  /* 암컷 섹션용: 파랑 계열 팀색은 핑크 계열로 */
+  var PINK_BASE="#E0709E";
+  var isBlue=function(hex){var c=hex2rgb(hex);return c[2]>c[0]+20;};
+  var idxInTeamF={};
+  keys.forEach(function(k){
+    var mem=breeders.filter(function(b){return b.team===k;});
+    var base=isBlue(tcolor(k))?PINK_BASE:tcolor(k);
+    mem.forEach(function(b,i){idxInTeamF[b.name]=shadeFor(base,i,mem.length);});
+  });
+  var bcolorF=function(br){return idxInTeamF[br.name]||bcolor(br);};
 
   var adultCnt=breeders.reduce(function(a,b){return a+b.larvae.filter(function(l){return l.adult!=null;}).length;},0);
   var mode=adultCnt>0?"adult":"weight";
@@ -535,9 +545,9 @@ function render(B){
   /* ── 그래프 3종 ── */
   var haveW=breeders.some(function(br){return br.larvae.some(function(l){return l.weights.some(function(w){return num(w)!=null;});});});
   if(haveW){
-    var mkSeries=function(fn){
+    var mkSeries=function(fn,colorFn){
       return breeders.map(function(br){
-        return {name:br.name,color:bcolor(br),photo:br.photo||"",
+        return {name:br.name,color:(colorFn||bcolor)(br),photo:br.photo||"",
           vals:rounds.map(function(_,i){return fn(br,i);})};
       });
     };
@@ -547,12 +557,12 @@ function render(B){
     };
     var charts=[
       ["수컷 유충 평균","<span class=\"sx-m\">♂</span> 개체들의 라운드별 평균",function(br,i){return avg(wAt(br,i,"m"));}],
-      ["암컷 유충 평균","<span class=\"sx-f\">♀</span> 개체들의 라운드별 평균",function(br,i){return avg(wAt(br,i,"f"));}],
+      ["암컷 유충 평균","<span class=\"sx-f\">♀</span> 개체들의 라운드별 평균",function(br,i){return avg(wAt(br,i,"f"));},bcolorF],
     ];
     charts.forEach(function(c,ci){
       html+='<div class="sec-t"><span>'+c[0]+'</span></div><div class="panel">'
         +'<div class="chart-sub">'+c[1]+' · 단위 g</div>'
-        +chart(mkSeries(c[2]),rounds,"g",ci)+'</div>';
+        +chart(mkSeries(c[2],c[3]),rounds,"g",ci)+'</div>';
     });
   }
 
@@ -570,7 +580,7 @@ function render(B){
       +(mode==="adult"?" 체장":" 최대 무게")+' TOP 10</span></div><div class="panel">';
     list.slice(0,10).forEach(function(x,i){
       html+='<div class="rrow"><div class="rk'+(i===0?" g":"")+'">'+(i+1)+'</div>'
-        +'<div class="rname"><b><i style="background:'+bcolor(x.br)+'"></i>'+esc(x.br.name)
+        +'<div class="rname"><b><i style="background:'+(sx[0]==="f"?bcolorF:bcolor)(x.br)+'"></i>'+esc(x.br.name)
         +' <span class="mono" style="font-size:12px;color:var(--dim);font-weight:400">'+esc(x.l.code)+'</span></b></div>'
         +'<div class="rval mono">'+n1(x.v)+'<small>'+unit+'</small></div></div>';
     });
