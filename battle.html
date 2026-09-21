@@ -580,7 +580,8 @@ function render(B){
       +(mode==="adult"?" 체장":" 최대 무게")+' TOP 10</span></div><div class="panel">';
     list.slice(0,10).forEach(function(x,i){
       html+='<div class="rrow"><div class="rk'+(i===0?" g":"")+'">'+(i+1)+'</div>'
-        +'<div class="rname"><b><i style="background:'+(sx[0]==="f"?bcolorF:bcolor)(x.br)+'"></i>'+esc(x.br.name)
+        +avatarHTML(x.br,24)
+        +'<div class="rname"><b>'+esc(x.br.name)
         +' <span class="mono" style="font-size:12px;color:var(--dim);font-weight:400">'+esc(x.l.code)+'</span></b></div>'
         +'<div class="rval mono">'+n1(x.v)+'<small>'+unit+'</small></div></div>';
     });
