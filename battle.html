@@ -112,6 +112,22 @@ display:inline-block;line-height:1;vertical-align:middle;position:relative;top:-
 .rrow.t1 .rk{color:#E8C77A}
 .rrow.t2 .rk{color:#CFCFCF}
 .rrow.t3 .rk{color:#D2A277}
+.tb-head{display:flex;align-items:flex-end;gap:10px}
+.tb-side{flex:1;min-width:0}
+.tb-side.r{text-align:right}
+.tb-name{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-crown{font-size:12px}
+.tb-score{font-size:22px;font-weight:700;margin-top:2px}
+.tb-score small{font-size:11px;color:var(--dim);margin-left:1px}
+.tb-vs{flex:none;font-family:"Times New Roman",Georgia,serif;font-size:13px;font-weight:700;color:var(--dim);padding-bottom:5px}
+.tb-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;margin-top:11px;background:var(--surf2)}
+.tb-bar i{display:block;height:100%;transition:width .4s}
+.tb-pct{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:5px;font-weight:700}
+.tb-gap{text-align:center;font-size:12.5px;color:var(--dim);margin-top:9px}
+.tb-gap b{color:var(--gold-l)}
+.tb-cnt{display:flex;justify-content:space-between;font-size:10.5px;color:#6E6559;margin-top:6px}
+.tb-note{font-size:10px;color:#6E6559;text-align:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--line2);line-height:1.6}
+.tb-note b{color:var(--gold-l)}
 .info-btn{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;margin-left:7px;
 border-radius:50%;border:1px solid var(--gold-d);background:transparent;color:var(--gold-l);cursor:pointer;
 font-family:Georgia,serif;font-style:italic;font-size:11px;font-weight:700;line-height:1;padding:0;vertical-align:2px}
@@ -519,6 +535,44 @@ function render(B){
   }
 
   /* ── 브리더 랭킹 ── */
+  /* ── 팀 중간 집계 (팀장 ×1.3 · 종합점수 합계) ── */
+  var normName=function(x){return String(x||"").replace(/^팀\s*/,"").replace(/\s+/g,"");};
+  var LEADER_W=1.3;
+  var tsum={};
+  keys.forEach(function(k){
+    var mem=rows.filter(function(r){return r.br.team===k;});
+    var sum=0,counted=0;
+    mem.forEach(function(r){
+      var isLeader=normName(r.br.name)===normName(tname(k));
+      r.isLeader=isLeader;
+      var v=r.total||0;
+      if(r.total!=null)counted++;
+      sum+=isLeader?v*LEADER_W:v;
+    });
+    tsum[k]={sum:sum,n:mem.length,counted:counted};
+  });
+  var kA=keys[0],kB=keys[1];
+  if(kA&&kB&&(tsum[kA].sum>0||tsum[kB].sum>0)){
+    var sA=tsum[kA].sum,sB=tsum[kB].sum,tot=sA+sB;
+    var pA=tot>0?sA/tot*100:50,pB=100-pA;
+    var lead=Math.abs(sA-sB)<0.05?null:(sA>sB?kA:kB);
+    html+='<div class="sec-t"><span>팀 중간 집계</span></div><div class="panel">'
+      +'<div class="tb-head">'
+      +'<div class="tb-side"><div class="tb-name" style="color:'+tcolor(kA)+'">'+(lead===kA?'<span class="tb-crown">👑</span> ':"")+esc(tname(kA))+'</div>'
+      +'<div class="tb-score mono">'+n1(sA)+'<small>점</small></div></div>'
+      +'<div class="tb-vs">VS</div>'
+      +'<div class="tb-side r"><div class="tb-name" style="color:'+tcolor(kB)+'">'+esc(tname(kB))+(lead===kB?' <span class="tb-crown">👑</span>':"")+'</div>'
+      +'<div class="tb-score mono">'+n1(sB)+'<small>점</small></div></div></div>'
+      +'<div class="tb-bar"><i style="width:'+pA.toFixed(1)+'%;background:'+tcolor(kA)+'"></i>'
+      +'<i style="width:'+pB.toFixed(1)+'%;background:'+tcolor(kB)+'"></i></div>'
+      +'<div class="tb-pct"><span>'+n1(pA)+'%</span><span>'+n1(pB)+'%</span></div>'
+      +'<div class="tb-gap">'+(lead?'격차 <b class="mono">'+n1(Math.abs(sA-sB))+'점</b> · '+esc(tname(lead))+' 리드':'동점')+'</div>'
+      +'<div class="tb-cnt"><span>집계 '+tsum[kA].counted+'/'+tsum[kA].n+'명</span>'
+      +'<span>집계 '+tsum[kB].counted+'/'+tsum[kB].n+'명</span></div>'
+      +'<div class="tb-note">브리더 종합점수 합계 · 팀장 <b>×1.3</b> · 유충 기록 기준이며 공식 판정은 우화 후 체장</div>'
+      +'</div>';
+  }
+
   html+='<div class="sec-t"><span>브리더 랭킹<button class="info-btn" onclick="openRankInfo()" aria-label="랭킹 산정 방식">i</button></span></div><div class="panel">';
   if(!ranked.length)html+='<div style="color:var(--dim);text-align:center;padding:12px 0">참가자 데이터를 기다리는 중…</div>';
   var CROWN=["👑","🥈","🥉"];
