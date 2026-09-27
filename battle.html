@@ -112,14 +112,11 @@ display:inline-block;line-height:1;vertical-align:middle;position:relative;top:-
 .rrow.t1 .rk{color:#E8C77A}
 .rrow.t2 .rk{color:#CFCFCF}
 .rrow.t3 .rk{color:#D2A277}
-.tb-art{display:flex;align-items:flex-end;justify-content:center;margin:-2px 0 2px}
-.tb-b{display:block;width:50%;height:auto;transition:width .45s ease,opacity .45s ease}
-.tb-b:last-child{margin-left:-6%}
-.tb-b.win{width:57%;opacity:1}
-.tb-b.lose{width:43%;opacity:.72}
-.tb-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;margin-top:6px;background:var(--surf2)}
+.tb-art{background:#fff;border-radius:11px;overflow:hidden;line-height:0;border:1px solid #2A241C}
+.tb-art img{display:block;width:100%;height:auto;max-height:168px;object-fit:contain}
+.tb-bar{display:flex;height:8px;border-radius:999px;overflow:hidden;margin-top:9px;background:var(--surf2)}
 .tb-bar i{display:block;height:100%;transition:width .4s}
-.tb-gap{text-align:center;font-size:12.5px;color:var(--dim);margin-top:11px;padding-bottom:2px}
+.tb-gap{text-align:center;font-size:12px;color:var(--dim);margin-top:8px}
 .tb-gap b{color:var(--gold-l)}
 .info-btn{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;margin-left:7px;
 border-radius:50%;border:1px solid var(--gold-d);background:transparent;color:var(--gold-l);cursor:pointer;
@@ -551,10 +548,7 @@ function render(B){
     var pA=tot>0?sA/tot*100:50,pB=100-pA;
     var lead=Math.abs(sA-sB)<0.05?null:(sA>sB?kA:kB);
     html+='<div class="sec-t"><span>팀 중간 집계</span></div><div class="panel">'
-      +'<div class="tb-art">'
-      +'<img class="tb-b'+(lead===kA?" win":lead===kB?" lose":"")+'" src="battle-clash-a.png" alt="'+esc(tname(kA))+'"/>'
-      +'<img class="tb-b'+(lead===kB?" win":lead===kA?" lose":"")+'" src="battle-clash-b.png" alt="'+esc(tname(kB))+'"/>'
-      +'</div>'
+      +'<div class="tb-art"><img src="battle-clash-'+(pA<35?"1":pA>65?"3":"2")+'.jpg" alt="'+esc(tname(kA))+' vs '+esc(tname(kB))+'"/></div>'
       +'<div class="tb-bar"><i style="width:'+pA.toFixed(1)+'%;background:'+tcolor(kA)+'"></i>'
       +'<i style="width:'+pB.toFixed(1)+'%;background:'+tcolor(kB)+'"></i></div>'
       +'<div class="tb-gap">'+(lead?esc(tname(lead))+' <b>리드</b>':'동점')+'</div>'
