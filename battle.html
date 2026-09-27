@@ -114,7 +114,11 @@ display:inline-block;line-height:1;vertical-align:middle;position:relative;top:-
 .rrow.t3 .rk{color:#D2A277}
 .tb-art{background:#fff;border-radius:11px;overflow:hidden;line-height:0;border:1px solid #2A241C}
 .tb-art img{display:block;width:100%;height:auto;max-height:168px;object-fit:contain}
-.tb-fight{position:relative;margin-top:13px;padding-bottom:3px}
+.tb-row{display:flex;align-items:center;gap:8px;margin-top:13px}
+.tb-tag{flex:none;max-width:78px;border:1.5px solid;border-radius:999px;padding:5px 10px;
+font-size:11.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+background:rgba(255,255,255,.03);text-align:center}
+.tb-fight{position:relative;flex:1;min-width:0;padding-bottom:3px}
 .tb-bar{display:flex;height:26px;border-radius:999px;overflow:hidden;background:var(--surf2);border:1px solid var(--line)}
 .tb-bar i{display:flex;align-items:center;height:100%;transition:width .5s ease;min-width:0;overflow:hidden}
 .tb-bar i.a{justify-content:flex-start;padding-left:11px}
@@ -131,8 +135,6 @@ background:radial-gradient(circle at 50% 38%,#40331C,#100E0A 72%);border:2px sol
 box-shadow:0 0 0 3px rgba(12,11,10,.92),0 0 16px rgba(168,136,79,.6);animation:vspulse 2.4s ease-in-out infinite}
 @keyframes vspulse{0%,100%{box-shadow:0 0 0 3px rgba(12,11,10,.92),0 0 16px rgba(168,136,79,.6)}
 50%{box-shadow:0 0 0 3px rgba(12,11,10,.92),0 0 24px rgba(168,136,79,.95)}}
-.tb-gap{text-align:center;font-size:12px;color:var(--dim);margin-top:8px}
-.tb-gap b{color:var(--gold-l)}
 .info-btn{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;margin-left:7px;
 border-radius:50%;border:1px solid var(--gold-d);background:transparent;color:var(--gold-l);cursor:pointer;
 font-family:Georgia,serif;font-style:italic;font-size:11px;font-weight:700;line-height:1;padding:0;vertical-align:2px}
@@ -276,6 +278,7 @@ function normRounds(rs){
     return {name:(r&&r.name)||(i+1)+"병",date:(r&&r.date)||""};
   });
 }
+function shortTeam(x){return String(x||"").replace(/^팀\s*/,"");}
 function normBreeder(br){
   var L=br.line||{},M=L.male||{},F=L.female||{};
   var mb=M.blood||"",fb=F.blood||"";
@@ -564,12 +567,17 @@ function render(B){
     var lead=Math.abs(sA-sB)<0.05?null:(sA>sB?kA:kB);
     html+='<div class="sec-t"><span>팀 중간 집계</span></div><div class="panel">'
       +'<div class="tb-art"><img src="battle-clash-'+(pA<35?"1":pA>65?"3":"2")+'.jpg" alt="'+esc(tname(kA))+' vs '+esc(tname(kB))+'"/></div>'
+      +'<div class="tb-row">'
+      +'<span class="tb-tag" style="border-color:'+tcolor(kA)+';color:'+tcolor(kA)+'">'
+      +(lead===kA?'👑 ':"")+esc(shortTeam(tname(kA)))+'</span>'
       +'<div class="tb-fight"><div class="tb-bar">'
       +'<i class="a" style="width:'+pA.toFixed(1)+'%;background:linear-gradient(90deg,'+mix(tcolor(kA),"#000000",0.35)+','+tcolor(kA)+')"><span>'+n1(pA)+'%</span></i>'
       +'<i class="b" style="width:'+pB.toFixed(1)+'%;background:linear-gradient(90deg,'+tcolor(kB)+','+mix(tcolor(kB),"#000000",0.35)+')"><span>'+n1(pB)+'%</span></i>'
       +'</div><div class="tb-clashline" style="left:'+Math.max(16,Math.min(84,pA)).toFixed(1)+'%"></div>'
       +'<div class="tb-vs" style="left:'+Math.max(16,Math.min(84,pA)).toFixed(1)+'%">VS</div></div>'
-      +'<div class="tb-gap">'+(lead?esc(tname(lead))+' <b>리드</b>':'동점')+'</div>'
+      +'<span class="tb-tag" style="border-color:'+tcolor(kB)+';color:'+tcolor(kB)+'">'
+      +esc(shortTeam(tname(kB)))+(lead===kB?' 👑':"")+'</span>'
+      +'</div>'
       +'</div>';
   }
 
