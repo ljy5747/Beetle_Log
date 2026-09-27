@@ -112,15 +112,13 @@ display:inline-block;line-height:1;vertical-align:middle;position:relative;top:-
 .rrow.t1 .rk{color:#E8C77A}
 .rrow.t2 .rk{color:#CFCFCF}
 .rrow.t3 .rk{color:#D2A277}
-.tb-head{display:flex;align-items:flex-end;gap:10px}
+.tb-head{display:flex;align-items:center;gap:10px}
 .tb-side{flex:1;min-width:0}
 .tb-side.r{text-align:right}
 .tb-name{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tb-crown{font-size:12px}
-.tb-score{font-size:22px;font-weight:700;margin-top:2px}
-.tb-score small{font-size:11px;color:var(--dim);margin-left:1px}
-.tb-vs{flex:none;font-family:"Times New Roman",Georgia,serif;font-size:13px;font-weight:700;color:var(--dim);padding-bottom:5px}
-.tb-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;margin-top:11px;background:var(--surf2)}
+.tb-clash{display:block;width:100%;max-width:340px;margin:4px auto 2px}
+.tb-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;margin-top:6px;background:var(--surf2)}
 .tb-bar i{display:block;height:100%;transition:width .4s}
 .tb-pct{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:5px;font-weight:700}
 .tb-gap{text-align:center;font-size:12.5px;color:var(--dim);margin-top:9px}
@@ -389,6 +387,33 @@ function shadeFor(base,i,n){
 }
 /*COLOR-END*/
 
+/*CLASH-START*/
+/* 두 마리가 큰턱을 맞대고 겨루는 실루엣 — 팀 색으로 그려짐 */
+function clashBeetle(cx,dy,flip,c,d,bg){
+  return '<g transform="translate('+cx+','+dy+') scale('+flip+',1)" stroke="'+bg+'" stroke-width="2.6" stroke-linejoin="round">'
+    +'<g stroke-width="5.5" stroke-linecap="round" fill="none">'
+    +'<path d="M-58,62 C-72,73 -84,78 -95,76"/><path d="M-36,67 C-46,79 -58,85 -70,86"/><path d="M-6,63 C0,77 10,85 22,88"/></g>'
+    +'<g stroke="'+d+'" stroke-width="4.5" fill="none" stroke-linecap="round">'
+    +'<path d="M-58,62 C-72,73 -84,78 -95,76"/><path d="M-36,67 C-46,79 -58,85 -70,86"/><path d="M-6,63 C0,77 10,85 22,88"/></g>'
+    +'<path d="M-90,48 C-90,31 -71,23 -47,23 C-25,23 -13,32 -13,48 C-13,64 -25,73 -47,73 C-71,73 -90,65 -90,48 Z" fill="'+c+'"/>'
+    +'<path d="M-88,48 C-70,42 -30,42 -13,48" stroke="'+d+'" stroke-width="1.4" fill="none" opacity=".5"/>'
+    +'<path d="M-15,29 C-1,27 9,33 11,41 L13,48 L11,55 C9,63 -1,69 -15,67 C-19,58 -19,38 -15,29 Z" fill="'+c+'"/>'
+    +'<path d="M11,32 L19,26 M11,64 L19,70" stroke="'+d+'" stroke-width="3.4" stroke-linecap="round"/>'
+    +'<path d="M12,36 C25,34 31,39 32,48 C31,57 25,62 12,60 Z" fill="'+c+'"/>'
+    +'<circle cx="19" cy="39" r="2.1" fill="'+d+'" stroke="none"/>'
+    +'<path d="M30,41 C50,26 72,21 88,27 C93,30 92,36 86,37 C78,33 62,35 48,41 L54,43 L44,44 C38,45 33,45 31,45 Z" fill="'+c+'"/>'
+    +'<path d="M30,55 C48,69 69,74 84,68 C89,65 88,59 82,58 C74,62 58,60 46,55 L52,52 L42,51 C37,52 33,53 31,53 Z" fill="'+c+'"/>'
+    +'</g>';
+}
+function clashSVG(cA,cB){
+  var bg="#0C0B0A";
+  return '<svg class="tb-clash" viewBox="0 0 360 104" preserveAspectRatio="xMidYMid meet">'
+    +clashBeetle(100,-2,1,cA,mix(cA,"#000000",0.45),bg)
+    +clashBeetle(260,2,-1,cB,mix(cB,"#000000",0.45),bg)
+    +'</svg>';
+}
+/*CLASH-END*/
+
 /*CHART-START*/
 /* 라운드별 다중 선 그래프 — 선 끝에 브리더 프로필 사진 */
 function chart(series,rounds,unit,cid){
@@ -558,15 +583,13 @@ function render(B){
     var lead=Math.abs(sA-sB)<0.05?null:(sA>sB?kA:kB);
     html+='<div class="sec-t"><span>팀 중간 집계</span></div><div class="panel">'
       +'<div class="tb-head">'
-      +'<div class="tb-side"><div class="tb-name" style="color:'+tcolor(kA)+'">'+(lead===kA?'<span class="tb-crown">👑</span> ':"")+esc(tname(kA))+'</div>'
-      +'<div class="tb-score mono">'+n1(sA)+'<small>점</small></div></div>'
-      +'<div class="tb-vs">VS</div>'
-      +'<div class="tb-side r"><div class="tb-name" style="color:'+tcolor(kB)+'">'+esc(tname(kB))+(lead===kB?' <span class="tb-crown">👑</span>':"")+'</div>'
-      +'<div class="tb-score mono">'+n1(sB)+'<small>점</small></div></div></div>'
+      +'<div class="tb-side"><div class="tb-name" style="color:'+tcolor(kA)+'">'+(lead===kA?'<span class="tb-crown">👑</span> ':"")+esc(tname(kA))+'</div></div>'
+      +'<div class="tb-side r"><div class="tb-name" style="color:'+tcolor(kB)+'">'+esc(tname(kB))+(lead===kB?' <span class="tb-crown">👑</span>':"")+'</div></div></div>'
+      +clashSVG(tcolor(kA),tcolor(kB))
       +'<div class="tb-bar"><i style="width:'+pA.toFixed(1)+'%;background:'+tcolor(kA)+'"></i>'
       +'<i style="width:'+pB.toFixed(1)+'%;background:'+tcolor(kB)+'"></i></div>'
       +'<div class="tb-pct"><span>'+n1(pA)+'%</span><span>'+n1(pB)+'%</span></div>'
-      +'<div class="tb-gap">'+(lead?'격차 <b class="mono">'+n1(Math.abs(sA-sB))+'점</b> · '+esc(tname(lead))+' 리드':'동점')+'</div>'
+      +'<div class="tb-gap">'+(lead?esc(tname(lead))+' <b>리드</b>':'동점')+'</div>'
       +'<div class="tb-cnt"><span>집계 '+tsum[kA].counted+'/'+tsum[kA].n+'명</span>'
       +'<span>집계 '+tsum[kB].counted+'/'+tsum[kB].n+'명</span></div>'
       +'<div class="tb-note">브리더 종합점수 합계 · 팀장 <b>×1.3</b> · 유충 기록 기준이며 공식 판정은 우화 후 체장</div>'
