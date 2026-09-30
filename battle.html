@@ -336,7 +336,7 @@ function breederScore(best){
    수컷 최대 20 · 평균 20 · TOP3 15 / 암컷 최대 15 · 평균 15 · TOP3 10 / 유효 개체수 5
    참가 조건: 수컷 3두 이상 + 암컷 3두 이상 (최신 병 무게 기준) */
 var EVAL_ITEMS=[["mMax",0.20],["mAvg",0.20],["mTop3",0.15],["fMax",0.15],["fAvg",0.15],["fTop3",0.10]];
-var MIN_PER_SEX=3;
+var MIN_TOTAL=3;
 function sexVals(larvae,metric,sex){
   var vs=[];
   larvae.forEach(function(l){
@@ -351,8 +351,8 @@ function computeBreederRanks(rows,metric){
   rows.forEach(function(r){
     var M=sexVals(r.br.larvae,metric,"m"),F=sexVals(r.br.larvae,metric,"f");
     r.mN=M.length;r.fN=F.length;
-    r.valid=r.br.larvae.filter(function(l){return metric(l)!=null;}).length;
-    r.eligible=M.length>=MIN_PER_SEX&&F.length>=MIN_PER_SEX;
+    r.valid=r.br.larvae.filter(function(l){return metric(l)!=null;}).length;   /* 무게가 기록된 개체 수 */
+    r.eligible=r.valid>=MIN_TOTAL;
     r.mMax=M.length?M[0]:null; r.mAvg=M.length?avg(M):null; r.mTop3=M.length?avg(M.slice(0,3)):null;
     r.fMax=F.length?F[0]:null; r.fAvg=F.length?avg(F):null; r.fTop3=F.length?avg(F.slice(0,3)):null;
   });
@@ -369,14 +369,10 @@ function computeBreederRanks(rows,metric){
       if(b>0&&r[it[0]]!=null){acc+=(r[it[0]]/b*100)*it[1];wsum+=it[1];}
     });
     r.partial=wsum>0?(acc/wsum*0.95+countPts(r.valid)):null;
-    /* 랭킹 점수는 암수 각 3두를 채운 참가자만 */
+    /* 랭킹 점수: 가진 항목만으로 환산 (전체 3두 이상이면 집계) */
     if(!r.eligible){r.total=null;r.grade=null;return;}
-    var t=0;
-    EVAL_ITEMS.forEach(function(it){
-      var b=best[it[0]]; if(b>0)t+=(r[it[0]]/b*100)*it[1];
-    });
-    t+=countPts(r.valid);
-    r.total=t;r.grade=gradeOf(t);
+    r.total=r.partial;
+    r.grade=gradeOf(r.total);
   });
   return rows;
 }
@@ -777,7 +773,7 @@ function openRankInfo(){
     +'<div class="info-sec">유효 개체수</div>'
     +'<p>최신 병 무게가 기록된 개체 수 · 10두 5점 / 9두 4점 / 8두 3점 / 7두 2점 / 6두 1점 / 5두 이하 0점</p>'
     +'<div class="info-sec">참가 조건</div>'
-    +'<p>수컷·암컷 각 <b>3두 이상</b> 기록이 있어야 집계돼요. 미달이면 <b>집계 대기</b>로 표시되고, 최고 기록 기준에서도 빠져요.</p>'
+    +'<p>무게가 기록된 개체가 <b>3두 이상</b>이면 집계돼요. 한쪽 성별이 없으면 그 항목은 빼고 <b>가진 항목만으로</b> 환산해요.</p>'
     +'<div class="info-sec">등급</div>'
     +'<p><span class="grade gS">S</span> 90↑ &nbsp;<span class="grade gA">A</span> 80↑ &nbsp;<span class="grade gB">B</span> 70↑ &nbsp;<span class="grade gC">C</span> 60↑ &nbsp;<span class="grade gD">D</span> 50↑ &nbsp;<span class="grade gE">E</span></p>'
     +'<p class="info-foot">무게는 개체별 최신 병 기준 · 동점이면 수컷 평균이 높은 쪽이 상위</p>'
