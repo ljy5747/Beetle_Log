@@ -356,12 +356,20 @@ function computeBreederRanks(rows,metric){
     r.mMax=M.length?M[0]:null; r.mAvg=M.length?avg(M):null; r.mTop3=M.length?avg(M.slice(0,3)):null;
     r.fMax=F.length?F[0]:null; r.fAvg=F.length?avg(F):null; r.fTop3=F.length?avg(F.slice(0,3)):null;
   });
-  var el=rows.filter(function(r){return r.eligible;});
+  /* 최고 기록 기준: 기록이 있는 모든 참가자 (전황 막대가 초반부터 움직이도록) */
   var best={};
   EVAL_ITEMS.forEach(function(it){
-    best[it[0]]=el.reduce(function(m,r){return Math.max(m,r[it[0]]||0);},0);
+    best[it[0]]=rows.reduce(function(m,r){return Math.max(m,r[it[0]]||0);},0);
   });
   rows.forEach(function(r){
+    /* 가진 항목만으로 환산한 부분 점수 — 팀 전황 막대에 사용 */
+    var acc=0,wsum=0;
+    EVAL_ITEMS.forEach(function(it){
+      var b=best[it[0]];
+      if(b>0&&r[it[0]]!=null){acc+=(r[it[0]]/b*100)*it[1];wsum+=it[1];}
+    });
+    r.partial=wsum>0?(acc/wsum*0.95+countPts(r.valid)):null;
+    /* 랭킹 점수는 암수 각 3두를 채운 참가자만 */
     if(!r.eligible){r.total=null;r.grade=null;return;}
     var t=0;
     EVAL_ITEMS.forEach(function(it){
@@ -554,8 +562,8 @@ function render(B){
     mem.forEach(function(r){
       var isLeader=normName(r.br.name)===normName(tname(k));
       r.isLeader=isLeader;
-      var v=r.total||0;
-      if(r.total!=null)counted++;
+      var v=r.partial||0;
+      if(r.partial!=null)counted++;
       sum+=isLeader?v*LEADER_W:v;
     });
     tsum[k]={sum:sum,n:mem.length,counted:counted};
