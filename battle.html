@@ -337,13 +337,22 @@ function breederScore(best){
    항목별 점수 = 내 기록 ÷ 참가자 최고 기록 × 100 (최고 기록 대비 비율)
    수컷 최대 20 · 평균 20 · TOP3 15 / 암컷 최대 15 · 평균 15 · TOP3 10 / 유효 개체수 5
    참가 조건: 수컷 3두 이상 + 암컷 3두 이상 (최신 병 무게 기준) */
-var EVAL_ITEMS=[["mMax",0.20],["mAvg",0.20],["mTop3",0.15],["fMax",0.15],["fAvg",0.15],["fTop3",0.10]];
+var EVAL_ITEMS=[["mAvg",0.16],["mMax",0.14],["mHAvg",0.11],["mHMax",0.09],["fAvg",0.24],["fMax",0.21]];
 var MIN_TOTAL=3;
 function sexVals(larvae,metric,sex){
   var vs=[];
   larvae.forEach(function(l){
     if(sexOf(l.sex)!==sex)return;
     var v=metric(l); if(v!=null)vs.push(v);
+  });
+  return vs.sort(function(a,b){return b-a;});
+}
+/* 두폭(mm) — 개체당 1회 측정값 */
+function sexHeads(larvae,sex){
+  var vs=[];
+  larvae.forEach(function(l){
+    if(sexOf(l.sex)!==sex)return;
+    if(l.head!=null)vs.push(l.head);
   });
   return vs.sort(function(a,b){return b-a;});
 }
@@ -355,8 +364,10 @@ function computeBreederRanks(rows,metric){
     r.mN=M.length;r.fN=F.length;
     r.valid=r.br.larvae.filter(function(l){return metric(l)!=null;}).length;   /* 무게가 기록된 개체 수 */
     r.eligible=r.valid>=MIN_TOTAL;
-    r.mMax=M.length?M[0]:null; r.mAvg=M.length?avg(M):null; r.mTop3=M.length?avg(M.slice(0,3)):null;
-    r.fMax=F.length?F[0]:null; r.fAvg=F.length?avg(F):null; r.fTop3=F.length?avg(F.slice(0,3)):null;
+    var MH=sexHeads(r.br.larvae,"m");
+    r.mMax=M.length?M[0]:null;   r.mAvg=M.length?avg(M):null;
+    r.mHMax=MH.length?MH[0]:null; r.mHAvg=MH.length?avg(MH):null;
+    r.fMax=F.length?F[0]:null;   r.fAvg=F.length?avg(F):null;
   });
   /* 최고 기록 기준: 기록이 있는 모든 참가자 (전황 막대가 초반부터 움직이도록) */
   var best={};
@@ -762,8 +773,8 @@ function openRecords(bi){
   document.body.appendChild(d);
 }
 function openRankInfo(){
-  var rows=[["수컷 최대 무게",20],["수컷 평균 무게",20],["수컷 TOP3 평균",15],
-            ["암컷 최대 무게",15],["암컷 평균 무게",15],["암컷 TOP3 평균",10],["유효 개체수",5]];
+  var rows=[["수컷 평균 무게",16],["수컷 최대 무게",14],["수컷 평균 두폭",11],["수컷 최대 두폭",9],
+            ["암컷 평균 무게",24],["암컷 최대 무게",21],["유효 개체수",5]];
   var h='<div class="rec-head"><div class="rec-t">브리더 랭킹 산정 방식</div>'
     +'<button class="rec-x" onclick="closeRecords()">✕</button></div>'
     +'<div class="rec-body info-body">'
@@ -772,7 +783,7 @@ function openRankInfo(){
     +rows.map(function(r){return '<tr><td style="text-align:left">'+r[0]+'</td><td class="mono">'+r[1]+'</td></tr>';}).join("")
     +'<tr class="info-sum"><td style="text-align:left">합계</td><td class="mono">100</td></tr></table>'
     +'<div class="info-sec">항목별 점수</div>'
-    +'<p>참가자 중 <b>최고 기록 대비 비율</b>로 환산해요.<br/>예) 1위 33.2g, 내 기록 31.5g → 31.5 ÷ 33.2 = 94.9% → 수컷 최대 20점 × 0.949 = <b>19.0점</b></p>'
+    +'<p>참가자 중 <b>최고 기록 대비 비율</b>로 환산해요.<br/>예) 1위 33.2g, 내 기록 31.5g → 31.5 ÷ 33.2 = 94.9% → 수컷 최대 무게 14점 × 0.949 = <b>13.3점</b></p>'
     +'<div class="info-sec">유효 개체수</div>'
     +'<p>최신 병 무게가 기록된 개체 수 · 10두 5점 / 9두 4점 / 8두 3점 / 7두 2점 / 6두 1점 / 5두 이하 0점</p>'
     +'<div class="info-sec">참가 조건</div>'
