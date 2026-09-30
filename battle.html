@@ -203,6 +203,8 @@ svg{display:block}
 .sxt{width:100%;border-collapse:collapse;font-size:13px}
 .sxt th{font-size:11.5px;font-weight:800;text-align:right;padding:0 4px 7px;border-bottom:1px solid var(--line2)}
 .sxt th:first-child{text-align:left}
+.sxt th.hm{color:#5AA9E6}
+.sxt th.hf{color:#F08CB4}
 .sxt td{text-align:right;padding:7px 4px;border-bottom:1px solid var(--line2);font-weight:700;color:var(--text)}
 .sxt tr:last-child td{border-bottom:none}
 .sxt-k{text-align:left!important;color:var(--dim);font-weight:400!important;font-size:12.5px}
@@ -699,7 +701,8 @@ function render(B){
         ["최대 체장",function(x){return x.aMax!=null?n1(x.aMax)+"mm":null;}],
       ];
       dh+='<table class="sxt"><tr><th></th>'
-        +'<th class="sx-m">♂ '+M.n+'두</th><th class="sx-f">♀ '+Fm.n+'두</th></tr>';
+        +'<th class="hm"><span class="sx-m">♂</span> '+M.n+'두</th>'
+        +'<th class="hf"><span class="sx-f">♀</span> '+Fm.n+'두</th></tr>';
       rowsDef.forEach(function(rd){
         var a=rd[1](M),b=rd[1](Fm);
         if(a==null&&b==null)return;   /* 양쪽 다 없는 항목은 숨김 */
