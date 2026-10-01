@@ -348,7 +348,7 @@ function LineParentCard({ p, role, onOpen }) {
   if (!p) return (
     <div className="pcard empty">
       <div className="pcard-ph sp-ph"><span>{male ? "부 미지정" : "모 미지정"}</span></div>
-      <div className="pcard-r"><div className="pcard-role dim"><span className={male ? "sx-m" : "sx-f"}>{male ? "♂︎" : "♀︎"}</span> {male ? "부" : "모"} 미지정</div>
+      <div className="pcard-r"><div className="pcard-role dim"><span className={male ? "sx-m" : "sx-f"}>{male ? "♂︎" : "♀︎"}</span> 종충 미지정</div>
         <div className="pcard-sub">라인 수정에서 종충을 골라주세요</div></div>
     </div>
   );
@@ -367,7 +367,7 @@ function LineParentCard({ p, role, onOpen }) {
       <SpeciesPhoto photo={p.photo} species={p.species} className="pcard-ph" />
       <div className="pcard-r">
         <div className="pcard-top">
-          <span className="pcard-role"><span className={male ? "sx-m" : "sx-f"}>{male ? "♂︎" : "♀︎"}</span> {male ? "부" : "모"}</span>
+          <span className="pcard-role"><span className={male ? "sx-m" : "sx-f"}>{male ? "♂︎" : "♀︎"}</span> 종충</span>
           <span className="tag mono">{p.code}</span>
           {p.gen && <span className="chip gen mono">{p.gen}</span>}
           {p.status === "사망" && <span className="chip" style={{ color: "#9A9088", borderColor: "#9A908855" }}>사망</span>}
@@ -999,13 +999,13 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
       <div className="sect">성충 조합</div>
       {parents.length === 0 && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>성충 탭에서 부모를 먼저 등록하면 여기서 선택할 수 있어요</div>}
       <div className="row">
-        <F label="부♂︎" half>
+        <F label="♂︎ 종충" half>
           <select className="in" value={f.fatherId || ""} onChange={(e) => pick("fatherId", e.target.value)}>
             <option value="">미지정</option>
             {parents.filter((p) => p.sex.includes("수")).map((p) => <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line].filter(Boolean).join(" · ")}</option>)}
           </select>
         </F>
-        <F label="모♀︎" half>
+        <F label="♀︎ 종충" half>
           <select className="in" value={f.motherId || ""} onChange={(e) => pick("motherId", e.target.value)}>
             <option value="">미지정</option>
             {parents.filter((p) => p.sex.includes("암")).map((p) => <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line].filter(Boolean).join(" · ")}</option>)}
@@ -2613,7 +2613,7 @@ function App() {
               <div className="empty">
                 <div className="empty-icon">🪲</div>
                 <div className="empty-t">첫 라인을 만들어보세요</div>
-                <div className="empty-d">라인 = 부♂︎ × 모♀︎ 조합 단위예요.<br />성충 탭에서 부모를 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
+                <div className="empty-d">라인 = ♂︎ 종충 × ♀︎ 종충 조합이에요.<br />성충 탭에서 종충을 먼저 등록한 뒤<br />+ 버튼으로 라인을 만들고 유충을 일괄 추가하세요.</div>
               </div>
             )}
 
@@ -3179,8 +3179,8 @@ function App() {
               <div className="panel">
                 <div className="kv">
                   {[["라인", L.code], ["종", L.species], ["산지", L.origin],
-                    ["부♂︎", parentById[L.fatherId] ? `${parentById[L.fatherId].code}${num(parentById[L.fatherId].totalLength) ? ` / ${parentById[L.fatherId].totalLength}mm` : ""}` : ""],
-                    ["모♀︎", parentById[L.motherId] ? `${parentById[L.motherId].code}${num(parentById[L.motherId].totalLength) ? ` / ${parentById[L.motherId].totalLength}mm` : ""}` : ""],
+                    ["♂︎ 종충", parentById[L.fatherId] ? `${parentById[L.fatherId].code}${num(parentById[L.fatherId].totalLength) ? ` / ${parentById[L.fatherId].totalLength}mm` : ""}` : ""],
+                    ["♀︎ 종충", parentById[L.motherId] ? `${parentById[L.motherId].code}${num(parentById[L.motherId].totalLength) ? ` / ${parentById[L.motherId].totalLength}mm` : ""}` : ""],
                     ["해체일", L.breakdownDate],
                     ["페어링일", L.pairDate], ["메모", cur.memo],
                   ].filter(([, v]) => v).map(([k, v]) => <div key={k} className="kv-row"><span className="kv-k">{k}</span><span className="kv-v">{v}</span></div>)}
@@ -3362,7 +3362,7 @@ function App() {
 
       {/* ───── 하단 탭바 (직접 그린 아이콘 + 설정) ───── */}
       <div className="bnav">
-        {[["lines", "라인"], ["parents", "종충"], ["calendar", "캘린더"]].map(([k, label]) => (
+        {[["lines", "라인"], ["parents", "성충"], ["calendar", "캘린더"]].map(([k, label]) => (
           <button key={k} className={"bnav-b" + (!settingsOpen && view.name === "list" && tab === k ? " on" : "")}
             onClick={() => { setSettingsOpen(false); setFilter("전체"); setTab(k); if (k === "parents") setSpeciesFolder(null); setView({ name: "list" }); }}>
             <span className="bnav-ic"><img src={"icons/tab-" + k + ".png?v=2"} alt={label} /></span>
