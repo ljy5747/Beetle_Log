@@ -116,6 +116,15 @@ vertical-align:middle;position:relative;top:-1.5px;-webkit-text-stroke:.4px curr
 .card.dead .card-val,.card.dead .card-sub{color:var(--dim)}
 /* 방금 저장한 유충 카드를 잠깐 강조 */
 
+/* ═══════════ 연도 이동 (‹ 2026 ›) ═══════════ */
+.year-nav{display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:14px}
+.year-arrow{background:none;border:none;color:var(--text);font-size:26px;font-weight:400;
+cursor:pointer;padding:2px 18px;line-height:1;font-family:inherit;border-radius:6px}
+.year-arrow:disabled{color:var(--line);cursor:default}
+.year-cur{display:flex;align-items:baseline;gap:7px;min-width:110px;justify-content:center}
+.year-n{font-size:20px;font-weight:800;letter-spacing:.02em}
+.year-c{font-size:12px;color:var(--dim);font-weight:700}
+
 /* ═══════════ 순서 편집 ═══════════ */
 .order-bar{display:flex;justify-content:flex-end;margin-bottom:10px}
 .s-row{display:flex;align-items:stretch;gap:8px}
