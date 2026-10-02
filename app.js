@@ -296,38 +296,38 @@ function Sortable({ items, editing, onReorder, children }) {
    앱을 2026년에 만들었으므로, 연도 값이 없는 기존 데이터는 모두 2026으로 봄
    (기존 데이터를 수정하지 않고 읽을 때만 적용) */
 const BASE_YEAR = 2026;
+const PAST_YEAR = "~2025"; /* 2026 이전 기록을 모아두는 칸 */
 const itemYear = (x) => String((x && x.year) || BASE_YEAR);
-/* 이동 가능한 연도 범위: 2026 ~ 올해+1 (해가 바뀌면 자동으로 넓어짐) */
-const yearBounds = () => {
+/* 이동 가능한 연도 목록: ~2025, 2026, …, 올해+1 (해가 바뀌면 자동으로 늘어남) */
+const yearSeq = () => {
   const now = new Date().getFullYear();
-  return { min: BASE_YEAR, max: Math.max(BASE_YEAR + 1, now + 1) };
+  const max = Math.max(BASE_YEAR + 1, now + 1);
+  const out = [PAST_YEAR];
+  for (let y = BASE_YEAR; y <= max; y++) out.push(String(y));
+  return out;
 };
 /* 탭 진입 시 기본으로 보여줄 연도 (당해 연도, 범위를 벗어나면 보정) */
 const defaultYear = () => {
-  const { min, max } = yearBounds();
-  return String(Math.min(Math.max(new Date().getFullYear(), min), max));
+  const seq = yearSeq();
+  const now = String(new Date().getFullYear());
+  return seq.includes(now) ? now : seq[seq.length - 1];
 };
 
 /* 폼에서 고를 수 있는 연도 목록 */
-const yearOptions = () => {
-  const { min, max } = yearBounds();
-  const out = [];
-  for (let y = max; y >= min; y--) out.push(String(y));
-  return out;
-};
+const yearOptions = () => [...yearSeq()].reverse();
 
 /* ‹ 2026 (12) › — 연도 이동 */
 function YearNav({ value, onChange, count }) {
-  const { min, max } = yearBounds();
-  const y = parseInt(value);
+  const seq = yearSeq();
+  const i = Math.max(0, seq.indexOf(value));
   return (
     <div className="year-nav">
-      <button className="year-arrow" disabled={y <= min} onClick={() => y > min && onChange(String(y - 1))}>‹</button>
+      <button className="year-arrow" disabled={i <= 0} onClick={() => i > 0 && onChange(seq[i - 1])}>‹</button>
       <div className="year-cur">
-        <span className="year-n mono">{value}</span>
+        <span className="year-n mono">{seq[i]}</span>
         <span className="year-c">{count}</span>
       </div>
-      <button className="year-arrow" disabled={y >= max} onClick={() => y < max && onChange(String(y + 1))}>›</button>
+      <button className="year-arrow" disabled={i >= seq.length - 1} onClick={() => i < seq.length - 1 && onChange(seq[i + 1])}>›</button>
     </div>
   );
 }
@@ -2490,7 +2490,11 @@ function App() {
       totalLength: ec.totalLength || "", jawLength: ec.jawLength || "", jawWidth: ec.jawWidth || "", jawThick: ec.jawThick || "", thoraxWidth: ec.thoraxWidth || "", headWidth: ec.headWidth || "",
       eclosionDate: ec.date || "", source: "자가", memo: ind.memo || "",
       /* 우화한 해의 성충으로 편입 (27년 1월 우화 → 2027 성충 목록) */
-      year: (String(ec.date || "").match(/^(\d{4})/) || [])[1] || defaultYear(),
+      year: (() => {
+        const y = (String(ec.date || "").match(/^(\d{4})/) || [])[1];
+        if (!y) return defaultYear();
+        return parseInt(y) < BASE_YEAR ? PAST_YEAR : y; /* 2026 이전 우화는 ~2025 칸으로 */
+      })(),
       status: "생존", photo: "", growthRecords,
       bornLineId: ind.lineId || "", bornLarvaId: ind.id,
     };
