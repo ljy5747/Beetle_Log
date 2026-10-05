@@ -1,6 +1,6 @@
 {
-  "name": "사육기록장 BeetleLog",
-  "short_name": "사육기록장",
+  "name": "BeetleLog",
+  "short_name": "BeetleLog",
   "description": "사슴벌레·장수풍뎅이 사육 기록 관리",
   "start_url": "./index.html",
   "scope": "./",

@@ -666,7 +666,22 @@ const F = ({ label, children, half }) => (
 );
 
 /* 균사/톱밥 브랜드 선택: 탭하면 샵별 제품 목록이 펼쳐지고, 맨 아래 직접 입력 */
-function FeedPicker({ feedType, value, brands, onChange, placeholder }) {
+/* 최근 90일간 그 먹이 종류에서 많이 쓴 제품 상위 5개 */
+function topFeeds(individuals, feedType, limit = 5) {
+  const since = addDays(today(), -90);
+  const cnt = {};
+  (individuals || []).forEach((i) => {
+    (i.bottleRecords || []).forEach((r) => {
+      if (!r.feedBrand || (r.feedType || "균사") !== feedType) return;
+      if (r.date && r.date < since) return;
+      cnt[r.feedBrand] = (cnt[r.feedBrand] || 0) + 1;
+    });
+  });
+  return Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a] || a.localeCompare(b, "ko"))
+    .slice(0, limit).map((name) => ({ name, n: cnt[name] }));
+}
+
+function FeedPicker({ feedType, value, brands, onChange, placeholder, individuals }) {
   const [open, setOpen] = useState(false);
   const [manual, setManual] = useState(false);
   const groups = (FEED_PRODUCTS && FEED_PRODUCTS[feedType]) || [];
@@ -690,6 +705,23 @@ function FeedPicker({ feedType, value, brands, onChange, placeholder }) {
       </button>
       {open && (
         <div className="picker-panel">
+          {(() => {
+            const tops = topFeeds(individuals, feedType);
+            if (tops.length === 0) return null;
+            return (
+              <div className="picker-group">
+                <div className="picker-shop">자주 쓰는 {feedType}</div>
+                <div className="picker-items">
+                  {tops.map((t) => (
+                    <button key={t.name} className={"picker-item" + (value === t.name ? " on" : "")}
+                      onClick={() => { onChange(t.name); setOpen(false); setManual(false); }}>
+                      {t.name}<span className="picker-n">{t.n}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           {groups.length === 0 && <div className="picker-empty">등록된 제품이 없어요. 직접 입력해주세요.</div>}
           {groups.map((g) => (
             <div key={g.shop} className="picker-group">
@@ -960,7 +992,7 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
 }
 
 /* ════════════════════ 성충 사육이력 행 입력 폼 ════════════════════ */
-function GrowthRowForm({ initial, brands, onSave, onClose, onDelete }) {
+function GrowthRowForm({ initial, brands, onSave, onClose, onDelete, individuals }) {
   const [f, setF] = useState({
     date: today(), instar: "", feedType: "균사", feedBrand: "", bottleSize: "", weight: "", memo: "",
     ...(initial || {}),
@@ -993,7 +1025,7 @@ function GrowthRowForm({ initial, brands, onSave, onClose, onDelete }) {
             {FEED_TYPES.map((t) => <option key={t}>{t}</option>)}
           </select>
         </F>
-        <F label="브랜드" half><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
+        <F label="브랜드" half><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} individuals={individuals} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
       </div>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
       {onDelete && (
@@ -1238,7 +1270,7 @@ function LarvaEditForm({ initial, lines, onSave, onClose }) {
 }
 
 /* ════════════════════ 병갈이 폼 ════════════════════ */
-function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
+function BottleForm({ initial, brands, onSave, onClose, onDelete, individuals }) {
   const [f, setF] = useState({
     date: today(), instar: "", weight: "", headWidth: "",
     feedType: "균사", feedBrand: "", bottleSize: "", nextDate: "", memo: "", flags: [], pudding: false, photo: "",
@@ -1294,7 +1326,7 @@ function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
         </button>
         <div className="hint" style={{ marginTop: 6 }}>푸딩컵으로 먹인 기록이면 켜주세요. 그래프에서 <b>푸딩 다음에 넣은 병이 1병</b>으로 잡혀요.</div>
       </F>
-      <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
+      <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} individuals={individuals} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
       <F label="다음 교체 예정일">
         <input type="date" className="in" value={f.nextDate} onChange={(e) => set("nextDate", e.target.value)} />
         <div className="row" style={{ marginTop: 8, alignItems: "center", gap: 8 }}>
@@ -1340,7 +1372,7 @@ function BottleForm({ initial, brands, onSave, onClose, onDelete }) {
 }
 
 /* ════════════════════ 일괄 병갈이 폼 ════════════════════ */
-function BulkBottleForm({ larvae, brands, onSave, onClose }) {
+function BulkBottleForm({ larvae, brands, onSave, onClose, individuals }) {
   /* 유충 상태인 개체만 대상, 기본은 전체 선택 */
   const targets = larvae.filter((i) => i.status === "유충");
   const [picked, setPicked] = useState(() => new Set(targets.map((i) => i.id)));
@@ -1388,7 +1420,7 @@ function BulkBottleForm({ larvae, brands, onSave, onClose }) {
           </div>
         </F>
           </div>
-          <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
+          <F label="브랜드 · 제품명"><FeedPicker feedType={f.feedType} value={f.feedBrand} brands={brands} individuals={individuals} onChange={(v) => set("feedBrand", v)} placeholder="탭하여 선택" /></F>
           <F label="다음 교체 예정일">
             <input type="date" className="in" value={f.nextDate} onChange={(e) => set("nextDate", e.target.value)} />
             <div className="row" style={{ marginTop: 8, alignItems: "center", gap: 8 }}>
@@ -3273,7 +3305,7 @@ function App() {
           onSave={saveParent} onClose={() => setModal(null)} />
       )}
       {modal?.type === "growthRow" && (
-        <GrowthRowForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveGrowthRow} onClose={() => setModal(null)}
+        <GrowthRowForm initial={modal.initial || null} brands={data.feedBrands} individuals={data.individuals} onSave={saveGrowthRow} onClose={() => setModal(null)}
           onDelete={modal.editId ? deleteGrowthRow : null} />
       )}
       {modal?.type === "line" && (
@@ -3296,6 +3328,7 @@ function App() {
         <BulkBottleForm
           larvae={larvaeOf(modal.lineId)}
           brands={data.feedBrands}
+          individuals={data.individuals}
           onSave={saveBulkBottle} onClose={() => setModal(null)} />
       )}
       {modal?.type === "renumber" && (
@@ -3316,7 +3349,7 @@ function App() {
         </div>
       )}
       {modal?.type === "bottle" && (
-        <BottleForm initial={modal.initial || null} brands={data.feedBrands} onSave={saveBottle} onClose={() => setModal(null)}
+        <BottleForm initial={modal.initial || null} brands={data.feedBrands} individuals={data.individuals} onSave={saveBottle} onClose={() => setModal(null)}
           onDelete={modal.editId ? () => {
             persist({ ...data, individuals: data.individuals.map((i) => i.id !== modal.indId ? i : { ...i, bottleRecords: i.bottleRecords.filter((r) => r.id !== modal.editId) }) });
             setModal(null); say("기록이 삭제됐어요");
