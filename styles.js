@@ -150,9 +150,9 @@ transition:box-shadow .3s,border-color .3s}
 .sp-card{background:var(--surf);border:1px solid var(--line);border-radius:5px;padding:16px 17px;cursor:pointer;box-shadow:none;
 display:flex;align-items:center;justify-content:space-between;gap:12px}
 .sp-card-l{min-width:0;flex:1}
-.sp-name{font-family:var(--serif);font-size:19px;font-weight:700;letter-spacing:.01em}
+.sp-name{font-family:var(--serif);font-size:19px;font-weight:700;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sp-meta{font-size:12px;color:var(--dim);margin-top:6px;letter-spacing:.02em}
-.sp-go{font-size:11px;color:var(--gold-d);font-weight:700;letter-spacing:.06em;text-transform:uppercase;flex:none}
+.sp-go{font-size:11px;color:var(--gold-d);font-weight:700;letter-spacing:.06em;text-transform:uppercase;flex:none;margin-left:12px}
 .sp-back{color:var(--gold-d);font-size:14px;font-weight:600;cursor:pointer;padding:4px 0 12px}
 .grp-head{display:flex;align-items:baseline;gap:8px;padding:2px 2px 10px;border-bottom:1.5px solid var(--text);margin-bottom:12px}
 .grp-name{font-family:var(--serif);font-size:21px;font-weight:700;letter-spacing:.01em}

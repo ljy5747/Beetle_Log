@@ -2805,7 +2805,7 @@ function App() {
                       return (
                         <div key={gname} className="sp-card" onClick={() => setSpeciesFolder(gname)}>
                           <div className="sp-card-l">
-                            <div className="sp-name serif">{gname}</div>
+                            <div className="sp-name serif" title={gname}>{gname}</div>
                             <div className="sp-meta">{list.length}마리 · ♂︎{males} ♀︎{females}</div>
                           </div>
                           <div className="sp-go">보기 ›</div>
