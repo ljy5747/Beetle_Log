@@ -61,12 +61,34 @@ const SB_HEADERS = {
   "Authorization": `Bearer ${SUPABASE_KEY}`,
   "Content-Type": "application/json",
 };
+/* 구글 로그인 계정(user:이메일)은 서버가 본인 확인을 할 수 있도록 로그인 토큰을 함께 보냄.
+   동기화 키 방식(로그인 없음)은 기존처럼 공개키로 요청. */
+const isAccountKey = (k) => typeof k === "string" && k.startsWith("user:");
+async function cloudAuthHeaders(syncKey, forceRefresh) {
+  if (!isAccountKey(syncKey)) return SB_HEADERS;
+  let s = await authLoadSession();
+  if (!s || !s.access) throw new Error("로그인이 필요해요");
+  /* 액세스 토큰은 1시간이면 만료 → 50분 지났거나 401을 받았으면 갱신 */
+  if (s.refresh && (forceRefresh || !s.at || Date.now() - s.at > 50 * 60 * 1000)) {
+    const fresh = await authRefresh(s.refresh);
+    if (fresh) s = fresh;
+    else if (forceRefresh) throw new Error("로그인이 만료됐어요. 다시 로그인해 주세요");
+  }
+  return { ...SB_HEADERS, "Authorization": `Bearer ${s.access}` };
+}
+async function cloudFetch(syncKey, url, opts) {
+  let res = await fetch(url, { ...opts, headers: { ...(await cloudAuthHeaders(syncKey, false)), ...(opts.extra || {}) } });
+  if (res.status === 401 && isAccountKey(syncKey)) {
+    res = await fetch(url, { ...opts, headers: { ...(await cloudAuthHeaders(syncKey, true)), ...(opts.extra || {}) } });
+  }
+  return res;
+}
 /* 동기화 키로 서버에 데이터 올리기 (있으면 갱신, 없으면 생성) */
 async function cloudUpload(syncKey, data) {
   const body = JSON.stringify([{ user_key: syncKey, data, updated_at: new Date().toISOString() }]);
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/beetlelog_data?on_conflict=user_key`, {
+  const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/beetlelog_data?on_conflict=user_key`, {
     method: "POST",
-    headers: { ...SB_HEADERS, "Prefer": "resolution=merge-duplicates" },
+    extra: { "Prefer": "resolution=merge-duplicates" },
     body,
   });
   if (!res.ok) throw new Error(`업로드 실패 (${res.status})`);
@@ -74,8 +96,8 @@ async function cloudUpload(syncKey, data) {
 }
 /* 동기화 키로 서버에서 데이터 받기 (없으면 null) */
 async function cloudDownload(syncKey) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/beetlelog_data?user_key=eq.${encodeURIComponent(syncKey)}&select=data,updated_at`, {
-    headers: SB_HEADERS,
+  const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/beetlelog_data?user_key=eq.${encodeURIComponent(syncKey)}&select=data,updated_at`, {
+    method: "GET",
   });
   if (!res.ok) throw new Error(`불러오기 실패 (${res.status})`);
   const rows = await res.json();
