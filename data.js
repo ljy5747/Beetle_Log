@@ -31,7 +31,7 @@ window.APP_DATA = {
       { shop: "투곤", items: ["오오히라", "히라타케", "칸타케", "기와"] },
       { shop: "곤충아카데미", items: ["GK"] },
       { shop: "곤충스타", items: ["폭식 오오히라", "폭식 기와"] },
-      { shop: "카미나가", items: ["S8K", "C3", "S21K", "S31K" "루카디아"] },
+      { shop: "카미나가", items: ["S8K", "C3", "S21K", "S31K", "루카디아"] },
       { shop: "혜제원", items: ["오오히라", "히라타케"] },
       { shop: "Exceed-craft", items: ["레빈지", "레빈지SP", "GLC"] },
       { shop: "KB", items: ["AG"] },
