@@ -94,35 +94,6 @@
                 ))}
               </div>
 
-              <div className="sect">푸시 알림 설정</div>
-              {authUser ? (
-                <div className="auth-box">
-                  <div className="set-desc">계정별 알림 수신 설정입니다. 실제 기기 푸시 수신은 서버 발송 기능 연결 후 사용할 수 있어요.</div>
-                  {[
-                    ["push_enabled", "전체 푸시 알림"],
-                    ["breeding_enabled", "사육 일정 알림"],
-                    ["reminder_enabled", "사용자 지정 알림"],
-                    ["record_change_enabled", "기록 변경 알림"]
-                  ].map(([key, label]) => (
-                    <label key={key} className="row mt" style={{alignItems:"center",justifyContent:"space-between",gap:12}}>
-                      <span>{label}</span>
-                      <input type="checkbox" checked={!!notificationPrefs[key]}
-                        disabled={notificationSaving || (key !== "push_enabled" && !notificationPrefs.push_enabled)}
-                        onChange={e => saveNotificationPref(key, e.target.checked)} />
-                    </label>
-                  ))}
-                  <label className="row mt" style={{alignItems:"center",justifyContent:"space-between"}}>
-                    <span>사육 일정 사전 알림</span>
-                    <select className="in" style={{width:120}} value={notificationPrefs.advance_days}
-                      disabled={notificationSaving || !notificationPrefs.push_enabled || !notificationPrefs.breeding_enabled}
-                      onChange={e => saveNotificationPref("advance_days", Number(e.target.value))}>
-                      <option value={0}>당일</option>
-                      <option value={1}>1일 전</option>
-                      <option value={3}>3일 전</option>
-                    </select>
-                  </label>
-                </div>
-              ) : <div className="set-desc">구글 로그인 후 계정별 푸시 알림을 설정할 수 있어요.</div>}
               <div className="sect">클라우드 동기화 (폰 ↔ PC)</div>
               {authUser ? (
                 <div className="auth-box">
