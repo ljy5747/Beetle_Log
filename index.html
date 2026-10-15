@@ -80,7 +80,7 @@ try {
       if (!res.ok) throw new Error(file + " 로드 실패 (" + res.status + ")");
       appParts.push(await res.text());
     }
-    run(Babel.transform(appParts.join("\n"), { presets: ["react"] }).code);
+    run(Babel.transform(appParts.join(""), { presets: ["react"] }).code);
   } catch (e) {
     document.getElementById("root").innerHTML =
       '<div class="boot">앱을 불러오지 못했어요.<br>잠시 후 새로고침해 주세요.<br><br><small style="color:#B4503F">' + (e && e.message ? e.message : e) + '</small></div>';
