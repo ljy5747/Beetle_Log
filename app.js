@@ -354,6 +354,24 @@ function YearNav({ value, onChange, count }) {
   );
 }
 
+/* Account-specific notification preferences. Existing Supabase Auth JWT + RLS. */
+const defaultNotificationPreferences = {
+  push_enabled: false, breeding_enabled: true, reminder_enabled: true,
+  record_change_enabled: false, advance_days: 1
+};
+async function notificationPreferencesRequest(method, userId, values) {
+  const session = await authLoadSession();
+  if (!session?.access) throw new Error("구글 로그인이 필요해요.");
+  let authHeaders = await cloudAuthHeaders("user:authenticated", false);
+  const url = SUPABASE_URL + "/rest/v1/notification_preferences" +
+    (method === "GET" ? "?select=push_enabled,breeding_enabled,reminder_enabled,record_change_enabled,advance_days&limit=1" : "?on_conflict=user_id");
+  const headers = { ...authHeaders, "Content-Type": "application/json" };
+  if (method === "POST") headers.Prefer = "resolution=merge-duplicates,return=minimal";
+  const result = await fetch(url, { method, headers,
+    ...(method === "POST" ? {body: JSON.stringify({user_id:userId,...values,updated_at:new Date().toISOString()})} : {}) });
+  if (!result.ok) throw new Error("알림 설정 서버 오류 (" + result.status + ")");
+  return method === "GET" ? (await result.json())[0] || null : true;
+}
 /* ════════════════════ 유충 카드 (라인 목록 / 교체 대상 목록에서 공용) ════════════════════ */
 function LarvaCard({ ind, crownM, crownF, lineCode, onOpen, onBottle }) {
   const lr = latestRec(ind), mw = maxWeight(ind), dl = lastDelta(ind);
@@ -2137,6 +2155,28 @@ function App() {
   const [syncKey, setSyncKey] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
   const [authUser, setAuthUser] = useState(null);
+  const [notificationPrefs, setNotificationPrefs] = useState(defaultNotificationPreferences);
+  const [notificationSaving, setNotificationSaving] = useState(false);
+  useEffect(() => {
+    if (!authUser?.id) { setNotificationPrefs(defaultNotificationPreferences); return; }
+    let active = true;
+    notificationPreferencesRequest("GET", authUser.id).then(p => {
+      if (active) setNotificationPrefs({ ...defaultNotificationPreferences, ...(p || {}) });
+    }).catch(() => { if (active) say("알림 설정을 불러오지 못했어요."); });
+    return () => { active = false; };
+  }, [authUser?.id]);
+  const saveNotificationPref = async (key, value) => {
+    if (!authUser?.id || notificationSaving) return;
+    const next = { ...notificationPrefs, [key]: value };
+    setNotificationSaving(true);
+    try {
+      await notificationPreferencesRequest("POST", authUser.id, next);
+      setNotificationPrefs(next);
+      say("알림 설정이 저장됐어요.");
+    } catch (e) { say(e.message || "알림 설정 저장 실패"); }
+    finally { setNotificationSaving(false); }
+  };
+
   const autoSyncRef = useRef({ on: false, key: "", timer: null });
   const fileRef = useRef(null);
   const xlsxRef = useRef(null);
@@ -3409,6 +3449,35 @@ function App() {
                 ))}
               </div>
 
+              <div className="sect">푸시 알림 설정</div>
+              {authUser ? (
+                <div className="auth-box">
+                  <div className="set-desc">계정별 알림 수신 설정입니다. 실제 기기 푸시 수신은 서버 발송 기능 연결 후 사용할 수 있어요.</div>
+                  {[
+                    ["push_enabled", "전체 푸시 알림"],
+                    ["breeding_enabled", "사육 일정 알림"],
+                    ["reminder_enabled", "사용자 지정 알림"],
+                    ["record_change_enabled", "기록 변경 알림"]
+                  ].map(([key, label]) => (
+                    <label key={key} className="row mt" style={{alignItems:"center",justifyContent:"space-between",gap:12}}>
+                      <span>{label}</span>
+                      <input type="checkbox" checked={!!notificationPrefs[key]}
+                        disabled={notificationSaving || (key !== "push_enabled" && !notificationPrefs.push_enabled)}
+                        onChange={e => saveNotificationPref(key, e.target.checked)} />
+                    </label>
+                  ))}
+                  <label className="row mt" style={{alignItems:"center",justifyContent:"space-between"}}>
+                    <span>사육 일정 사전 알림</span>
+                    <select className="in" style={{width:120}} value={notificationPrefs.advance_days}
+                      disabled={notificationSaving || !notificationPrefs.push_enabled || !notificationPrefs.breeding_enabled}
+                      onChange={e => saveNotificationPref("advance_days", Number(e.target.value))}>
+                      <option value={0}>당일</option>
+                      <option value={1}>1일 전</option>
+                      <option value={3}>3일 전</option>
+                    </select>
+                  </label>
+                </div>
+              ) : <div className="set-desc">구글 로그인 후 계정별 푸시 알림을 설정할 수 있어요.</div>}
               <div className="sect">클라우드 동기화 (폰 ↔ PC)</div>
               {authUser ? (
                 <div className="auth-box">
