@@ -358,14 +358,14 @@ function YearNav({ value, onChange, count }) {
 /* Account-specific notification preferences. Existing Supabase Auth JWT + RLS. */
 const defaultNotificationPreferences = {
   push_enabled: false, breeding_enabled: true, reminder_enabled: true,
-  record_change_enabled: false, advance_days: 1
+  record_change_enabled: false, advance_days: 1, notification_hour: 9
 };
 async function notificationPreferencesRequest(method, userId, values) {
   const session = await authLoadSession();
   if (!session?.access) throw new Error("구글 로그인이 필요해요.");
   let authHeaders = await cloudAuthHeaders("user:authenticated", false);
   const url = SUPABASE_URL + "/rest/v1/notification_preferences" +
-    (method === "GET" ? "?select=push_enabled,breeding_enabled,reminder_enabled,record_change_enabled,advance_days&limit=1" : "?on_conflict=user_id");
+    (method === "GET" ? "?select=push_enabled,breeding_enabled,reminder_enabled,record_change_enabled,advance_days,notification_hour&limit=1" : "?on_conflict=user_id");
   const headers = { ...authHeaders, "Content-Type": "application/json" };
   if (method === "POST") headers.Prefer = "resolution=merge-duplicates,return=minimal";
   const result = await fetch(url, { method, headers,
@@ -3552,6 +3552,14 @@ function App() {
                       catch(e){say(e?.message||"원격 테스트 전송 실패");}
                     }}>📨 서버에서 테스트 푸시 보내기</button>
                   <div className="set-desc" style={{marginTop:6}}>처음 한 번은 '원격 푸시 수신 기기 등록'을 눌러주세요. 이후 앱을 닫은 뒤 다른 기기에서 테스트 푸시를 보내면 백그라운드 수신을 확인할 수 있어요.</div>
+                  <label className="row mt" style={{alignItems:"center",justifyContent:"space-between",gap:12}}>
+                    <span>알림 시간 (한국 시간)</span>
+                    <select className="in" style={{width:120}} value={notificationPrefs.notification_hour ?? 9}
+                      disabled={notificationSaving || !notificationPrefs.push_enabled}
+                      onChange={e=>saveNotificationPref("notification_hour",Number(e.target.value))}>
+                      {Array.from({length:24},(_,h)=><option key={h} value={h}>{String(h).padStart(2,"0")}:00</option>)}
+                    </select>
+                  </label>
                   <label className="row mt" style={{alignItems:"center",justifyContent:"space-between"}}>
                     <span>사육 일정 사전 알림</span>
                     <select className="in" style={{width:120}} value={notificationPrefs.advance_days}

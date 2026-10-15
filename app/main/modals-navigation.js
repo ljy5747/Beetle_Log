@@ -128,6 +128,14 @@
                       catch(e){say(e?.message||"원격 테스트 전송 실패");}
                     }}>📨 서버에서 테스트 푸시 보내기</button>
                   <div className="set-desc" style={{marginTop:6}}>처음 한 번은 '원격 푸시 수신 기기 등록'을 눌러주세요. 이후 앱을 닫은 뒤 다른 기기에서 테스트 푸시를 보내면 백그라운드 수신을 확인할 수 있어요.</div>
+                  <label className="row mt" style={{alignItems:"center",justifyContent:"space-between",gap:12}}>
+                    <span>알림 시간 (한국 시간)</span>
+                    <select className="in" style={{width:120}} value={notificationPrefs.notification_hour ?? 9}
+                      disabled={notificationSaving || !notificationPrefs.push_enabled}
+                      onChange={e=>saveNotificationPref("notification_hour",Number(e.target.value))}>
+                      {Array.from({length:24},(_,h)=><option key={h} value={h}>{String(h).padStart(2,"0")}:00</option>)}
+                    </select>
+                  </label>
                   <label className="row mt" style={{alignItems:"center",justifyContent:"space-between"}}>
                     <span>사육 일정 사전 알림</span>
                     <select className="in" style={{width:120}} value={notificationPrefs.advance_days}
