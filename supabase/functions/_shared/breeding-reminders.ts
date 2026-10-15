@@ -47,6 +47,6 @@ export function remindersDue(data: RecordLike, prefs: RecordLike, todayKst: stri
 }
 export function dailyNotificationBody(due: Reminder[]): string {
   if (due.length === 0) return "";
-  if (due.length > 3) return "오늘 예정된 할 일 " + due.length + "건을 해야 합니다.";
+  if (due.length > 3) return "알림 대상 할 일 " + due.length + "건을 해야 합니다.";
   return due.map(x => x.label + " 해야 합니다.").join("\n");
 }
