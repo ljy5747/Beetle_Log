@@ -117,6 +117,17 @@
                       catch (e) { say(e?.message || "기기 알림 테스트에 실패했어요."); }
                     }}>🔔 이 기기에서 테스트 알림 표시</button>
                   <div className="set-desc" style={{marginTop:6}}>휴대폰 알림 표시 테스트입니다. 서버에서 보내는 원격 푸시와는 별개예요. 아이폰은 홈 화면 앱에서 실행해야 해요.</div>
+                  <button className="btn mt" style={{width:"100%"}} disabled={!notificationPrefs.push_enabled||notificationSaving}
+                    onClick={async () => {
+                      try { await beetleRegisterRemotePush(); say("원격 푸시 수신 기기를 등록했어요."); }
+                      catch(e){ say(e?.message||"기기 등록 실패"); }
+                    }}>📲 원격 푸시 수신 기기 등록</button>
+                  <button className="btn mt" style={{width:"100%"}} disabled={!notificationPrefs.push_enabled||notificationSaving}
+                    onClick={async () => {
+                      try { const result=await beetleSendRemoteTest(); say("서버가 "+result.sent+"대의 기기에 테스트 알림을 전송했어요."); }
+                      catch(e){say(e?.message||"원격 테스트 전송 실패");}
+                    }}>📨 서버에서 테스트 푸시 보내기</button>
+                  <div className="set-desc" style={{marginTop:6}}>처음 한 번은 '원격 푸시 수신 기기 등록'을 눌러주세요. 이후 앱을 닫은 뒤 다른 기기에서 테스트 푸시를 보내면 백그라운드 수신을 확인할 수 있어요.</div>
                   <label className="row mt" style={{alignItems:"center",justifyContent:"space-between"}}>
                     <span>사육 일정 사전 알림</span>
                     <select className="in" style={{width:120}} value={notificationPrefs.advance_days}

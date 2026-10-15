@@ -403,6 +403,44 @@ async function beetleTestDeviceNotification() {
     data:{url:"./index.html"}
   });
 }
+
+
+/* Authenticated Web Push: explicit opt-in, never auto-prompt. */
+async function beetleRemotePush(action, payload) {
+  const h=await cloudAuthHeaders("user:authenticated",false);
+  const res=await fetch(SUPABASE_URL+"/functions/v1/beetle-push",{
+    method:"POST",headers:{...h,"Content-Type":"application/json"},body:JSON.stringify({action,...payload})
+  });
+  const result=await res.json().catch(()=>({}));
+  if(!res.ok||!result.ok)throw new Error(result.error||"원격 푸시 요청 실패 ("+res.status+")");
+  return result;
+}
+async function beetleRegisterRemotePush() {
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window))throw new Error("이 기기는 원격 푸시를 지원하지 않아요.");
+  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1;
+  if(ios&&!navigator.standalone&&!window.matchMedia("(display-mode: standalone)").matches)throw new Error("아이폰에서는 홈 화면에 추가한 앱에서 실행해 주세요.");
+  // Must ask permission before asynchronous operations to preserve iOS user gesture.
+  const permission=Notification.permission==="granted"?"granted":await Notification.requestPermission();
+  if(permission!=="granted")throw new Error("알림 권한을 허용해야 합니다.");
+  const h=await cloudAuthHeaders("user:authenticated",false);
+  const keyResponse=await fetch(SUPABASE_URL+"/functions/v1/beetle-push",{headers:h});
+  if(!keyResponse.ok)throw new Error("서버 공개키를 가져오지 못했어요.");
+  const {publicKey}=await keyResponse.json();
+  if(!publicKey)throw new Error("원격 푸시 키 미설정");
+  const registration=await navigator.serviceWorker.register("./push-sw.js",{scope:"./"});
+  const ready=await navigator.serviceWorker.ready;
+  let subscription=await ready.pushManager.getSubscription();
+  if(!subscription){
+    const padded=publicKey.padEnd(Math.ceil(publicKey.length/4)*4,"=");
+    const binary=atob(padded.replace(/-/g,"+").replace(/_/g,"/"));
+    const key=Uint8Array.from(binary,c=>c.charCodeAt(0));
+    subscription=await ready.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
+  }
+  const json=subscription.toJSON();
+  await beetleRemotePush("subscribe",{endpoint:json.endpoint,keys:json.keys});
+  return true;
+}
+async function beetleSendRemoteTest() { return await beetleRemotePush("test",{}); }
 /* ════════════════════ 유충 카드 (라인 목록 / 교체 대상 목록에서 공용) ════════════════════ */
 function LarvaCard({ ind, crownM, crownF, lineCode, onOpen, onBottle }) {
   const lr = latestRec(ind), mw = maxWeight(ind), dl = lastDelta(ind);
@@ -3503,6 +3541,17 @@ function App() {
                       catch (e) { say(e?.message || "기기 알림 테스트에 실패했어요."); }
                     }}>🔔 이 기기에서 테스트 알림 표시</button>
                   <div className="set-desc" style={{marginTop:6}}>휴대폰 알림 표시 테스트입니다. 서버에서 보내는 원격 푸시와는 별개예요. 아이폰은 홈 화면 앱에서 실행해야 해요.</div>
+                  <button className="btn mt" style={{width:"100%"}} disabled={!notificationPrefs.push_enabled||notificationSaving}
+                    onClick={async () => {
+                      try { await beetleRegisterRemotePush(); say("원격 푸시 수신 기기를 등록했어요."); }
+                      catch(e){ say(e?.message||"기기 등록 실패"); }
+                    }}>📲 원격 푸시 수신 기기 등록</button>
+                  <button className="btn mt" style={{width:"100%"}} disabled={!notificationPrefs.push_enabled||notificationSaving}
+                    onClick={async () => {
+                      try { const result=await beetleSendRemoteTest(); say("서버가 "+result.sent+"대의 기기에 테스트 알림을 전송했어요."); }
+                      catch(e){say(e?.message||"원격 테스트 전송 실패");}
+                    }}>📨 서버에서 테스트 푸시 보내기</button>
+                  <div className="set-desc" style={{marginTop:6}}>처음 한 번은 '원격 푸시 수신 기기 등록'을 눌러주세요. 이후 앱을 닫은 뒤 다른 기기에서 테스트 푸시를 보내면 백그라운드 수신을 확인할 수 있어요.</div>
                   <label className="row mt" style={{alignItems:"center",justifyContent:"space-between"}}>
                     <span>사육 일정 사전 알림</span>
                     <select className="in" style={{width:120}} value={notificationPrefs.advance_days}

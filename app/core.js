@@ -403,3 +403,41 @@ async function beetleTestDeviceNotification() {
     data:{url:"./index.html"}
   });
 }
+
+
+/* Authenticated Web Push: explicit opt-in, never auto-prompt. */
+async function beetleRemotePush(action, payload) {
+  const h=await cloudAuthHeaders("user:authenticated",false);
+  const res=await fetch(SUPABASE_URL+"/functions/v1/beetle-push",{
+    method:"POST",headers:{...h,"Content-Type":"application/json"},body:JSON.stringify({action,...payload})
+  });
+  const result=await res.json().catch(()=>({}));
+  if(!res.ok||!result.ok)throw new Error(result.error||"원격 푸시 요청 실패 ("+res.status+")");
+  return result;
+}
+async function beetleRegisterRemotePush() {
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window))throw new Error("이 기기는 원격 푸시를 지원하지 않아요.");
+  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1;
+  if(ios&&!navigator.standalone&&!window.matchMedia("(display-mode: standalone)").matches)throw new Error("아이폰에서는 홈 화면에 추가한 앱에서 실행해 주세요.");
+  // Must ask permission before asynchronous operations to preserve iOS user gesture.
+  const permission=Notification.permission==="granted"?"granted":await Notification.requestPermission();
+  if(permission!=="granted")throw new Error("알림 권한을 허용해야 합니다.");
+  const h=await cloudAuthHeaders("user:authenticated",false);
+  const keyResponse=await fetch(SUPABASE_URL+"/functions/v1/beetle-push",{headers:h});
+  if(!keyResponse.ok)throw new Error("서버 공개키를 가져오지 못했어요.");
+  const {publicKey}=await keyResponse.json();
+  if(!publicKey)throw new Error("원격 푸시 키 미설정");
+  const registration=await navigator.serviceWorker.register("./push-sw.js",{scope:"./"});
+  const ready=await navigator.serviceWorker.ready;
+  let subscription=await ready.pushManager.getSubscription();
+  if(!subscription){
+    const padded=publicKey.padEnd(Math.ceil(publicKey.length/4)*4,"=");
+    const binary=atob(padded.replace(/-/g,"+").replace(/_/g,"/"));
+    const key=Uint8Array.from(binary,c=>c.charCodeAt(0));
+    subscription=await ready.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
+  }
+  const json=subscription.toJSON();
+  await beetleRemotePush("subscribe",{endpoint:json.endpoint,keys:json.keys});
+  return true;
+}
+async function beetleSendRemoteTest() { return await beetleRemotePush("test",{}); }
