@@ -66,23 +66,10 @@ try {
       if (!r.ok) throw new Error(f + " 로드 실패 (" + r.status + ")");
       run(await r.text());
     }
-    /* 기능별 소스 파일을 순서대로 결합 후 한 번에 컴파일합니다.
-       전역 const/함수/컴포넌트의 기존 스코프와 실행 순서를 유지합니다. */
-    var appFiles = [
-      "app/core.js", "app/cards.js", "app/ui-common.js",
-      "app/forms-adult.js", "app/forms-larva.js",
-      "app/excel.js", "app/calendar.js",
-      "app/main/state.js", "app/main/list.js", "app/main/line-details.js",
-      "app/main/adult-details.js", "app/main/larva-details.js", "app/main/modals-navigation.js"
-    ];
-    var appParts = [];
-    for (var j = 0; j < appFiles.length; j++) {
-      var file = appFiles[j];
-      var res = await fetch(file + "?v=" + v);
-      if (!res.ok) throw new Error(file + " 로드 실패 (" + res.status + ")");
-      appParts.push(await res.text());
-    }
-    run(Babel.transform(appParts.join(""), { presets: ["react"] }).code);
+    /* 운영에서는 빌드된 단일 앱 파일만 요청: 중복 실행 방지 및 로딩 시간 단축. */
+    var appResponse = await fetch("app.js?v=" + v);
+    if (!appResponse.ok) throw new Error("app.js 로드 실패 (" + appResponse.status + ")");
+    run(Babel.transform(await appResponse.text(), { presets: ["react"] }).code);
   } catch (e) {
     document.getElementById("root").innerHTML =
       '<div class="boot">앱을 불러오지 못했어요.<br>잠시 후 새로고침해 주세요.<br><br><small style="color:#B4503F">' + (e && e.message ? e.message : e) + '</small></div>';
