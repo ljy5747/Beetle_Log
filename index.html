@@ -60,12 +60,18 @@ try {
   try {
     var v = Date.now();
     /* ① 설정값 → ② 디자인 → ③ 앱 본체 순서로 (순서 중요) */
-    for (var i = 0; i < 2; i++) {
-      var f = ["data.js", "styles.js"][i];
-      var r = await fetch(f + "?v=" + v);
-      if (!r.ok) throw new Error(f + " 로드 실패 (" + r.status + ")");
-      run(await r.text());
+    var settingsResponse = await fetch("data.js?v=" + v);
+    if (!settingsResponse.ok) throw new Error("data.js 로드 실패 (" + settingsResponse.status + ")");
+    run(await settingsResponse.text());
+    /* CSS 소스는 하나의 템플릿 문자열이므로 순서대로 결합해 실행 */
+    var styleFiles = ["styles/base.js", "styles/cards.js", "styles/navigation.js", "styles/forms-calendar.js"];
+    var styleParts = [];
+    for (var i = 0; i < styleFiles.length; i++) {
+      var styleResponse = await fetch(styleFiles[i] + "?v=" + v);
+      if (!styleResponse.ok) throw new Error(styleFiles[i] + " 로드 실패 (" + styleResponse.status + ")");
+      styleParts.push(await styleResponse.text());
     }
+    run(styleParts.join(""));
     /* 기능별 소스 파일을 순서대로 결합 후 한 번에 컴파일합니다.
        전역 const/함수/컴포넌트의 기존 스코프와 실행 순서를 유지합니다. */
     var appFiles = [
