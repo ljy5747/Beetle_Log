@@ -19,6 +19,28 @@ function App() {
   const [syncKey, setSyncKey] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
   const [authUser, setAuthUser] = useState(null);
+  const [notificationPrefs, setNotificationPrefs] = useState(defaultNotificationPreferences);
+  const [notificationSaving, setNotificationSaving] = useState(false);
+  useEffect(() => {
+    if (!authUser?.id) { setNotificationPrefs(defaultNotificationPreferences); return; }
+    let active = true;
+    notificationPreferencesRequest("GET", authUser.id).then(p => {
+      if (active) setNotificationPrefs({ ...defaultNotificationPreferences, ...(p || {}) });
+    }).catch(() => { if (active) say("알림 설정을 불러오지 못했어요."); });
+    return () => { active = false; };
+  }, [authUser?.id]);
+  const saveNotificationPref = async (key, value) => {
+    if (!authUser?.id || notificationSaving) return;
+    const next = { ...notificationPrefs, [key]: value };
+    setNotificationSaving(true);
+    try {
+      await notificationPreferencesRequest("POST", authUser.id, next);
+      setNotificationPrefs(next);
+      say("알림 설정이 저장됐어요.");
+    } catch (e) { say(e.message || "알림 설정 저장 실패"); }
+    finally { setNotificationSaving(false); }
+  };
+
   const autoSyncRef = useRef({ on: false, key: "", timer: null });
   const fileRef = useRef(null);
   const xlsxRef = useRef(null);
