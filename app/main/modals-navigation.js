@@ -111,6 +111,12 @@
                         onChange={e => saveNotificationPref(key, e.target.checked)} />
                     </label>
                   ))}
+                  <button className="btn mt" style={{width:"100%"}} disabled={!notificationPrefs.push_enabled}
+                    onClick={async () => {
+                      try { await beetleTestDeviceNotification(); say("기기 테스트 알림을 표시했어요."); }
+                      catch (e) { say(e?.message || "기기 알림 테스트에 실패했어요."); }
+                    }}>🔔 이 기기에서 테스트 알림 표시</button>
+                  <div className="set-desc" style={{marginTop:6}}>휴대폰 알림 표시 테스트입니다. 서버에서 보내는 원격 푸시와는 별개예요. 아이폰은 홈 화면 앱에서 실행해야 해요.</div>
                   <label className="row mt" style={{alignItems:"center",justifyContent:"space-between"}}>
                     <span>사육 일정 사전 알림</span>
                     <select className="in" style={{width:120}} value={notificationPrefs.advance_days}
