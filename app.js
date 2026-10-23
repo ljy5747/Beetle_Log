@@ -543,7 +543,7 @@ function LineParentCard({ p, role, onOpen }) {
   ].filter(Boolean);
   return (
     <div className={"pcard" + (male ? " male" : " female")} onClick={onOpen}>
-      <SpeciesPhoto photo={p.photo} species={p.species} className="pcard-ph" />
+      <SpeciesPhoto photo={p.photo} species={p.species} sex={p.sex} className="pcard-ph" />
       <div className="pcard-r">
         <div className="pcard-top">
           <span className="pcard-role"><span className={male ? "sx-m" : "sx-f"}>{male ? "♂︎" : "♀︎"}</span> 종충</span>
@@ -701,14 +701,17 @@ function LineWeightChart({ kids }) {
 /* ════════════════════ 사진 (본인 사진 → 종 디폴트 → 종 이름 빈칸) ════════════════════
    종 디폴트 사진: icons/species/<종이름>.png 로 올리면 자동 표시됩니다 */
 const KING_STAG_DEFAULT_PHOTO = "icons/species/king-stag-default.jpg";
+const KING_STAG_FEMALE_PHOTO = "icons/species/king-stag-female-default.jpg";
+const isFemaleStag = (sex) => /^(F|female)$/i.test(String(sex || "").trim()) || /암컷|♀/.test(String(sex || ""));
+const kingStagDefaultPhoto = (sex) => isFemaleStag(sex) ? KING_STAG_FEMALE_PHOTO : KING_STAG_DEFAULT_PHOTO;
 const isKingStagSpecies = (species) =>
   /왕사슴벌레|dorcus[ ._-]*hopei|binodulosus|オオクワ|オオクワガタ/i.test(String(species || ""));
-function SpeciesPhoto({ photo, species, className }) {
+function SpeciesPhoto({ photo, species, sex, className }) {
   const [err, setErr] = useState(false);
   // Individual photos always win. This illustration is only a display fallback.
   if (photo) return <img src={photo} alt="" className={className} />;
   if (isKingStagSpecies(species))
-    return <img src={KING_STAG_DEFAULT_PHOTO} alt="왕사슴벌레 기본 이미지" className={className} />;
+    return <img src={kingStagDefaultPhoto(sex)} alt={`왕사슴벌레 ${isFemaleStag(sex) ? "암컷" : "수컷"} 기본 이미지`} className={className} />;
   if (!species || err) return (
     <div className={(className || "") + " sp-ph"}><span>{species || "종 미입력"}</span></div>
   );
@@ -1041,7 +1044,7 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
             <img src={f.photo} alt="" className="photo-prev" />
           ) : isKingStagSpecies(f.species) ? (
             <div className="photo-empty" style={{position:"relative",padding:0,overflow:"hidden"}}>
-              <img src={KING_STAG_DEFAULT_PHOTO} alt="왕사슴벌레 기본 이미지" className="photo-prev" />
+              <img src={kingStagDefaultPhoto(f.sex)} alt={`왕사슴벌레 ${isFemaleStag(f.sex) ? "암컷" : "수컷"} 기본 이미지`} className="photo-prev" />
               <span style={{position:"absolute",bottom:6,right:6,background:"#fffE",borderRadius:6,padding:"4px 7px",fontSize:11,color:"#34271B"}}>
                 {photoBusy ? "처리 중…" : "📷 내 사진 올리기"}
               </span>
@@ -3080,7 +3083,7 @@ function App() {
                             {myLines > 0 && <em> 라인 {myLines}</em>}
                           </div>
                         </div>
-                        <SpeciesPhoto photo={p.photo} species={p.species} className="card-thumb" />
+                        <SpeciesPhoto photo={p.photo} species={p.species} sex={p.sex} className="card-thumb" />
                       </div>
                     );
                   }}</Sortable>
@@ -3236,7 +3239,7 @@ function App() {
             </div>
 
             <div className="bcard">
-              <SpeciesPhoto photo={p.photo} species={p.species} className="bc-photo" />
+              <SpeciesPhoto photo={p.photo} species={p.species} sex={p.sex} className="bc-photo" />
               <div className="bc-head serif">BREEDING CARD</div>
               <div className="bc-species serif">{p.species || "종 미입력"}</div>
               <div className="bc-sub">{[p.line, p.gen, p.origin, p.sex].filter(Boolean).join(" · ")}</div>

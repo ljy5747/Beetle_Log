@@ -226,7 +226,7 @@
                             {myLines > 0 && <em> 라인 {myLines}</em>}
                           </div>
                         </div>
-                        <SpeciesPhoto photo={p.photo} species={p.species} className="card-thumb" />
+                        <SpeciesPhoto photo={p.photo} species={p.species} sex={p.sex} className="card-thumb" />
                       </div>
                     );
                   }}</Sortable>

@@ -11,7 +11,7 @@
             </div>
 
             <div className="bcard">
-              <SpeciesPhoto photo={p.photo} species={p.species} className="bc-photo" />
+              <SpeciesPhoto photo={p.photo} species={p.species} sex={p.sex} className="bc-photo" />
               <div className="bc-head serif">BREEDING CARD</div>
               <div className="bc-species serif">{p.species || "종 미입력"}</div>
               <div className="bc-sub">{[p.line, p.gen, p.origin, p.sex].filter(Boolean).join(" · ")}</div>

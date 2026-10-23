@@ -44,6 +44,13 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
         <label className="photo-pick">
           {f.photo ? (
             <img src={f.photo} alt="" className="photo-prev" />
+          ) : isKingStagSpecies(f.species) ? (
+            <div className="photo-empty" style={{position:"relative",padding:0,overflow:"hidden"}}>
+              <img src={kingStagDefaultPhoto(f.sex)} alt={`왕사슴벌레 ${isFemaleStag(f.sex) ? "암컷" : "수컷"} 기본 이미지`} className="photo-prev" />
+              <span style={{position:"absolute",bottom:6,right:6,background:"#fffE",borderRadius:6,padding:"4px 7px",fontSize:11,color:"#34271B"}}>
+                {photoBusy ? "처리 중…" : "📷 내 사진 올리기"}
+              </span>
+            </div>
           ) : (
             <div className="photo-empty">{photoBusy ? "처리 중…" : "📷 사진 추가 (탭하여 선택)"}</div>
           )}
