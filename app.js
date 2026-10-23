@@ -122,12 +122,12 @@ async function cloudUpload(syncKey, data) {
   return true;
 }
 /* 계정별 마지막 클라우드 스냅샷을 동기화 충돌 탐지의 기준으로 보관 */
-async function cloudDownload(syncKey) {
+async function cloudDownload(syncKey, trackBaseline = true) {
   const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/beetlelog_data?user_key=eq.${encodeURIComponent(syncKey)}&select=data,updated_at`, { method: 'GET' });
   if (!res.ok) throw new Error(`불러오기 실패 (${res.status})`);
   const rows = await res.json();
   const row = rows.length ? rows[0] : null;
-  if (isAccountKey(syncKey)) {
+  if (isAccountKey(syncKey) && trackBaseline) {
     beetleAccountBaseline = row?.data || null;
     beetleAccountBaselineKey = syncKey;
   }
@@ -2291,7 +2291,7 @@ function App() {
         Date.now()-state.lastWrite < 7000) return;
       running=true;
       try{
-        const row=await cloudDownload(as.key);
+        const row=await cloudDownload(as.key,false);
         if(cancelled || !row?.data || !Array.isArray(row.data.individuals))return;
         const local=liveSyncRef.current.data;
         if(local && dataWeight(local)>dataWeight(row.data))return;
@@ -2303,6 +2303,8 @@ function App() {
             feedBrands:Array.isArray(row.data.feedBrands)?row.data.feedBrands:[]};
           setData(fresh);
           liveSyncRef.current.data=fresh;
+          beetleAccountBaseline=row.data;
+          beetleAccountBaselineKey=as.key;
           await idbSet(KEY,JSON.stringify(fresh));
         }
       }catch(e){/* Offline: retain local data and try again next time. */}
