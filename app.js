@@ -700,7 +700,7 @@ function LineWeightChart({ kids }) {
 
 /* ════════════════════ 사진 (본인 사진 → 종 디폴트 → 종 이름 빈칸) ════════════════════
    종 디폴트 사진: icons/species/<종이름>.png 로 올리면 자동 표시됩니다 */
-const KING_STAG_DEFAULT_PHOTO = "icons/species/king-stag-default.svg";
+const KING_STAG_DEFAULT_PHOTO = "icons/species/king-stag-default.jpg";
 const isKingStagSpecies = (species) =>
   /왕사슴벌레|dorcus[ ._-]*hopei|binodulosus|オオクワ|オオクワガタ/i.test(String(species || ""));
 function SpeciesPhoto({ photo, species, className }) {
