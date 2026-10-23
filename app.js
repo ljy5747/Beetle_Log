@@ -83,25 +83,55 @@ async function cloudFetch(syncKey, url, opts) {
   }
   return res;
 }
-/* 동기화 키로 서버에 데이터 올리기 (있으면 갱신, 없으면 생성) */
+/* 연결된 KML 항목은 서버의 최신 버전과 이전에 내려받은 기록을 3-way merge.
+   새로고침하지 않은 예전 기기의 업로드가 KML 수정을 되돌리지 못하게 합니다. */
+let beetleAccountBaseline = null;
+let beetleAccountBaselineKey = '';
+let beetleUploadQueue = Promise.resolve();
 async function cloudUpload(syncKey, data) {
+  if (isAccountKey(syncKey)) {
+    const request = async () => {
+      const baseline = beetleAccountBaselineKey === syncKey ? beetleAccountBaseline : null;
+      const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/rpc/beetlelog_save_preserving_kml`, {
+        method: 'POST',
+        body: JSON.stringify({ p_data: data, p_baseline: baseline }),
+      });
+      if (!res.ok) {
+        const errorText = await res.text().catch(()=>'');
+        throw new Error('KML 안전 동기화 실패 (' + res.status + ') ' + errorText.slice(0,180));
+      }
+      const saved = await res.json();
+      if (saved?.data) {
+        beetleAccountBaseline = saved.data;
+        beetleAccountBaselineKey = syncKey;
+      }
+      return true;
+    };
+    const work = beetleUploadQueue.catch(()=>{}).then(request);
+    beetleUploadQueue = work;
+    return work;
+  }
+  /* 예전 동기화 키 방식은 기존 동작을 유지합니다. */
   const body = JSON.stringify([{ user_key: syncKey, data, updated_at: new Date().toISOString() }]);
   const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/beetlelog_data?on_conflict=user_key`, {
-    method: "POST",
-    extra: { "Prefer": "resolution=merge-duplicates" },
+    method: 'POST',
+    extra: { Prefer: 'resolution=merge-duplicates' },
     body,
   });
   if (!res.ok) throw new Error(`업로드 실패 (${res.status})`);
   return true;
 }
-/* 동기화 키로 서버에서 데이터 받기 (없으면 null) */
+/* 계정별 마지막 클라우드 스냅샷을 동기화 충돌 탐지의 기준으로 보관 */
 async function cloudDownload(syncKey) {
-  const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/beetlelog_data?user_key=eq.${encodeURIComponent(syncKey)}&select=data,updated_at`, {
-    method: "GET",
-  });
+  const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/beetlelog_data?user_key=eq.${encodeURIComponent(syncKey)}&select=data,updated_at`, { method: 'GET' });
   if (!res.ok) throw new Error(`불러오기 실패 (${res.status})`);
   const rows = await res.json();
-  return rows.length ? rows[0] : null;
+  const row = rows.length ? rows[0] : null;
+  if (isAccountKey(syncKey)) {
+    beetleAccountBaseline = row?.data || null;
+    beetleAccountBaselineKey = syncKey;
+  }
+  return row;
 }
 
 /* ════════════════════ 구글 로그인 (Supabase Auth) ════════════════════ */
