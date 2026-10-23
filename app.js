@@ -2277,6 +2277,44 @@ function App() {
   };
 
   const autoSyncRef = useRef({ on: false, key: "", timer: null });
+  const liveSyncRef = useRef({data:null,modal:null,settingsOpen:false,lastWrite:0});
+  liveSyncRef.current.data = data;
+  liveSyncRef.current.modal = modal;
+  liveSyncRef.current.settingsOpen = settingsOpen;
+  useEffect(() => {
+    if (!authUser?.email) return;
+    let cancelled = false, running = false;
+    const refresh = async () => {
+      const state=liveSyncRef.current, as=autoSyncRef.current;
+      if(cancelled || running || document.hidden || !as.on || !as.key ||
+        as.timer || state.modal || state.settingsOpen ||
+        Date.now()-state.lastWrite < 7000) return;
+      running=true;
+      try{
+        const row=await cloudDownload(as.key);
+        if(cancelled || !row?.data || !Array.isArray(row.data.individuals))return;
+        const local=liveSyncRef.current.data;
+        if(local && dataWeight(local)>dataWeight(row.data))return;
+        if(JSON.stringify(local)!==JSON.stringify(row.data)){
+          const fresh={individuals:row.data.individuals,
+            lines:Array.isArray(row.data.lines)?row.data.lines:[],
+            parents:Array.isArray(row.data.parents)?row.data.parents:[],
+            customEvents:Array.isArray(row.data.customEvents)?row.data.customEvents:[],
+            feedBrands:Array.isArray(row.data.feedBrands)?row.data.feedBrands:[]};
+          setData(fresh);
+          liveSyncRef.current.data=fresh;
+          await idbSet(KEY,JSON.stringify(fresh));
+        }
+      }catch(e){/* Offline: retain local data and try again next time. */}
+      finally{running=false;}
+    };
+    const timer=setInterval(refresh,8000);
+    const onVisible=()=>{if(!document.hidden)refresh();};
+    window.addEventListener('focus',refresh);
+    document.addEventListener('visibilitychange',onVisible);
+    return ()=>{cancelled=true;clearInterval(timer);window.removeEventListener('focus',refresh);
+      document.removeEventListener('visibilitychange',onVisible);};
+  },[authUser?.email]);
   const fileRef = useRef(null);
   const xlsxRef = useRef(null);
   const toastT = useRef(null);
@@ -2542,6 +2580,8 @@ function App() {
   const say = (msg) => { setToast(msg); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(null), 2400); };
 
   const persist = async (next) => {
+    liveSyncRef.current.data=next;
+    liveSyncRef.current.lastWrite=Date.now();
     setData(next);
     try { await idbSet(KEY, JSON.stringify(next)); }
     catch (e) { say("⚠️ 저장 실패 — 네트워크를 확인해주세요"); }
@@ -2550,7 +2590,8 @@ function App() {
     if (as.on && as.key) {
       clearTimeout(as.timer);
       as.timer = setTimeout(() => {
-        cloudUpload(as.key, next).catch(() => {/* 실패해도 조용히 — 다음 변경 때 재시도 */});
+        as.timer=null;
+        cloudUpload(as.key, next).catch(() => { say('⚠️ 서버 저장 실패 — 다시 시도해주세요.'); });
       }, 2000);
     }
   };
