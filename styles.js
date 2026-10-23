@@ -193,7 +193,7 @@ box-shadow:0 2px 14px rgba(23,21,19,.07);text-align:center}
 border-radius:999px;padding:3px 12px;letter-spacing:.06em}
 .bc-lineage{margin-top:10px;font-size:12px;color:var(--gold-d);font-weight:600}
 .bc-lineage b{font-weight:800}
-.bc-photo{width:100%;max-height:280px;object-fit:cover;border-radius:6px;margin-bottom:16px;border:1px solid var(--line)}
+.bc-photo{display:block;width:100%;height:clamp(180px,60vw,280px);object-fit:contain;object-position:center;background:#fff;border-radius:6px;margin-bottom:16px;border:1px solid var(--line)}
 
 /* ═══════════ [11] 사육이력 표 (성충 상세) ═══════════ */
 .dtable{background:var(--surf);border:1px solid var(--line);border-radius:6px;overflow:hidden}
