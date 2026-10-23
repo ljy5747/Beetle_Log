@@ -2542,7 +2542,9 @@ function App() {
                   setData(merged);
                   try { await idbSet(KEY, JSON.stringify(merged)); } catch (e) {}
                 } else {
-                  /* 서버가 로컬보다 적음 → 로컬(최신)을 지키고, 서버를 로컬로 덮어씀 */
+                  /* 더 큰 로컬 백업은 보존하되, KML 연동 항목의 오래된 값이 서버 값을 덮어쓰지 않도록 기준점을 로컬로 둡니다. */
+                  beetleAccountBaseline=base;
+                  beetleAccountBaselineKey=myKey;
                   cloudUpload(myKey, base).catch(() => {});
                   setTimeout(() => say("이 기기 기록이 더 최신이라 그대로 두고 서버에 올렸어요"), 1200);
                 }
