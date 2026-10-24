@@ -41,7 +41,9 @@ function App() {
     finally { setNotificationSaving(false); }
   };
 
-  const autoSyncRef = useRef({ on: false, key: "", timer: null });
+  const autoSyncRef = useRef({ on: false, key: "", timer: null, dirty:false, revision:0, uploading:false });
+  const liveSyncRef = useRef({data:null,modal:null,settingsOpen:false});
+  liveSyncRef.current={data,modal,settingsOpen};
   const fileRef = useRef(null);
   const xlsxRef = useRef(null);
   const toastT = useRef(null);
@@ -73,14 +75,14 @@ function App() {
     /* 1) 마지막 상태를 클라우드에 저장 (실패해도 아래 스냅샷으로 복구 가능) */
     const key = autoSyncRef.current.key || syncKey;
     clearTimeout(autoSyncRef.current.timer);
-    if (w > 0 && key) { try { await cloudUpload(key, data); } catch (e) { say("⚠️ 클라우드 저장 실패 — 되돌리기로 복구할 수 있어요"); } }
+    if (w > 0 && key) { try { await cloudUpload(key, data); } catch (e) { say("⚠️ "+e.message); return; } }
     /* 2) 기기 안 백업 스냅샷 (되돌리기용) */
     if (w > 0) await snapSave(data, "로그아웃 직전");
     /* 3) 로그아웃 + 로컬 비우기 */
     await authSignOut();
-    autoSyncRef.current.on = false; autoSyncRef.current.key = "";
+    autoSyncRef.current.on = false; autoSyncRef.current.key = ""; autoSyncRef.current.dirty=false; cloudSnapshots.clear();
     setAuthUser(null); setSyncKey("");
-    try { await idbSet("beetle-sync-key", ""); await idbSet("beetle-owner", ""); } catch (e) {}
+    try { await idbSet("beetle-sync-key", ""); await idbSet("beetle-owner", ""); await idbSet("beetle-cloud-baseline", ""); } catch (e) {}
     const empty = { individuals: [], lines: [], parents: [], customEvents: [], feedBrands: [] };
     setData(empty);
     try { await idbSet(KEY, JSON.stringify(empty)); } catch (e) {}
@@ -246,6 +248,7 @@ function App() {
             autoSyncRef.current.key = myKey;
             /* 앱 켤 때: 서버에 더 최신 데이터가 있으면 받아오기 (안전장치 포함) */
             try {
+              let savedBase=null;try{savedBase=JSON.parse((await idbGet("beetle-cloud-baseline"))||"null");}catch(e){}
               const row = await cloudDownload(myKey);
               if (row && row.data && Array.isArray(row.data.individuals)) {
                 /* 남의 기록이면 로컬 분량을 0으로 취급 → 서버 것으로 무조건 교체 */
@@ -255,21 +258,23 @@ function App() {
                   try { await idbSet("beetle-local-backup", JSON.stringify({ at: Date.now(), weight: localW, data: base })); } catch (e) {}
                   await snapSave(base, "동기화 직전");
                 }
-                /* 서버가 로컬보다 적으면(사고 의심) 자동 덮어쓰기 안 함 — 기준 강화 */
-                if (serverW >= localW || localW === 0) {
-                  const merged = {
-                    individuals: row.data.individuals,
+                /* Merge offline edits against the last confirmed server snapshot. */
+                if (row.data) {
+                  const server = {
+                    ...row.data,individuals: row.data.individuals,
                     lines: Array.isArray(row.data.lines) ? row.data.lines : [],
                     parents: Array.isArray(row.data.parents) ? row.data.parents : [],
                     customEvents: Array.isArray(row.data.customEvents) ? row.data.customEvents : [],
                     feedBrands: Array.isArray(row.data.feedBrands) ? row.data.feedBrands : [],
                   };
-                  setData(merged);
+                  let merged=server;
+                  if(!foreign&&((savedBase?.key===myKey&&savedBase.row?.data)||autoSyncRef.current.dirty)){
+                    try{merged=mergeCloudData(savedBase?.key===myKey?savedBase.row.data:base,autoSyncRef.current.dirty?liveSyncRef.current.data:base,server);}
+                    catch(error){if(savedBase?.row)await rememberCloudSnapshot(myKey,savedBase.row);autoSyncRef.current.dirty=true;say("⚠️ "+error.message);throw error;}
+                  }
+                  liveSyncRef.current.data=merged;setData(merged);
                   try { await idbSet(KEY, JSON.stringify(merged)); } catch (e) {}
-                } else {
-                  /* 서버가 로컬보다 적음 → 로컬(최신)을 지키고, 서버를 로컬로 덮어씀 */
-                  cloudUpload(myKey, base).catch(() => {});
-                  setTimeout(() => say("이 기기 기록이 더 최신이라 그대로 두고 서버에 올렸어요"), 1200);
+                  if(!cloudEqual(merged,row.data))await persist(merged);
                 }
               } else if (foreign) {
                 /* 서버도 비어있고 로컬은 남의 기록 → 올리지 말고 비움 */
@@ -306,19 +311,47 @@ function App() {
 
   const say = (msg) => { setToast(msg); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(null), 2400); };
 
-  const persist = async (next) => {
-    setData(next);
-    try { await idbSet(KEY, JSON.stringify(next)); }
-    catch (e) { say("⚠️ 저장 실패 — 네트워크를 확인해주세요"); }
-    /* 자동 동기화 켜져 있으면 2초 뒤 서버에 올림 (연속 변경은 묶어서 한 번만) */
-    const as = autoSyncRef.current;
-    if (as.on && as.key) {
-      clearTimeout(as.timer);
-      as.timer = setTimeout(() => {
-        cloudUpload(as.key, next).catch(() => {/* 실패해도 조용히 — 다음 변경 때 재시도 */});
-      }, 2000);
-    }
+  const applyCloudUpload = async () => {
+    const as=autoSyncRef.current;if(as.uploading||!as.on||!as.key||!as.dirty)return;
+    const next=liveSyncRef.current.data,revision=as.revision,key=as.key;let succeeded=false;as.uploading=true;
+    try{
+      const merged=await cloudUpload(key,next);
+      if(!as.on||as.key!==key)return;
+      const current=liveSyncRef.current.data;
+      const result=as.revision===revision?merged:mergeCloudData(next,current,merged);
+      liveSyncRef.current.data=result;setData(result);await idbSet(KEY,JSON.stringify(result));
+      if(as.revision===revision)as.dirty=false;
+      succeeded=true;
+    }catch(e){say("⚠️ "+(e.message||"클라우드 저장 실패 — 기기 기록은 유지됩니다"));}
+    finally{as.uploading=false;if(succeeded&&as.dirty){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}}
   };
+  const persist = async (next) => {
+    liveSyncRef.current.data=next;setData(next);
+    const as=autoSyncRef.current;as.dirty=true;as.revision++;
+    try { await idbSet(KEY,JSON.stringify(next)); }catch(e){say("⚠️ 기기 저장 실패 — 저장 공간을 확인해 주세요");}
+    if(as.on&&as.key){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}
+  };
+  // Pull KML edits while idle, and never replace an open form or unsaved local edits.
+  useEffect(()=>{
+    let busy=false,stopped=false;
+    const pull=async()=>{
+      const as=autoSyncRef.current,live=liveSyncRef.current;
+      if(stopped||busy||!as.on||!as.key||as.dirty||as.uploading||live.modal||live.settingsOpen||document.hidden||!live.data)return;
+      if(document.activeElement?.matches?.('input,select,textarea,[contenteditable="true"]'))return;
+      const revision=as.revision,key=as.key;busy=true;
+      try{
+        const row=await cloudDownload(key,{remember:false});
+        if(!row||stopped||as.key!==key||as.dirty||as.revision!==revision||liveSyncRef.current.modal)return;
+        const remembering=rememberCloudSnapshot(key,row);
+        if(!cloudEqual(liveSyncRef.current.data,row.data)){
+          liveSyncRef.current.data=row.data;setData(row.data);await idbSet(KEY,JSON.stringify(row.data));
+        }
+        await remembering;
+      }catch(e){}finally{busy=false;}
+    };
+    const timer=setInterval(pull,8000);window.addEventListener("focus",pull);document.addEventListener("visibilitychange",pull);
+    return()=>{stopped=true;clearInterval(timer);window.removeEventListener("focus",pull);document.removeEventListener("visibilitychange",pull);};
+  },[]);
 
   const updateInd = (id, patch) =>
     persist({ ...data, individuals: data.individuals.map((i) => (i.id === id ? { ...i, ...patch } : i)) });
@@ -509,9 +542,11 @@ function App() {
     setSyncBusy(true);
     try {
       await saveSyncKey(k);
-      await cloudUpload(k, data);
+      const merged=await cloudUpload(k, data);
+      liveSyncRef.current.data=merged;setData(merged);await idbSet(KEY,JSON.stringify(merged));
+      autoSyncRef.current.dirty=false;
       say("☁︎ 클라우드에 올렸어요");
-    } catch (e) { say("⚠️ 업로드 실패 — 인터넷을 확인해주세요"); }
+    } catch (e) { say("⚠️ "+(e.message||"업로드 실패")); }
     setSyncBusy(false);
   };
   const doDownload = async () => {
@@ -519,6 +554,7 @@ function App() {
     if (!k) return say("먼저 동기화 키를 입력해주세요");
     setSyncBusy(true);
     try {
+      if(autoSyncRef.current.dirty&&dataWeight(liveSyncRef.current.data)>0)await snapSave(liveSyncRef.current.data,"클라우드 불러오기 직전");
       const row = await cloudDownload(k);
       if (!row || !row.data || !Array.isArray(row.data.individuals)) {
         say("이 키로 저장된 데이터가 없어요");
@@ -558,4 +594,5 @@ function App() {
     );
     return <span className="pl-wrap">{one(fa, true)}<i className="pl-x">×</i>{one(mo, false)}</span>;
   };
+
 

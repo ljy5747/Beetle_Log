@@ -83,55 +83,68 @@ async function cloudFetch(syncKey, url, opts) {
   }
   return res;
 }
-/* 연결된 KML 항목은 서버의 최신 버전과 이전에 내려받은 기록을 3-way merge.
-   새로고침하지 않은 예전 기기의 업로드가 KML 수정을 되돌리지 못하게 합니다. */
-let beetleAccountBaseline = null;
-let beetleAccountBaselineKey = '';
-let beetleUploadQueue = Promise.resolve();
-async function cloudUpload(syncKey, data) {
-  if (isAccountKey(syncKey)) {
-    const request = async () => {
-      const baseline = beetleAccountBaselineKey === syncKey ? beetleAccountBaseline : null;
-      const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/rpc/beetlelog_save_preserving_kml`, {
-        method: 'POST',
-        body: JSON.stringify({ p_data: data, p_baseline: baseline }),
-      });
-      if (!res.ok) {
-        const errorText = await res.text().catch(()=>'');
-        throw new Error('KML 안전 동기화 실패 (' + res.status + ') ' + errorText.slice(0,180));
-      }
-      const saved = await res.json();
-      if (saved?.data) {
-        beetleAccountBaseline = saved.data;
-        beetleAccountBaselineKey = syncKey;
-      }
-      return true;
-    };
-    const work = beetleUploadQueue.catch(()=>{}).then(request);
-    beetleUploadQueue = work;
-    return work;
+/* Server snapshots make KML and other-device edits safe to merge. */
+const cloudSnapshots = new Map(), cloudUploadQueues = new Map();
+const cloudCopy = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+const cloudEqual = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+function mergeCloudData(base, local, remote, path="기록") {
+  if (cloudEqual(local,base)) return cloudCopy(remote);
+  if (cloudEqual(remote,base) || cloudEqual(local,remote)) return cloudCopy(local);
+  const object = v => v && typeof v === "object" && !Array.isArray(v);
+  if (object(base) && object(local) && object(remote)) {
+    const out = {};
+    for (const key of new Set([...Object.keys(base),...Object.keys(local),...Object.keys(remote)])) {
+      const value = mergeCloudData(base[key],local[key],remote[key],path+"."+key);
+      if (value !== undefined) out[key]=value;
+    }
+    return out;
   }
-  /* 예전 동기화 키 방식은 기존 동작을 유지합니다. */
-  const body = JSON.stringify([{ user_key: syncKey, data, updated_at: new Date().toISOString() }]);
-  const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/beetlelog_data?on_conflict=user_key`, {
-    method: 'POST',
-    extra: { Prefer: 'resolution=merge-duplicates' },
-    body,
-  });
-  if (!res.ok) throw new Error(`업로드 실패 (${res.status})`);
-  return true;
+  if ([base,local,remote].every(Array.isArray)) {
+    if ([base,local,remote].every(a=>a.every(v=>object(v)&&typeof v.id==="string") && new Set(a.map(v=>v.id)).size===a.length)) {
+      const maps=[base,local,remote].map(a=>new Map(a.map(v=>[v.id,v]))), out=[];
+      for (const id of new Set([...local.map(v=>v.id),...remote.map(v=>v.id),...base.map(v=>v.id)])) {
+        const value=mergeCloudData(maps[0].get(id),maps[1].get(id),maps[2].get(id),path+"["+id+"]");
+        if (value !== undefined) out.push(value);
+      }
+      return out;
+    }
+    if ([base,local,remote].every(a=>a.every(v=>typeof v==="string"))) {
+      return [...new Set([...local,...remote])].filter(v=>mergeCloudData(base.includes(v),local.includes(v),remote.includes(v),path));
+    }
+  }
+  throw new Error("다른 앱에서 같은 항목을 수정했어요 ("+path+"). 기기 기록은 유지됩니다. 백업 후 클라우드 불러오기로 최신 내용을 확인해 주세요.");
 }
-/* 계정별 마지막 클라우드 스냅샷을 동기화 충돌 탐지의 기준으로 보관 */
-async function cloudDownload(syncKey, trackBaseline = true) {
-  const res = await cloudFetch(syncKey, `${SUPABASE_URL}/rest/v1/beetlelog_data?user_key=eq.${encodeURIComponent(syncKey)}&select=data,updated_at`, { method: 'GET' });
-  if (!res.ok) throw new Error(`불러오기 실패 (${res.status})`);
-  const rows = await res.json();
-  const row = rows.length ? rows[0] : null;
-  if (isAccountKey(syncKey) && trackBaseline) {
-    beetleAccountBaseline = row?.data || null;
-    beetleAccountBaselineKey = syncKey;
+async function rememberCloudSnapshot(key,row){ if(row)cloudSnapshots.set(key,cloudCopy(row));else cloudSnapshots.delete(key);try{await idbSet("beetle-cloud-baseline",JSON.stringify({key,row}));}catch(e){} }
+async function readCloudRow(syncKey) {
+  const res=await cloudFetch(syncKey,`${SUPABASE_URL}/rest/v1/beetlelog_data?user_key=eq.${encodeURIComponent(syncKey)}&select=data,updated_at`,{method:"GET"});
+  if(!res.ok)throw new Error(`불러오기 실패 (${res.status})`);
+  const rows=await res.json();return rows[0]||null;
+}
+async function writeMergedCloud(syncKey,local) {
+  const baseline=cloudSnapshots.get(syncKey);
+  for(let attempt=0;attempt<3;attempt++){
+    const row=await readCloudRow(syncKey);
+    if(row&&!baseline)throw new Error("먼저 클라우드 불러오기를 해주세요. 기기 기록은 유지됩니다.");
+    if(!row&&baseline)throw new Error("서버 기록이 없어졌어요. 기기 백업을 확인한 뒤 다시 연결해 주세요.");
+    const merged=row?mergeCloudData(baseline.data,local,row.data):local;
+    const query=row?`?user_key=eq.${encodeURIComponent(syncKey)}&updated_at=eq.${encodeURIComponent(row.updated_at)}`:"?on_conflict=user_key";
+    const res=await cloudFetch(syncKey,SUPABASE_URL+"/rest/v1/beetlelog_data"+query,{
+      method:row?"PATCH":"POST",extra:{Prefer:row?"return=representation":"resolution=ignore-duplicates,return=representation"},
+      body:JSON.stringify(row?{data:merged,updated_at:new Date().toISOString()}:[{user_key:syncKey,data:merged,updated_at:new Date().toISOString()}])
+    });
+    if(!res.ok){let message="";try{message=(await res.json()).message||"";}catch(e){}throw new Error(message||`업로드 실패 (${res.status})`);}
+    const saved=(await res.json())[0];
+    if(saved){await rememberCloudSnapshot(syncKey,saved);return saved.data;}
   }
-  return row;
+  throw new Error("다른 기기에서 저장 중이에요. 잠시 뒤 다시 저장해 주세요. 기기 기록은 유지됩니다.");
+}
+function cloudUpload(syncKey,data){
+ const local=cloudCopy(data),previous=cloudUploadQueues.get(syncKey)||Promise.resolve();
+ const work=previous.catch(()=>{}).then(()=>writeMergedCloud(syncKey,local));
+ cloudUploadQueues.set(syncKey,work);return work.finally(()=>{if(cloudUploadQueues.get(syncKey)===work)cloudUploadQueues.delete(syncKey);});
+}
+async function cloudDownload(syncKey,options={}){
+ const row=await readCloudRow(syncKey);if(options.remember!==false)await rememberCloudSnapshot(syncKey,row);return row;
 }
 
 /* ════════════════════ 구글 로그인 (Supabase Auth) ════════════════════ */
@@ -2292,47 +2305,9 @@ function App() {
     finally { setNotificationSaving(false); }
   };
 
-  const autoSyncRef = useRef({ on: false, key: "", timer: null });
-  const liveSyncRef = useRef({data:null,modal:null,settingsOpen:false,lastWrite:0});
-  liveSyncRef.current.data = data;
-  liveSyncRef.current.modal = modal;
-  liveSyncRef.current.settingsOpen = settingsOpen;
-  useEffect(() => {
-    if (!authUser?.email) return;
-    let cancelled = false, running = false;
-    const refresh = async () => {
-      const state=liveSyncRef.current, as=autoSyncRef.current;
-      if(cancelled || running || document.hidden || !as.on || !as.key ||
-        as.timer || state.modal || state.settingsOpen ||
-        Date.now()-state.lastWrite < 7000) return;
-      running=true;
-      try{
-        const row=await cloudDownload(as.key,false);
-        if(cancelled || !row?.data || !Array.isArray(row.data.individuals))return;
-        const local=liveSyncRef.current.data;
-        if(local && dataWeight(local)>dataWeight(row.data))return;
-        if(JSON.stringify(local)!==JSON.stringify(row.data)){
-          const fresh={individuals:row.data.individuals,
-            lines:Array.isArray(row.data.lines)?row.data.lines:[],
-            parents:Array.isArray(row.data.parents)?row.data.parents:[],
-            customEvents:Array.isArray(row.data.customEvents)?row.data.customEvents:[],
-            feedBrands:Array.isArray(row.data.feedBrands)?row.data.feedBrands:[]};
-          setData(fresh);
-          liveSyncRef.current.data=fresh;
-          beetleAccountBaseline=row.data;
-          beetleAccountBaselineKey=as.key;
-          await idbSet(KEY,JSON.stringify(fresh));
-        }
-      }catch(e){/* Offline: retain local data and try again next time. */}
-      finally{running=false;}
-    };
-    const timer=setInterval(refresh,8000);
-    const onVisible=()=>{if(!document.hidden)refresh();};
-    window.addEventListener('focus',refresh);
-    document.addEventListener('visibilitychange',onVisible);
-    return ()=>{cancelled=true;clearInterval(timer);window.removeEventListener('focus',refresh);
-      document.removeEventListener('visibilitychange',onVisible);};
-  },[authUser?.email]);
+  const autoSyncRef = useRef({ on: false, key: "", timer: null, dirty:false, revision:0, uploading:false });
+  const liveSyncRef = useRef({data:null,modal:null,settingsOpen:false});
+  liveSyncRef.current={data,modal,settingsOpen};
   const fileRef = useRef(null);
   const xlsxRef = useRef(null);
   const toastT = useRef(null);
@@ -2364,14 +2339,14 @@ function App() {
     /* 1) 마지막 상태를 클라우드에 저장 (실패해도 아래 스냅샷으로 복구 가능) */
     const key = autoSyncRef.current.key || syncKey;
     clearTimeout(autoSyncRef.current.timer);
-    if (w > 0 && key) { try { await cloudUpload(key, data); } catch (e) { say("⚠️ 클라우드 저장 실패 — 되돌리기로 복구할 수 있어요"); } }
+    if (w > 0 && key) { try { await cloudUpload(key, data); } catch (e) { say("⚠️ "+e.message); return; } }
     /* 2) 기기 안 백업 스냅샷 (되돌리기용) */
     if (w > 0) await snapSave(data, "로그아웃 직전");
     /* 3) 로그아웃 + 로컬 비우기 */
     await authSignOut();
-    autoSyncRef.current.on = false; autoSyncRef.current.key = "";
+    autoSyncRef.current.on = false; autoSyncRef.current.key = ""; autoSyncRef.current.dirty=false; cloudSnapshots.clear();
     setAuthUser(null); setSyncKey("");
-    try { await idbSet("beetle-sync-key", ""); await idbSet("beetle-owner", ""); } catch (e) {}
+    try { await idbSet("beetle-sync-key", ""); await idbSet("beetle-owner", ""); await idbSet("beetle-cloud-baseline", ""); } catch (e) {}
     const empty = { individuals: [], lines: [], parents: [], customEvents: [], feedBrands: [] };
     setData(empty);
     try { await idbSet(KEY, JSON.stringify(empty)); } catch (e) {}
@@ -2537,6 +2512,7 @@ function App() {
             autoSyncRef.current.key = myKey;
             /* 앱 켤 때: 서버에 더 최신 데이터가 있으면 받아오기 (안전장치 포함) */
             try {
+              let savedBase=null;try{savedBase=JSON.parse((await idbGet("beetle-cloud-baseline"))||"null");}catch(e){}
               const row = await cloudDownload(myKey);
               if (row && row.data && Array.isArray(row.data.individuals)) {
                 /* 남의 기록이면 로컬 분량을 0으로 취급 → 서버 것으로 무조건 교체 */
@@ -2546,23 +2522,23 @@ function App() {
                   try { await idbSet("beetle-local-backup", JSON.stringify({ at: Date.now(), weight: localW, data: base })); } catch (e) {}
                   await snapSave(base, "동기화 직전");
                 }
-                /* 서버가 로컬보다 적으면(사고 의심) 자동 덮어쓰기 안 함 — 기준 강화 */
-                if (serverW >= localW || localW === 0) {
-                  const merged = {
-                    individuals: row.data.individuals,
+                /* Merge offline edits against the last confirmed server snapshot. */
+                if (row.data) {
+                  const server = {
+                    ...row.data,individuals: row.data.individuals,
                     lines: Array.isArray(row.data.lines) ? row.data.lines : [],
                     parents: Array.isArray(row.data.parents) ? row.data.parents : [],
                     customEvents: Array.isArray(row.data.customEvents) ? row.data.customEvents : [],
                     feedBrands: Array.isArray(row.data.feedBrands) ? row.data.feedBrands : [],
                   };
-                  setData(merged);
+                  let merged=server;
+                  if(!foreign&&((savedBase?.key===myKey&&savedBase.row?.data)||autoSyncRef.current.dirty)){
+                    try{merged=mergeCloudData(savedBase?.key===myKey?savedBase.row.data:base,autoSyncRef.current.dirty?liveSyncRef.current.data:base,server);}
+                    catch(error){if(savedBase?.row)await rememberCloudSnapshot(myKey,savedBase.row);autoSyncRef.current.dirty=true;say("⚠️ "+error.message);throw error;}
+                  }
+                  liveSyncRef.current.data=merged;setData(merged);
                   try { await idbSet(KEY, JSON.stringify(merged)); } catch (e) {}
-                } else {
-                  /* 더 큰 로컬 백업은 보존하되, KML 연동 항목의 오래된 값이 서버 값을 덮어쓰지 않도록 기준점을 로컬로 둡니다. */
-                  beetleAccountBaseline=base;
-                  beetleAccountBaselineKey=myKey;
-                  cloudUpload(myKey, base).catch(() => {});
-                  setTimeout(() => say("이 기기 기록이 더 최신이라 그대로 두고 서버에 올렸어요"), 1200);
+                  if(!cloudEqual(merged,row.data))await persist(merged);
                 }
               } else if (foreign) {
                 /* 서버도 비어있고 로컬은 남의 기록 → 올리지 말고 비움 */
@@ -2599,22 +2575,47 @@ function App() {
 
   const say = (msg) => { setToast(msg); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(null), 2400); };
 
-  const persist = async (next) => {
-    liveSyncRef.current.data=next;
-    liveSyncRef.current.lastWrite=Date.now();
-    setData(next);
-    try { await idbSet(KEY, JSON.stringify(next)); }
-    catch (e) { say("⚠️ 저장 실패 — 네트워크를 확인해주세요"); }
-    /* 자동 동기화 켜져 있으면 2초 뒤 서버에 올림 (연속 변경은 묶어서 한 번만) */
-    const as = autoSyncRef.current;
-    if (as.on && as.key) {
-      clearTimeout(as.timer);
-      as.timer = setTimeout(() => {
-        as.timer=null;
-        cloudUpload(as.key, next).catch(() => { say('⚠️ 서버 저장 실패 — 다시 시도해주세요.'); });
-      }, 2000);
-    }
+  const applyCloudUpload = async () => {
+    const as=autoSyncRef.current;if(as.uploading||!as.on||!as.key||!as.dirty)return;
+    const next=liveSyncRef.current.data,revision=as.revision,key=as.key;let succeeded=false;as.uploading=true;
+    try{
+      const merged=await cloudUpload(key,next);
+      if(!as.on||as.key!==key)return;
+      const current=liveSyncRef.current.data;
+      const result=as.revision===revision?merged:mergeCloudData(next,current,merged);
+      liveSyncRef.current.data=result;setData(result);await idbSet(KEY,JSON.stringify(result));
+      if(as.revision===revision)as.dirty=false;
+      succeeded=true;
+    }catch(e){say("⚠️ "+(e.message||"클라우드 저장 실패 — 기기 기록은 유지됩니다"));}
+    finally{as.uploading=false;if(succeeded&&as.dirty){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}}
   };
+  const persist = async (next) => {
+    liveSyncRef.current.data=next;setData(next);
+    const as=autoSyncRef.current;as.dirty=true;as.revision++;
+    try { await idbSet(KEY,JSON.stringify(next)); }catch(e){say("⚠️ 기기 저장 실패 — 저장 공간을 확인해 주세요");}
+    if(as.on&&as.key){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}
+  };
+  // Pull KML edits while idle, and never replace an open form or unsaved local edits.
+  useEffect(()=>{
+    let busy=false,stopped=false;
+    const pull=async()=>{
+      const as=autoSyncRef.current,live=liveSyncRef.current;
+      if(stopped||busy||!as.on||!as.key||as.dirty||as.uploading||live.modal||live.settingsOpen||document.hidden||!live.data)return;
+      if(document.activeElement?.matches?.('input,select,textarea,[contenteditable="true"]'))return;
+      const revision=as.revision,key=as.key;busy=true;
+      try{
+        const row=await cloudDownload(key,{remember:false});
+        if(!row||stopped||as.key!==key||as.dirty||as.revision!==revision||liveSyncRef.current.modal)return;
+        const remembering=rememberCloudSnapshot(key,row);
+        if(!cloudEqual(liveSyncRef.current.data,row.data)){
+          liveSyncRef.current.data=row.data;setData(row.data);await idbSet(KEY,JSON.stringify(row.data));
+        }
+        await remembering;
+      }catch(e){}finally{busy=false;}
+    };
+    const timer=setInterval(pull,8000);window.addEventListener("focus",pull);document.addEventListener("visibilitychange",pull);
+    return()=>{stopped=true;clearInterval(timer);window.removeEventListener("focus",pull);document.removeEventListener("visibilitychange",pull);};
+  },[]);
 
   const updateInd = (id, patch) =>
     persist({ ...data, individuals: data.individuals.map((i) => (i.id === id ? { ...i, ...patch } : i)) });
@@ -2805,9 +2806,11 @@ function App() {
     setSyncBusy(true);
     try {
       await saveSyncKey(k);
-      await cloudUpload(k, data);
+      const merged=await cloudUpload(k, data);
+      liveSyncRef.current.data=merged;setData(merged);await idbSet(KEY,JSON.stringify(merged));
+      autoSyncRef.current.dirty=false;
       say("☁︎ 클라우드에 올렸어요");
-    } catch (e) { say("⚠️ 업로드 실패 — 인터넷을 확인해주세요"); }
+    } catch (e) { say("⚠️ "+(e.message||"업로드 실패")); }
     setSyncBusy(false);
   };
   const doDownload = async () => {
@@ -2815,6 +2818,7 @@ function App() {
     if (!k) return say("먼저 동기화 키를 입력해주세요");
     setSyncBusy(true);
     try {
+      if(autoSyncRef.current.dirty&&dataWeight(liveSyncRef.current.data)>0)await snapSave(liveSyncRef.current.data,"클라우드 불러오기 직전");
       const row = await cloudDownload(k);
       if (!row || !row.data || !Array.isArray(row.data.individuals)) {
         say("이 키로 저장된 데이터가 없어요");
@@ -3873,3 +3877,4 @@ root.render(<App />);
   }
   window.KMLHub={open,close};
 })();
+
