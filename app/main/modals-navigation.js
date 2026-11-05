@@ -72,14 +72,14 @@
       })()}
 
       {settingsOpen && (
-        <div className="overlay ov-set" onClick={() => setSettingsOpen(false)}>
+        <div className="overlay ov-set" onClick={() => { if (!autoSyncRef.current.importing) setSettingsOpen(false); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="mhead">
-              <button className="hbtn" onClick={() => setSettingsOpen(false)}>닫기</button>
+              <button className="hbtn" disabled={legacyImportBusy} onClick={() => setSettingsOpen(false)}>닫기</button>
               <div className="mtitle">설정</div>
               <span style={{ width: 40 }} />
             </div>
-            <div className="mbody">
+            <div className="mbody" inert={legacyImportBusy ? "" : undefined} aria-busy={legacyImportBusy}>
               <div className="sect">화면 색상</div>
               <div className="thm-row">
                 {[
@@ -158,6 +158,12 @@
                       <div className="auth-stat">구글 로그인됨 · 자동 동기화 켜짐 ✓</div>
                     </div>
                   </div>
+                  <div className="set-desc mt">기존 동기화 키로 저장한 기록을 이 구글 계정에 가져올 수 있어요.</div>
+                  <input className="in mt" type="password" autoComplete="off" aria-label="기존 동기화 키"
+                    placeholder="기존 동기화 키" value={legacySyncKey} onChange={(e) => setLegacySyncKey(e.target.value)} />
+                  <button className="btn mt" style={{ width: "100%" }} disabled={syncBusy || legacyImportBusy || !legacySyncKey.trim()} onClick={importLegacySync}>
+                    {legacyImportBusy ? "가져오는 중…" : "기존 코드 불러오기"}
+                  </button>
                   <button className="btn ghost sm mt" onClick={doLogout}>로그아웃</button>
                   <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed var(--line)" }}>
                     <ConfirmBtn className="btn danger sm" label="계정 삭제 (클라우드 데이터 포함)" onConfirm={async () => {

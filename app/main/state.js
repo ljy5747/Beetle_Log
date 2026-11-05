@@ -18,6 +18,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncKey, setSyncKey] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
+  const [legacySyncKey, setLegacySyncKey] = useState("");
+  const [legacyImportBusy, setLegacyImportBusy] = useState(false);
   const [authUser, setAuthUser] = useState(null);
   const [notificationPrefs, setNotificationPrefs] = useState(defaultNotificationPreferences);
   const [notificationSaving, setNotificationSaving] = useState(false);
@@ -41,7 +43,7 @@ function App() {
     finally { setNotificationSaving(false); }
   };
 
-  const autoSyncRef = useRef({ on: false, key: "", timer: null, dirty:false, revision:0, uploading:false });
+  const autoSyncRef = useRef({ on: false, key: "", timer: null, dirty:false, revision:0, uploading:false, importing:false, loadingAccount:false });
   const liveSyncRef = useRef({data:null,modal:null,settingsOpen:false});
   liveSyncRef.current={data,modal,settingsOpen};
   const fileRef = useRef(null);
@@ -137,7 +139,7 @@ function App() {
   const goBackStep = () => {
     const b = backRef.current;
     if (b.modal) { setModal(null); return true; }
-    if (b.settingsOpen) { setSettingsOpen(false); return true; }
+    if (b.settingsOpen) { if (!autoSyncRef.current.importing) setSettingsOpen(false); return true; }
     if (b.view.name === "detail") {
       const ind = b.data && b.data.individuals.find((i) => i.id === b.view.id);
       goView(ind && ind.lineId ? { name: "lineDetail", id: ind.lineId } : { name: "list" }, true, true);
@@ -231,6 +233,7 @@ function App() {
           }
           if (u && u.email) {
             const myKey = "user:" + u.email;
+            autoSyncRef.current.loadingAccount = true;
             setAuthUser(u);
             setSyncKey(myKey);
             try { await idbSet("beetle-sync-key", myKey); } catch (e) {}
@@ -283,9 +286,10 @@ function App() {
                 try { await idbSet(KEY, JSON.stringify(empty)); } catch (e) {}
               } else {
                 /* 서버에 아무것도 없으면 내 로컬을 올려둠 */
-                if (dataWeight(base) > 0) cloudUpload(myKey, base).catch(() => {});
+                if (dataWeight(base) > 0) await cloudUpload(myKey, base);
               }
             } catch (e) { /* 네트워크 문제면 조용히 — 로컬로 계속 */ }
+            finally { autoSyncRef.current.loadingAccount = false; }
           }
         }
       } catch (e) { /* 로그인 안 했으면 무시 */ }
@@ -312,7 +316,7 @@ function App() {
   const say = (msg) => { setToast(msg); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(null), 2400); };
 
   const applyCloudUpload = async () => {
-    const as=autoSyncRef.current;if(as.uploading||!as.on||!as.key||!as.dirty)return;
+    const as=autoSyncRef.current;if(as.uploading||as.importing||!as.on||!as.key||!as.dirty)return;
     const next=liveSyncRef.current.data,revision=as.revision,key=as.key;let succeeded=false;as.uploading=true;
     try{
       const merged=await cloudUpload(key,next);
@@ -341,7 +345,7 @@ function App() {
       const revision=as.revision,key=as.key;busy=true;
       try{
         const row=await cloudDownload(key,{remember:false});
-        if(!row||stopped||as.key!==key||as.dirty||as.revision!==revision||liveSyncRef.current.modal)return;
+        if(!row||stopped||as.key!==key||as.dirty||as.revision!==revision||liveSyncRef.current.modal||liveSyncRef.current.settingsOpen)return;
         const remembering=rememberCloudSnapshot(key,row);
         if(!cloudEqual(liveSyncRef.current.data,row.data)){
           liveSyncRef.current.data=row.data;setData(row.data);await idbSet(KEY,JSON.stringify(row.data));
@@ -548,6 +552,52 @@ function App() {
       say("☁︎ 클라우드에 올렸어요");
     } catch (e) { say("⚠️ "+(e.message||"업로드 실패")); }
     setSyncBusy(false);
+  };
+  const importLegacySync = async () => {
+    const sourceKey = legacySyncKey.trim();
+    const accountKey = authUser?.email ? "user:" + authUser.email : "";
+    const sync = autoSyncRef.current;
+    if (!accountKey || syncBusy || sync.importing) return;
+    if (!sourceKey || isAccountKey(sourceKey)) return say("로그인 없이 사용하던 동기화 키를 입력해 주세요.");
+    if (sync.loadingAccount || sync.uploading || !sync.on || sync.key !== accountKey) {
+      return say("계정 동기화가 끝나면 다시 시도해 주세요.");
+    }
+
+    sync.importing = true;
+    setLegacyImportBusy(true);
+    try {
+      const row = await cloudDownload(sourceKey, { remember: false });
+      const legacy = row?.data;
+      if (!Array.isArray(legacy?.individuals)) return say("이 키로 저장된 기록이 없어요.");
+      const counts = `성충 ${legacy.parents?.length || 0} · 라인 ${legacy.lines?.length || 0} · 유충 ${legacy.individuals.length} · 일정 ${legacy.customEvents?.length || 0}`;
+      if (!confirm(`${counts}\n\n이 기록을 ${authUser.email} 계정으로 가져올까요? 같은 ID의 항목은 구글 계정 기록을 유지합니다.`)) return;
+
+      await snapSave(liveSyncRef.current.data, "기존 동기화 키 가져오기 직전");
+      const local = liveSyncRef.current.data;
+      const revision = sync.revision;
+      const saved = await cloudUpload(accountKey, local, legacy);
+      const editedDuringImport = sync.revision !== revision;
+      const merged = editedDuringImport ? mergeCloudData(local, liveSyncRef.current.data, saved) : saved;
+      liveSyncRef.current.data = merged;
+      setData(merged);
+      setLegacySyncKey("");
+      if (!editedDuringImport) sync.dirty = false;
+      try {
+        await idbSet(KEY, JSON.stringify(merged));
+        say("✓ 기존 기록을 구글 계정에 저장했어요.");
+      } catch (error) {
+        say("구글 계정에 저장했어요. 기기 저장에 실패해 다시 열면 서버 기록을 불러와요.");
+      }
+    } catch (error) {
+      say(error.message || "기존 기록을 가져오지 못했어요.");
+    } finally {
+      sync.importing = false;
+      setLegacyImportBusy(false);
+      if (sync.dirty) {
+        clearTimeout(sync.timer);
+        sync.timer = setTimeout(() => applyCloudUpload(), 2000);
+      }
+    }
   };
   const doDownload = async () => {
     const k = syncKey.trim();

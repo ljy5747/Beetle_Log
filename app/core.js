@@ -120,13 +120,29 @@ async function readCloudRow(syncKey) {
   if(!res.ok)throw new Error(`불러오기 실패 (${res.status})`);
   const rows=await res.json();return rows[0]||null;
 }
-async function writeMergedCloud(syncKey,local) {
+function mergeLegacyRecords(account, legacy) {
+  const merged = { ...account };
+  for (const field of ["parents", "lines", "individuals", "customEvents"]) {
+    const records = new Map((account[field] || []).map(record => [record.id, record]));
+    for (const record of legacy[field] || []) {
+      if (typeof record?.id !== "string" || !record.id) {
+        throw new Error("기존 기록에 식별자가 없는 항목이 있어 가져오기를 중단했어요.");
+      }
+      if (!records.has(record.id)) records.set(record.id, record);
+    }
+    merged[field] = [...records.values()];
+  }
+  merged.feedBrands = [...new Set([...(account.feedBrands || []), ...(legacy.feedBrands || [])])];
+  return merged;
+}
+async function writeMergedCloud(syncKey,local,legacy) {
   const baseline=cloudSnapshots.get(syncKey);
   for(let attempt=0;attempt<3;attempt++){
     const row=await readCloudRow(syncKey);
     if(row&&!baseline)throw new Error("먼저 클라우드 불러오기를 해주세요. 기기 기록은 유지됩니다.");
     if(!row&&baseline)throw new Error("서버 기록이 없어졌어요. 기기 백업을 확인한 뒤 다시 연결해 주세요.");
-    const merged=row?mergeCloudData(baseline.data,local,row.data):local;
+    const account=row?mergeCloudData(baseline.data,local,row.data):local;
+    const merged=legacy?mergeLegacyRecords(account,legacy):account;
     const query=row?`?user_key=eq.${encodeURIComponent(syncKey)}&updated_at=eq.${encodeURIComponent(row.updated_at)}`:"?on_conflict=user_key";
     const res=await cloudFetch(syncKey,SUPABASE_URL+"/rest/v1/beetlelog_data"+query,{
       method:row?"PATCH":"POST",extra:{Prefer:row?"return=representation":"resolution=ignore-duplicates,return=representation"},
@@ -138,9 +154,9 @@ async function writeMergedCloud(syncKey,local) {
   }
   throw new Error("다른 기기에서 저장 중이에요. 잠시 뒤 다시 저장해 주세요. 기기 기록은 유지됩니다.");
 }
-function cloudUpload(syncKey,data){
+function cloudUpload(syncKey,data,legacy){
  const local=cloudCopy(data),previous=cloudUploadQueues.get(syncKey)||Promise.resolve();
- const work=previous.catch(()=>{}).then(()=>writeMergedCloud(syncKey,local));
+ const work=previous.catch(()=>{}).then(()=>writeMergedCloud(syncKey,local,legacy));
  cloudUploadQueues.set(syncKey,work);return work.finally(()=>{if(cloudUploadQueues.get(syncKey)===work)cloudUploadQueues.delete(syncKey);});
 }
 async function cloudDownload(syncKey,options={}){

@@ -4,6 +4,11 @@ const runtime=fs.readFileSync(__dirname+'/../app.js','utf8');for(const path of [
 const copy=x=>JSON.parse(JSON.stringify(x));let server={data:{individuals:[{id:'v',code:'01',sex:'M',bottleRecords:[{id:'r',weight:'0',photo:'keep'}]}],lines:[],parents:[],feedBrands:[]},updated_at:'1'},casRace=false,writes=0;
 const sb={SUPABASE_URL:'https://example.com',idbSet:async()=>{},cloudFetch:async(key,url,opts)=>{
  if(opts.method==='GET')return{ok:true,json:async()=>server?[copy(server)]:[]};
+ if(opts.method==='POST'){
+   if(server)return{ok:true,json:async()=>[]};
+   const [created]=JSON.parse(opts.body);
+   writes++;server=created;return{ok:true,json:async()=>[copy(server)]};
+ }
  if(opts.method==='PATCH'){
    if(casRace){server.data.individuals[0].remote='race';server.updated_at='race';casRace=false;return{ok:true,json:async()=>[]};}
    const version=new URL(url).searchParams.get('updated_at').slice(3);if(version!==server.updated_at)return{ok:true,json:async()=>[]};
@@ -23,5 +28,24 @@ vm.runInNewContext(file.slice(start,end)+'\nglobalThis.api={mergeCloudData,cloud
  const m=a.mergeCloudData(b,l,r);assert.equal(m.individuals.length,1);assert.equal(m.individuals[0].weight,'21');assert.ok(m.feedBrands.includes('B'));
  assert.throws(()=>a.mergeCloudData(b,{...b,individuals:[]},{...b,individuals:[{id:'a',weight:'1'},b.individuals[1]]}),/같은 항목/);
  const beforeUnknown=JSON.stringify(server);await assert.rejects(a.cloudUpload('new-key',local),/먼저/);assert.equal(JSON.stringify(server),beforeUnknown);
- console.log('PASS: cloud baseline merge, distinct-field preservation, CAS retry, same-field conflict, deletions, metadata and unknown-baseline protection.');
+ await a.cloudDownload('user:test');
+ const legacy={individuals:[{id:'v',code:'old'},{id:'legacy',lineId:'legacy-line',bottleRecords:[{id:'historic',photo:'legacy-photo'}]}],lines:[{id:'legacy-line',fatherId:'legacy-parent'}],parents:[{id:'legacy-parent'}],customEvents:[{id:'legacy-event'}],feedBrands:['B','B']};
+ const sourceBefore=copy(legacy),beforeImport=copy(server.data);
+ casRace=true;
+ const imported=await a.cloudUpload('user:test',beforeImport,legacy);
+ assert.equal(imported.individuals[0].code,beforeImport.individuals[0].code);
+ assert.equal(imported.individuals[0].remote,'race');
+ assert.equal(imported.individuals[1].bottleRecords[0].photo,'legacy-photo');
+ assert.equal(imported.lines[0].fatherId,imported.parents[0].id);
+ assert.equal(imported.customEvents[0].id,'legacy-event');
+ assert.equal(imported.feedBrands.length,1);
+ assert.equal(imported.feedBrands[0],'B');
+ assert.deepEqual(legacy,sourceBefore);
+ assert.equal((await a.cloudUpload('user:test',imported,legacy)).individuals.length,2);
+ server=null;
+ const created=await a.cloudUpload('user:empty',{individuals:[]},{individuals:[{id:'old'}]});
+ assert.equal(created.individuals[0].id,'old');
+ assert.equal(server.user_key,'user:empty');
+ assert.equal(created.parents.length,0);
+ console.log('PASS: cloud sync regressions and legacy key import into existing and new accounts.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
