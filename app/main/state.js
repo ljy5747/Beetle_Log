@@ -584,9 +584,25 @@ function App() {
       if (!editedDuringImport) sync.dirty = false;
       try {
         await idbSet(KEY, JSON.stringify(merged));
-        say("✓ 기존 기록을 구글 계정에 저장했어요.");
       } catch (error) {
-        say("구글 계정에 저장했어요. 기기 저장에 실패해 다시 열면 서버 기록을 불러와요.");
+        return say("구글 계정에 저장했어요. 기기 저장에 실패해 다시 열면 서버 기록을 불러와요.");
+      }
+
+      if (!legacyRecordsCopied(saved, legacy)) {
+        return say("구글 계정에 저장했어요. 계정 기록과 다른 내용이 있어 기존 코드는 보관했어요.");
+      }
+      if (!confirm("구글 계정에 동기화했어요. 기존 코드에 저장된 중복 기록을 삭제할까요?\n\n삭제하면 기존 코드로는 이 기록을 불러올 수 없어요.")) {
+        return say("✓ 구글 계정에 저장했고 기존 코드의 기록도 보관했어요.");
+      }
+      try {
+        const account = await cloudDownload(accountKey, { remember: false });
+        if (!legacyRecordsCopied(account?.data, legacy)) {
+          return say("구글 계정 기록이 바뀌어 기존 코드의 기록을 보관했어요.");
+        }
+        const cleared = await clearLegacyCloudRecords(sourceKey, row);
+        say(cleared ? "✓ 구글 계정에 저장했고 기존 코드의 기록을 삭제했어요." : "기존 코드의 기록이 바뀌어 삭제하지 않았어요.");
+      } catch (error) {
+        say("구글 계정에 저장했어요. 기존 코드의 기록 삭제는 확인하지 못했어요.");
       }
     } catch (error) {
       say(error.message || "기존 기록을 가져오지 못했어요.");

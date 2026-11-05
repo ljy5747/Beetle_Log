@@ -120,9 +120,10 @@ async function readCloudRow(syncKey) {
   if(!res.ok)throw new Error(`불러오기 실패 (${res.status})`);
   const rows=await res.json();return rows[0]||null;
 }
+const legacyRecordFields = ["parents", "lines", "individuals", "customEvents"];
 function mergeLegacyRecords(account, legacy) {
   const merged = { ...account };
-  for (const field of ["parents", "lines", "individuals", "customEvents"]) {
+  for (const field of legacyRecordFields) {
     const records = new Map((account[field] || []).map(record => [record.id, record]));
     for (const record of legacy[field] || []) {
       if (typeof record?.id !== "string" || !record.id) {
@@ -135,12 +136,38 @@ function mergeLegacyRecords(account, legacy) {
   merged.feedBrands = [...new Set([...(account.feedBrands || []), ...(legacy.feedBrands || [])])];
   return merged;
 }
+function legacyRecordsCopied(account, legacy) {
+  if (!account) return false;
+  return Object.entries(legacy).every(([field, value]) => {
+    if (Array.isArray(value) && legacyRecordFields.includes(field)) {
+      const copies = new Map((account[field] || []).map(record => [record.id, record]));
+      return value.every(record => cloudEqual(record, copies.get(record.id)));
+    }
+    if (field === "feedBrands" && Array.isArray(value)) {
+      const brands = new Set(account.feedBrands || []);
+      return value.every(brand => brands.has(brand));
+    }
+    return cloudEqual(account[field], value);
+  });
+}
+async function clearLegacyCloudRecords(sourceKey, sourceRow) {
+  if (!sourceKey || isAccountKey(sourceKey)) throw new Error("기존 동기화 키를 확인해 주세요.");
+  const version = sourceRow.updated_at == null ? "is.null" : "eq." + encodeURIComponent(sourceRow.updated_at);
+  const query = `?user_key=eq.${encodeURIComponent(sourceKey)}&updated_at=${version}&select=updated_at`;
+  const res = await cloudFetch(sourceKey, SUPABASE_URL + "/rest/v1/beetlelog_data" + query, {
+    method: "PATCH",
+    extra: { Prefer: "return=representation" },
+    body: JSON.stringify({ data: null }),
+  });
+  if (!res.ok) throw new Error("기존 코드 기록을 삭제하지 못했어요.");
+  return (await res.json()).length === 1;
+}
 async function writeMergedCloud(syncKey,local,legacy) {
   const baseline=cloudSnapshots.get(syncKey);
   for(let attempt=0;attempt<3;attempt++){
     const row=await readCloudRow(syncKey);
     if(row&&!baseline)throw new Error("먼저 클라우드 불러오기를 해주세요. 기기 기록은 유지됩니다.");
-    if(!row&&baseline)throw new Error("서버 기록이 없어졌어요. 기기 백업을 확인한 뒤 다시 연결해 주세요.");
+    if((!row&&baseline)||(row?.data===null&&baseline?.data))throw new Error("서버 기록이 없어졌어요. 기기 백업을 확인한 뒤 다시 연결해 주세요.");
     const account=row?mergeCloudData(baseline.data,local,row.data):local;
     const merged=legacy?mergeLegacyRecords(account,legacy):account;
     const query=row?`?user_key=eq.${encodeURIComponent(syncKey)}&updated_at=eq.${encodeURIComponent(row.updated_at)}`:"?on_conflict=user_key";

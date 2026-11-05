@@ -2,7 +2,7 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const file=fs.readFileSync(__dirname+'/../app/core.js','utf8'),start=file.indexOf('/* Server snapshots'),end=file.indexOf('/* ════════════════════ 구글 로그인',start);
 const runtime=fs.readFileSync(__dirname+'/../app.js','utf8');for(const path of ['app/core.js','app/main/state.js'])assert.ok(runtime.includes(fs.readFileSync(__dirname+'/../'+path,'utf8').trim()),'Runtime/source mismatch: '+path);
 const copy=x=>JSON.parse(JSON.stringify(x));let server={data:{individuals:[{id:'v',code:'01',sex:'M',bottleRecords:[{id:'r',weight:'0',photo:'keep'}]}],lines:[],parents:[],feedBrands:[]},updated_at:'1'},casRace=false,writes=0;
-const sb={SUPABASE_URL:'https://example.com',idbSet:async()=>{},cloudFetch:async(key,url,opts)=>{
+const sb={SUPABASE_URL:'https://example.com',idbSet:async()=>{},isAccountKey:key=>key.startsWith('user:'),cloudFetch:async(key,url,opts)=>{
  if(opts.method==='GET')return{ok:true,json:async()=>server?[copy(server)]:[]};
  if(opts.method==='POST'){
    if(server)return{ok:true,json:async()=>[]};
@@ -12,11 +12,11 @@ const sb={SUPABASE_URL:'https://example.com',idbSet:async()=>{},cloudFetch:async
  if(opts.method==='PATCH'){
    if(casRace){server.data.individuals[0].remote='race';server.updated_at='race';casRace=false;return{ok:true,json:async()=>[]};}
    const version=new URL(url).searchParams.get('updated_at').slice(3);if(version!==server.updated_at)return{ok:true,json:async()=>[]};
-   writes++;server={...JSON.parse(opts.body),updated_at:String(writes+1)};return{ok:true,json:async()=>[copy(server)]};
+   writes++;server={...server,...JSON.parse(opts.body),updated_at:String(writes+1)};return{ok:true,json:async()=>[copy(server)]};
  }
  throw Error('Unexpected method '+opts.method);
 }};
-vm.runInNewContext(file.slice(start,end)+'\nglobalThis.api={mergeCloudData,cloudUpload,cloudDownload,rememberCloudSnapshot};',sb);const a=sb.api;
+vm.runInNewContext(file.slice(start,end)+'\nglobalThis.api={mergeCloudData,cloudUpload,cloudDownload,rememberCloudSnapshot,legacyRecordsCopied,clearLegacyCloudRecords};',sb);const a=sb.api;
 (async()=>{
  const baseline=(await a.cloudDownload('user:test')).data;
  server.data.individuals[0].bottleRecords[0].weight='22.5';server.updated_at='remote';
@@ -47,5 +47,17 @@ vm.runInNewContext(file.slice(start,end)+'\nglobalThis.api={mergeCloudData,cloud
  assert.equal(created.individuals[0].id,'old');
  assert.equal(server.user_key,'user:empty');
  assert.equal(created.parents.length,0);
- console.log('PASS: cloud sync regressions and legacy key import into existing and new accounts.');
+ assert.equal(a.legacyRecordsCopied(imported,legacy),false);
+ assert.equal(a.legacyRecordsCopied(imported,{...legacy,individuals:[legacy.individuals[1]]}),true);
+ assert.equal(a.legacyRecordsCopied(imported,{individuals:[],other:'uncopied'}),false);
+ server={data:{individuals:[{id:'source'}]},updated_at:'source-current'};
+ const sourceBaseline=(await a.cloudDownload('legacy-code')).data;
+ const staleSource={...server,updated_at:'source-old'};
+ assert.equal(await a.clearLegacyCloudRecords('legacy-code',staleSource),false);
+ assert.equal(server.data.individuals[0].id,'source');
+ await assert.rejects(a.clearLegacyCloudRecords('user:test',server),/기존 동기화 키/);
+ assert.equal(await a.clearLegacyCloudRecords('legacy-code',server),true);
+ assert.equal(server.data,null);
+ await assert.rejects(a.cloudUpload('legacy-code',sourceBaseline),/서버 기록이 없어졌어요/);
+ console.log('PASS: cloud sync, legacy import, copy checks and version-checked cleanup.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

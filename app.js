@@ -120,9 +120,10 @@ async function readCloudRow(syncKey) {
   if(!res.ok)throw new Error(`불러오기 실패 (${res.status})`);
   const rows=await res.json();return rows[0]||null;
 }
+const legacyRecordFields = ["parents", "lines", "individuals", "customEvents"];
 function mergeLegacyRecords(account, legacy) {
   const merged = { ...account };
-  for (const field of ["parents", "lines", "individuals", "customEvents"]) {
+  for (const field of legacyRecordFields) {
     const records = new Map((account[field] || []).map(record => [record.id, record]));
     for (const record of legacy[field] || []) {
       if (typeof record?.id !== "string" || !record.id) {
@@ -135,12 +136,38 @@ function mergeLegacyRecords(account, legacy) {
   merged.feedBrands = [...new Set([...(account.feedBrands || []), ...(legacy.feedBrands || [])])];
   return merged;
 }
+function legacyRecordsCopied(account, legacy) {
+  if (!account) return false;
+  return Object.entries(legacy).every(([field, value]) => {
+    if (Array.isArray(value) && legacyRecordFields.includes(field)) {
+      const copies = new Map((account[field] || []).map(record => [record.id, record]));
+      return value.every(record => cloudEqual(record, copies.get(record.id)));
+    }
+    if (field === "feedBrands" && Array.isArray(value)) {
+      const brands = new Set(account.feedBrands || []);
+      return value.every(brand => brands.has(brand));
+    }
+    return cloudEqual(account[field], value);
+  });
+}
+async function clearLegacyCloudRecords(sourceKey, sourceRow) {
+  if (!sourceKey || isAccountKey(sourceKey)) throw new Error("기존 동기화 키를 확인해 주세요.");
+  const version = sourceRow.updated_at == null ? "is.null" : "eq." + encodeURIComponent(sourceRow.updated_at);
+  const query = `?user_key=eq.${encodeURIComponent(sourceKey)}&updated_at=${version}&select=updated_at`;
+  const res = await cloudFetch(sourceKey, SUPABASE_URL + "/rest/v1/beetlelog_data" + query, {
+    method: "PATCH",
+    extra: { Prefer: "return=representation" },
+    body: JSON.stringify({ data: null }),
+  });
+  if (!res.ok) throw new Error("기존 코드 기록을 삭제하지 못했어요.");
+  return (await res.json()).length === 1;
+}
 async function writeMergedCloud(syncKey,local,legacy) {
   const baseline=cloudSnapshots.get(syncKey);
   for(let attempt=0;attempt<3;attempt++){
     const row=await readCloudRow(syncKey);
     if(row&&!baseline)throw new Error("먼저 클라우드 불러오기를 해주세요. 기기 기록은 유지됩니다.");
-    if(!row&&baseline)throw new Error("서버 기록이 없어졌어요. 기기 백업을 확인한 뒤 다시 연결해 주세요.");
+    if((!row&&baseline)||(row?.data===null&&baseline?.data))throw new Error("서버 기록이 없어졌어요. 기기 백업을 확인한 뒤 다시 연결해 주세요.");
     const account=row?mergeCloudData(baseline.data,local,row.data):local;
     const merged=legacy?mergeLegacyRecords(account,legacy):account;
     const query=row?`?user_key=eq.${encodeURIComponent(syncKey)}&updated_at=eq.${encodeURIComponent(row.updated_at)}`:"?on_conflict=user_key";
@@ -2864,9 +2891,25 @@ function App() {
       if (!editedDuringImport) sync.dirty = false;
       try {
         await idbSet(KEY, JSON.stringify(merged));
-        say("✓ 기존 기록을 구글 계정에 저장했어요.");
       } catch (error) {
-        say("구글 계정에 저장했어요. 기기 저장에 실패해 다시 열면 서버 기록을 불러와요.");
+        return say("구글 계정에 저장했어요. 기기 저장에 실패해 다시 열면 서버 기록을 불러와요.");
+      }
+
+      if (!legacyRecordsCopied(saved, legacy)) {
+        return say("구글 계정에 저장했어요. 계정 기록과 다른 내용이 있어 기존 코드는 보관했어요.");
+      }
+      if (!confirm("구글 계정에 동기화했어요. 기존 코드에 저장된 중복 기록을 삭제할까요?\n\n삭제하면 기존 코드로는 이 기록을 불러올 수 없어요.")) {
+        return say("✓ 구글 계정에 저장했고 기존 코드의 기록도 보관했어요.");
+      }
+      try {
+        const account = await cloudDownload(accountKey, { remember: false });
+        if (!legacyRecordsCopied(account?.data, legacy)) {
+          return say("구글 계정 기록이 바뀌어 기존 코드의 기록을 보관했어요.");
+        }
+        const cleared = await clearLegacyCloudRecords(sourceKey, row);
+        say(cleared ? "✓ 구글 계정에 저장했고 기존 코드의 기록을 삭제했어요." : "기존 코드의 기록이 바뀌어 삭제하지 않았어요.");
+      } catch (error) {
+        say("구글 계정에 저장했어요. 기존 코드의 기록 삭제는 확인하지 못했어요.");
       }
     } catch (error) {
       say(error.message || "기존 기록을 가져오지 못했어요.");
