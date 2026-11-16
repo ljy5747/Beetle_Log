@@ -18,6 +18,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncKey, setSyncKey] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
+  const [cloudConflict, setCloudConflict] = useState(null);
   const [legacySyncKey, setLegacySyncKey] = useState("");
   const [legacyImportBusy, setLegacyImportBusy] = useState(false);
   const [authUser, setAuthUser] = useState(null);
@@ -273,7 +274,7 @@ function App() {
                   let merged=server;
                   if(!foreign&&((savedBase?.key===myKey&&savedBase.row?.data)||autoSyncRef.current.dirty)){
                     try{merged=mergeCloudData(savedBase?.key===myKey?savedBase.row.data:base,autoSyncRef.current.dirty?liveSyncRef.current.data:base,server);}
-                    catch(error){if(savedBase?.row)await rememberCloudSnapshot(myKey,savedBase.row);autoSyncRef.current.dirty=true;say("⚠️ "+error.message);throw error;}
+                    catch(error){if(savedBase?.row)await rememberCloudSnapshot(myKey,savedBase.row);autoSyncRef.current.dirty=true;if(error?.code==="BEETLE_SYNC_CONFLICT")setCloudConflict({path:error.conflictPath});say(error?.code==="BEETLE_SYNC_CONFLICT"?"⚠️ 동기화 충돌: 설정에서 해결해 주세요.":"⚠️ "+error.message);throw error;}
                   }
                   liveSyncRef.current.data=merged;setData(merged);
                   try { await idbSet(KEY, JSON.stringify(merged)); } catch (e) {}
@@ -325,8 +326,9 @@ function App() {
       const result=as.revision===revision?merged:mergeCloudData(next,current,merged);
       liveSyncRef.current.data=result;setData(result);await idbSet(KEY,JSON.stringify(result));
       if(as.revision===revision)as.dirty=false;
+      setCloudConflict(null);
       succeeded=true;
-    }catch(e){say("⚠️ "+(e.message||"클라우드 저장 실패 — 기기 기록은 유지됩니다"));}
+    }catch(e){if(e?.code==="BEETLE_SYNC_CONFLICT")setCloudConflict({path:e.conflictPath});say(e?.code==="BEETLE_SYNC_CONFLICT"?"⚠️ 동기화 충돌: 설정에서 안전하게 해결할 수 있어요.":"⚠️ "+(e.message||"클라우드 저장 실패 — 기기 기록은 유지됩니다"));}
     finally{as.uploading=false;if(succeeded&&as.dirty){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}}
   };
   const persist = async (next) => {
@@ -340,7 +342,7 @@ function App() {
     let busy=false,stopped=false;
     const pull=async()=>{
       const as=autoSyncRef.current,live=liveSyncRef.current;
-      if(stopped||busy||!as.on||!as.key||as.dirty||as.uploading||live.modal||live.settingsOpen||document.hidden||!live.data)return;
+      if(stopped||busy||!as.on||!as.key||as.loadingAccount||as.dirty||as.uploading||as.importing||live.modal||live.settingsOpen||document.hidden||!live.data)return;
       if(document.activeElement?.matches?.('input,select,textarea,[contenteditable="true"]'))return;
       const revision=as.revision,key=as.key;busy=true;
       try{
@@ -540,18 +542,67 @@ function App() {
     reader.readAsArrayBuffer(file); e.target.value = "";
   };
   const saveSyncKey = async (k) => { setSyncKey(k); try { await idbSet("beetle-sync-key", k); } catch (e) {} };
-  const doUpload = async () => {
-    const k = syncKey.trim();
-    if (!k) return say("먼저 동기화 키를 입력해주세요");
+  /* Never silently overwrite a concurrent phone/PC edit.
+     Preserve BOTH device and cloud states before an explicitly confirmed field-level resolution. */
+  const resolveCloudConflict = async () => {
+    const as=autoSyncRef.current;
+    const key=as.key||syncKey.trim();
+    if (!key||!cloudConflict||syncBusy||as.uploading||as.importing) return;
+    const match=String(cloudConflict.path||"").match(/individuals\[([^\]]+)\]/);
+    const ind=match&&liveSyncRef.current.data?.individuals?.find(i=>i.id===match[1]);
+    const item=ind?.code?ind.code+" 개체":"해당 기록";
+    if (!confirm(item+"의 기기와 서버 기록이 모두 수정됐어요.\n\n충돌한 항목만 이 기기의 값을 우선 적용할까요? 다른 항목은 두 기기 기록을 병합합니다.\n\n먼저 양쪽 기록을 기기에 백업합니다. 백업이 실패하면 업로드를 중단합니다.")) return;
     setSyncBusy(true);
+    as.importing=true;
+    const revision=as.revision;
+    try {
+      const local=cloudCopy(liveSyncRef.current.data);
+      const remote=await readCloudRow(key);
+      if (!remote?.data) throw new Error("클라우드 원본을 확인하지 못해 중단했어요.");
+      // Mandatory backup: do not proceed if storage is full / private mode blocks IndexedDB.
+      const localSlim=snapShrink(local).data,remoteSlim=snapShrink(remote.data).data;
+      await idbSet("beetle-sync-conflict-pair",JSON.stringify({key,at:Date.now(),local:localSlim,remote:remoteSlim,path:cloudConflict.path}));
+      const merged=await cloudUpload(key,local,null,{resolveConflicts:"local",expectedRemoteVersion:remote.updated_at});
+      const current=liveSyncRef.current.data;
+      const result=as.revision===revision?merged:mergeCloudData(local,current,merged);
+      liveSyncRef.current.data=result;setData(result);
+      await idbSet(KEY,JSON.stringify(result));
+      if(as.revision===revision)as.dirty=false;
+      setCloudConflict(null);
+      say("✓ 충돌을 해결했어요. 기기·서버 기록을 백업하고 병합했습니다.");
+    }catch(e){setCloudConflict({path:e?.conflictPath||cloudConflict.path});say("⚠️ "+(e?.message||"충돌 해결 실패 — 원본은 유지됩니다."));}
+    finally{as.importing=false;setSyncBusy(false);if(as.dirty){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}}
+  };
+  const downloadCloudConflictBackup = async () => {
+    try {
+      const backup=await idbGet("beetle-sync-conflict-pair");
+      if(!backup)return say("이 기기에 저장된 충돌 백업이 아직 없어요.");
+      await deliverFile("BeetleLog_동기화충돌백업_"+today()+".json",backup,"application/json");
+    }catch(e){say("⚠️ 충돌 백업을 내보내지 못했어요.");}
+  };
+  const doUpload = async () => {
+    const k = syncKey.trim(),as=autoSyncRef.current;
+    if (!k) return say("먼저 동기화 키를 입력해주세요");
+    if (as.uploading || as.importing || syncBusy) return say("동기화 처리 중이에요. 완료 후 다시 시도해 주세요.");
+    as.importing=true;
+    setSyncBusy(true);
+    const revision=as.revision,original=cloudCopy(liveSyncRef.current.data);
     try {
       await saveSyncKey(k);
-      const merged=await cloudUpload(k, data);
-      liveSyncRef.current.data=merged;setData(merged);await idbSet(KEY,JSON.stringify(merged));
-      autoSyncRef.current.dirty=false;
+      const merged=await cloudUpload(k,original);
+      const result=as.revision===revision?merged:mergeCloudData(original,liveSyncRef.current.data,merged);
+      liveSyncRef.current.data=result;setData(result);await idbSet(KEY,JSON.stringify(result));
+      if(as.revision===revision)as.dirty=false;
+      setCloudConflict(null);
       say("☁︎ 클라우드에 올렸어요");
-    } catch (e) { say("⚠️ "+(e.message||"업로드 실패")); }
-    setSyncBusy(false);
+    } catch (e) {
+      if(e?.code==="BEETLE_SYNC_CONFLICT")setCloudConflict({path:e.conflictPath});
+      say(e?.code==="BEETLE_SYNC_CONFLICT"?"⚠️ 같은 기록을 다른 기기에서도 수정했어요. 아래 충돌 해결 버튼을 이용해 주세요.":"⚠️ "+(e.message||"업로드 실패"));
+    }finally{
+      as.importing=false;
+      setSyncBusy(false);
+      if(as.on&&as.dirty){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}
+    }
   };
   const importLegacySync = async () => {
     const sourceKey = legacySyncKey.trim();
@@ -616,6 +667,7 @@ function App() {
     }
   };
   const doDownload = async () => {
+    if(autoSyncRef.current.dirty||cloudConflict)return say("⚠️ 동기화되지 않은 기기 기록이 있습니다. 먼저 올리기 또는 충돌 해결을 이용해 주세요.");
     const k = syncKey.trim();
     if (!k) return say("먼저 동기화 키를 입력해주세요");
     setSyncBusy(true);

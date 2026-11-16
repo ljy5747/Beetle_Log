@@ -87,14 +87,14 @@ async function cloudFetch(syncKey, url, opts) {
 const cloudSnapshots = new Map(), cloudUploadQueues = new Map();
 const cloudCopy = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const cloudEqual = (a,b) => JSON.stringify(a) === JSON.stringify(b);
-function mergeCloudData(base, local, remote, path="기록") {
+function mergeCloudData(base, local, remote, path="기록", resolveConflicts="error") {
   if (cloudEqual(local,base)) return cloudCopy(remote);
   if (cloudEqual(remote,base) || cloudEqual(local,remote)) return cloudCopy(local);
   const object = v => v && typeof v === "object" && !Array.isArray(v);
   if (object(base) && object(local) && object(remote)) {
     const out = {};
     for (const key of new Set([...Object.keys(base),...Object.keys(local),...Object.keys(remote)])) {
-      const value = mergeCloudData(base[key],local[key],remote[key],path+"."+key);
+      const value = mergeCloudData(base[key],local[key],remote[key],path+"."+key,resolveConflicts);
       if (value !== undefined) out[key]=value;
     }
     return out;
@@ -103,16 +103,20 @@ function mergeCloudData(base, local, remote, path="기록") {
     if ([base,local,remote].every(a=>a.every(v=>object(v)&&typeof v.id==="string") && new Set(a.map(v=>v.id)).size===a.length)) {
       const maps=[base,local,remote].map(a=>new Map(a.map(v=>[v.id,v]))), out=[];
       for (const id of new Set([...local.map(v=>v.id),...remote.map(v=>v.id),...base.map(v=>v.id)])) {
-        const value=mergeCloudData(maps[0].get(id),maps[1].get(id),maps[2].get(id),path+"["+id+"]");
+        const value=mergeCloudData(maps[0].get(id),maps[1].get(id),maps[2].get(id),path+"["+id+"]",resolveConflicts);
         if (value !== undefined) out.push(value);
       }
       return out;
     }
     if ([base,local,remote].every(a=>a.every(v=>typeof v==="string"))) {
-      return [...new Set([...local,...remote])].filter(v=>mergeCloudData(base.includes(v),local.includes(v),remote.includes(v),path));
+      return [...new Set([...local,...remote])].filter(v=>mergeCloudData(base.includes(v),local.includes(v),remote.includes(v),path,resolveConflicts));
     }
   }
-  throw new Error("다른 앱에서 같은 항목을 수정했어요 ("+path+"). 기기 기록은 유지됩니다. 백업 후 클라우드 불러오기로 최신 내용을 확인해 주세요.");
+  if (resolveConflicts === "local") return cloudCopy(local); // Explicit user choice only; see backup in resolveCloudConflict.
+  const error = new Error("다른 기기에서도 같은 기록을 변경했어요. 기기 기록은 안전하게 남아 있습니다.");
+  error.code = "BEETLE_SYNC_CONFLICT";
+  error.conflictPath = path;
+  throw error;
 }
 async function rememberCloudSnapshot(key,row){ if(row)cloudSnapshots.set(key,cloudCopy(row));else cloudSnapshots.delete(key);try{await idbSet("beetle-cloud-baseline",JSON.stringify({key,row}));}catch(e){} }
 async function readCloudRow(syncKey) {
@@ -162,13 +166,14 @@ async function clearLegacyCloudRecords(sourceKey, sourceRow) {
   if (!res.ok) throw new Error("기존 코드 기록을 삭제하지 못했어요.");
   return (await res.json()).length === 1;
 }
-async function writeMergedCloud(syncKey,local,legacy) {
+async function writeMergedCloud(syncKey,local,legacy,options={}) {
   const baseline=cloudSnapshots.get(syncKey);
   for(let attempt=0;attempt<3;attempt++){
     const row=await readCloudRow(syncKey);
+    if(options.expectedRemoteVersion !== undefined && row?.updated_at !== options.expectedRemoteVersion) throw new Error("다른 기기에서 서버 기록을 다시 변경했어요. 덮어쓰지 않았습니다. 다시 충돌 해결을 실행해 주세요.");
     if(row&&!baseline)throw new Error("먼저 클라우드 불러오기를 해주세요. 기기 기록은 유지됩니다.");
     if((!row&&baseline)||(row?.data===null&&baseline?.data))throw new Error("서버 기록이 없어졌어요. 기기 백업을 확인한 뒤 다시 연결해 주세요.");
-    const account=row?mergeCloudData(baseline.data,local,row.data):local;
+    const account=row?mergeCloudData(baseline.data,local,row.data,"기록",options.resolveConflicts||"error"):local;
     const merged=legacy?mergeLegacyRecords(account,legacy):account;
     const query=row?`?user_key=eq.${encodeURIComponent(syncKey)}&updated_at=eq.${encodeURIComponent(row.updated_at)}`:"?on_conflict=user_key";
     const res=await cloudFetch(syncKey,SUPABASE_URL+"/rest/v1/beetlelog_data"+query,{
@@ -181,9 +186,9 @@ async function writeMergedCloud(syncKey,local,legacy) {
   }
   throw new Error("다른 기기에서 저장 중이에요. 잠시 뒤 다시 저장해 주세요. 기기 기록은 유지됩니다.");
 }
-function cloudUpload(syncKey,data,legacy){
+function cloudUpload(syncKey,data,legacy,options={}){
  const local=cloudCopy(data),previous=cloudUploadQueues.get(syncKey)||Promise.resolve();
- const work=previous.catch(()=>{}).then(()=>writeMergedCloud(syncKey,local,legacy));
+ const work=previous.catch(()=>{}).then(()=>writeMergedCloud(syncKey,local,legacy,options));
  cloudUploadQueues.set(syncKey,work);return work.finally(()=>{if(cloudUploadQueues.get(syncKey)===work)cloudUploadQueues.delete(syncKey);});
 }
 async function cloudDownload(syncKey,options={}){
