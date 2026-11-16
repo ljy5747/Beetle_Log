@@ -87,14 +87,14 @@ async function cloudFetch(syncKey, url, opts) {
 const cloudSnapshots = new Map(), cloudUploadQueues = new Map();
 const cloudCopy = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const cloudEqual = (a,b) => JSON.stringify(a) === JSON.stringify(b);
-function mergeCloudData(base, local, remote, path="기록") {
+function mergeCloudData(base, local, remote, path="기록", resolveConflicts="error") {
   if (cloudEqual(local,base)) return cloudCopy(remote);
   if (cloudEqual(remote,base) || cloudEqual(local,remote)) return cloudCopy(local);
   const object = v => v && typeof v === "object" && !Array.isArray(v);
   if (object(base) && object(local) && object(remote)) {
     const out = {};
     for (const key of new Set([...Object.keys(base),...Object.keys(local),...Object.keys(remote)])) {
-      const value = mergeCloudData(base[key],local[key],remote[key],path+"."+key);
+      const value = mergeCloudData(base[key],local[key],remote[key],path+"."+key,resolveConflicts);
       if (value !== undefined) out[key]=value;
     }
     return out;
@@ -103,16 +103,20 @@ function mergeCloudData(base, local, remote, path="기록") {
     if ([base,local,remote].every(a=>a.every(v=>object(v)&&typeof v.id==="string") && new Set(a.map(v=>v.id)).size===a.length)) {
       const maps=[base,local,remote].map(a=>new Map(a.map(v=>[v.id,v]))), out=[];
       for (const id of new Set([...local.map(v=>v.id),...remote.map(v=>v.id),...base.map(v=>v.id)])) {
-        const value=mergeCloudData(maps[0].get(id),maps[1].get(id),maps[2].get(id),path+"["+id+"]");
+        const value=mergeCloudData(maps[0].get(id),maps[1].get(id),maps[2].get(id),path+"["+id+"]",resolveConflicts);
         if (value !== undefined) out.push(value);
       }
       return out;
     }
     if ([base,local,remote].every(a=>a.every(v=>typeof v==="string"))) {
-      return [...new Set([...local,...remote])].filter(v=>mergeCloudData(base.includes(v),local.includes(v),remote.includes(v),path));
+      return [...new Set([...local,...remote])].filter(v=>mergeCloudData(base.includes(v),local.includes(v),remote.includes(v),path,resolveConflicts));
     }
   }
-  throw new Error("다른 앱에서 같은 항목을 수정했어요 ("+path+"). 기기 기록은 유지됩니다. 백업 후 클라우드 불러오기로 최신 내용을 확인해 주세요.");
+  if (resolveConflicts === "local") return cloudCopy(local); // Explicit user choice only; see backup in resolveCloudConflict.
+  const error = new Error("다른 기기에서도 같은 기록을 변경했어요. 기기 기록은 안전하게 남아 있습니다.");
+  error.code = "BEETLE_SYNC_CONFLICT";
+  error.conflictPath = path;
+  throw error;
 }
 async function rememberCloudSnapshot(key,row){ if(row)cloudSnapshots.set(key,cloudCopy(row));else cloudSnapshots.delete(key);try{await idbSet("beetle-cloud-baseline",JSON.stringify({key,row}));}catch(e){} }
 async function readCloudRow(syncKey) {
@@ -162,13 +166,13 @@ async function clearLegacyCloudRecords(sourceKey, sourceRow) {
   if (!res.ok) throw new Error("기존 코드 기록을 삭제하지 못했어요.");
   return (await res.json()).length === 1;
 }
-async function writeMergedCloud(syncKey,local,legacy) {
+async function writeMergedCloud(syncKey,local,legacy,options={}) {
   const baseline=cloudSnapshots.get(syncKey);
   for(let attempt=0;attempt<3;attempt++){
     const row=await readCloudRow(syncKey);
     if(row&&!baseline)throw new Error("먼저 클라우드 불러오기를 해주세요. 기기 기록은 유지됩니다.");
     if((!row&&baseline)||(row?.data===null&&baseline?.data))throw new Error("서버 기록이 없어졌어요. 기기 백업을 확인한 뒤 다시 연결해 주세요.");
-    const account=row?mergeCloudData(baseline.data,local,row.data):local;
+    const account=row?mergeCloudData(baseline.data,local,row.data,"기록",options.resolveConflicts||"error"):local;
     const merged=legacy?mergeLegacyRecords(account,legacy):account;
     const query=row?`?user_key=eq.${encodeURIComponent(syncKey)}&updated_at=eq.${encodeURIComponent(row.updated_at)}`:"?on_conflict=user_key";
     const res=await cloudFetch(syncKey,SUPABASE_URL+"/rest/v1/beetlelog_data"+query,{
@@ -181,9 +185,9 @@ async function writeMergedCloud(syncKey,local,legacy) {
   }
   throw new Error("다른 기기에서 저장 중이에요. 잠시 뒤 다시 저장해 주세요. 기기 기록은 유지됩니다.");
 }
-function cloudUpload(syncKey,data,legacy){
+function cloudUpload(syncKey,data,legacy,options={}){
  const local=cloudCopy(data),previous=cloudUploadQueues.get(syncKey)||Promise.resolve();
- const work=previous.catch(()=>{}).then(()=>writeMergedCloud(syncKey,local,legacy));
+ const work=previous.catch(()=>{}).then(()=>writeMergedCloud(syncKey,local,legacy,options));
  cloudUploadQueues.set(syncKey,work);return work.finally(()=>{if(cloudUploadQueues.get(syncKey)===work)cloudUploadQueues.delete(syncKey);});
 }
 async function cloudDownload(syncKey,options={}){
@@ -527,6 +531,7 @@ async function beetleRegisterRemotePush() {
   return true;
 }
 async function beetleSendRemoteTest() { return await beetleRemotePush("test",{}); }
+
 /* ════════════════════ 유충 카드 (라인 목록 / 교체 대상 목록에서 공용) ════════════════════ */
 function LarvaCard({ ind, crownM, crownF, lineCode, onOpen, onBottle }) {
   const lr = latestRec(ind), mw = maxWeight(ind), dl = lastDelta(ind);
@@ -2325,6 +2330,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncKey, setSyncKey] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
+  const [cloudConflict, setCloudConflict] = useState(null);
   const [legacySyncKey, setLegacySyncKey] = useState("");
   const [legacyImportBusy, setLegacyImportBusy] = useState(false);
   const [authUser, setAuthUser] = useState(null);
@@ -2580,7 +2586,7 @@ function App() {
                   let merged=server;
                   if(!foreign&&((savedBase?.key===myKey&&savedBase.row?.data)||autoSyncRef.current.dirty)){
                     try{merged=mergeCloudData(savedBase?.key===myKey?savedBase.row.data:base,autoSyncRef.current.dirty?liveSyncRef.current.data:base,server);}
-                    catch(error){if(savedBase?.row)await rememberCloudSnapshot(myKey,savedBase.row);autoSyncRef.current.dirty=true;say("⚠️ "+error.message);throw error;}
+                    catch(error){if(savedBase?.row)await rememberCloudSnapshot(myKey,savedBase.row);autoSyncRef.current.dirty=true;if(error?.code==="BEETLE_SYNC_CONFLICT")setCloudConflict({path:error.conflictPath});say(error?.code==="BEETLE_SYNC_CONFLICT"?"⚠️ 동기화 충돌: 설정에서 해결해 주세요.":"⚠️ "+error.message);throw error;}
                   }
                   liveSyncRef.current.data=merged;setData(merged);
                   try { await idbSet(KEY, JSON.stringify(merged)); } catch (e) {}
@@ -2632,8 +2638,9 @@ function App() {
       const result=as.revision===revision?merged:mergeCloudData(next,current,merged);
       liveSyncRef.current.data=result;setData(result);await idbSet(KEY,JSON.stringify(result));
       if(as.revision===revision)as.dirty=false;
+      setCloudConflict(null);
       succeeded=true;
-    }catch(e){say("⚠️ "+(e.message||"클라우드 저장 실패 — 기기 기록은 유지됩니다"));}
+    }catch(e){if(e?.code==="BEETLE_SYNC_CONFLICT")setCloudConflict({path:e.conflictPath});say(e?.code==="BEETLE_SYNC_CONFLICT"?"⚠️ 동기화 충돌: 설정에서 안전하게 해결할 수 있어요.":"⚠️ "+(e.message||"클라우드 저장 실패 — 기기 기록은 유지됩니다"));}
     finally{as.uploading=false;if(succeeded&&as.dirty){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}}
   };
   const persist = async (next) => {
@@ -2647,7 +2654,7 @@ function App() {
     let busy=false,stopped=false;
     const pull=async()=>{
       const as=autoSyncRef.current,live=liveSyncRef.current;
-      if(stopped||busy||!as.on||!as.key||as.dirty||as.uploading||live.modal||live.settingsOpen||document.hidden||!live.data)return;
+      if(stopped||busy||!as.on||!as.key||as.loadingAccount||as.dirty||as.uploading||as.importing||live.modal||live.settingsOpen||document.hidden||!live.data)return;
       if(document.activeElement?.matches?.('input,select,textarea,[contenteditable="true"]'))return;
       const revision=as.revision,key=as.key;busy=true;
       try{
@@ -2847,18 +2854,67 @@ function App() {
     reader.readAsArrayBuffer(file); e.target.value = "";
   };
   const saveSyncKey = async (k) => { setSyncKey(k); try { await idbSet("beetle-sync-key", k); } catch (e) {} };
-  const doUpload = async () => {
-    const k = syncKey.trim();
-    if (!k) return say("먼저 동기화 키를 입력해주세요");
+  /* Never silently overwrite a concurrent phone/PC edit.
+     Preserve BOTH device and cloud states before an explicitly confirmed field-level resolution. */
+  const resolveCloudConflict = async () => {
+    const as=autoSyncRef.current;
+    const key=as.key||syncKey.trim();
+    if (!key||!cloudConflict||syncBusy||as.uploading||as.importing) return;
+    const match=String(cloudConflict.path||"").match(/individuals\[([^\]]+)\]/);
+    const ind=match&&liveSyncRef.current.data?.individuals?.find(i=>i.id===match[1]);
+    const item=ind?.code?ind.code+" 개체":"해당 기록";
+    if (!confirm(item+"의 기기와 서버 기록이 모두 수정됐어요.\n\n충돌한 항목만 이 기기의 값을 우선 적용할까요? 다른 항목은 두 기기 기록을 병합합니다.\n\n먼저 양쪽 기록을 기기에 백업합니다. 백업이 실패하면 업로드를 중단합니다.")) return;
     setSyncBusy(true);
+    as.importing=true;
+    const revision=as.revision;
+    try {
+      const local=cloudCopy(liveSyncRef.current.data);
+      const remote=await readCloudRow(key);
+      if (!remote?.data) throw new Error("클라우드 원본을 확인하지 못해 중단했어요.");
+      // Mandatory backup: do not proceed if storage is full / private mode blocks IndexedDB.
+      const localSlim=snapShrink(local).data,remoteSlim=snapShrink(remote.data).data;
+      await idbSet("beetle-sync-conflict-pair",JSON.stringify({key,at:Date.now(),local:localSlim,remote:remoteSlim,path:cloudConflict.path}));
+      const merged=await cloudUpload(key,local,null,{resolveConflicts:"local"});
+      const current=liveSyncRef.current.data;
+      const result=as.revision===revision?merged:mergeCloudData(local,current,merged);
+      liveSyncRef.current.data=result;setData(result);
+      await idbSet(KEY,JSON.stringify(result));
+      if(as.revision===revision)as.dirty=false;
+      setCloudConflict(null);
+      say("✓ 충돌을 해결했어요. 기기·서버 기록을 백업하고 병합했습니다.");
+    }catch(e){setCloudConflict({path:e?.conflictPath||cloudConflict.path});say("⚠️ "+(e?.message||"충돌 해결 실패 — 원본은 유지됩니다."));}
+    finally{as.importing=false;setSyncBusy(false);if(as.dirty){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}}
+  };
+  const downloadCloudConflictBackup = async () => {
+    try {
+      const backup=await idbGet("beetle-sync-conflict-pair");
+      if(!backup)return say("이 기기에 저장된 충돌 백업이 아직 없어요.");
+      await deliverFile("BeetleLog_동기화충돌백업_"+today()+".json",backup,"application/json");
+    }catch(e){say("⚠️ 충돌 백업을 내보내지 못했어요.");}
+  };
+  const doUpload = async () => {
+    const k = syncKey.trim(),as=autoSyncRef.current;
+    if (!k) return say("먼저 동기화 키를 입력해주세요");
+    if (as.uploading || as.importing || syncBusy) return say("동기화 처리 중이에요. 완료 후 다시 시도해 주세요.");
+    as.importing=true;
+    setSyncBusy(true);
+    const revision=as.revision,original=cloudCopy(liveSyncRef.current.data);
     try {
       await saveSyncKey(k);
-      const merged=await cloudUpload(k, data);
-      liveSyncRef.current.data=merged;setData(merged);await idbSet(KEY,JSON.stringify(merged));
-      autoSyncRef.current.dirty=false;
+      const merged=await cloudUpload(k,original);
+      const result=as.revision===revision?merged:mergeCloudData(original,liveSyncRef.current.data,merged);
+      liveSyncRef.current.data=result;setData(result);await idbSet(KEY,JSON.stringify(result));
+      if(as.revision===revision)as.dirty=false;
+      setCloudConflict(null);
       say("☁︎ 클라우드에 올렸어요");
-    } catch (e) { say("⚠️ "+(e.message||"업로드 실패")); }
-    setSyncBusy(false);
+    } catch (e) {
+      if(e?.code==="BEETLE_SYNC_CONFLICT")setCloudConflict({path:e.conflictPath});
+      say(e?.code==="BEETLE_SYNC_CONFLICT"?"⚠️ 같은 기록을 다른 기기에서도 수정했어요. 아래 충돌 해결 버튼을 이용해 주세요.":"⚠️ "+(e.message||"업로드 실패"));
+    }finally{
+      as.importing=false;
+      setSyncBusy(false);
+      if(as.on&&as.dirty){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}
+    }
   };
   const importLegacySync = async () => {
     const sourceKey = legacySyncKey.trim();
@@ -2923,6 +2979,7 @@ function App() {
     }
   };
   const doDownload = async () => {
+    if(autoSyncRef.current.dirty||cloudConflict)return say("⚠️ 동기화되지 않은 기기 기록이 있습니다. 먼저 올리기 또는 충돌 해결을 이용해 주세요.");
     const k = syncKey.trim();
     if (!k) return say("먼저 동기화 키를 입력해주세요");
     setSyncBusy(true);
@@ -2967,6 +3024,7 @@ function App() {
     );
     return <span className="pl-wrap">{one(fa, true)}<i className="pl-x">×</i>{one(mo, false)}</span>;
   };
+
 
   /* ════════ 렌더 ════════ */
   return (
@@ -3776,11 +3834,6 @@ function App() {
                   </label>
                 </div>
               ) : <div className="set-desc">구글 로그인 후 계정별 푸시 알림을 설정할 수 있어요.</div>}
-              <div className="sect">국균연구소 KML 연동</div>
-              <div className="set-desc">승인된 Google 계정으로 로그인하면 KML 웹과 동일한 성충·라인 DB를 조회하고 등록할 수 있습니다. 개인 BeetleLog 사육기록은 그대로 유지됩니다.</div>
-              <button className="btn primary mt" style={{width:"100%"}} disabled={!authUser}
-                onClick={()=>window.KMLHub?.open(authUser)}>국균연구소 KML 성충·라인 열기</button>
-              {!authUser && <div className="set-desc">먼저 아래에서 Google 로그인을 해주세요.</div>}
               <div className="sect">클라우드 동기화 (폰 ↔ PC)</div>
               {authUser ? (
                 <div className="auth-box">
@@ -3822,6 +3875,19 @@ function App() {
                 <button className="btn" style={{ flex: 1 }} disabled={syncBusy} onClick={doUpload}>{syncBusy ? "처리 중…" : "☁︎ 올리기"}</button>
                 <button className="btn primary" style={{ flex: 1 }} disabled={syncBusy} onClick={doDownload}>{syncBusy ? "처리 중…" : "⤓ 불러오기"}</button>
               </div>
+              {cloudConflict && (
+                <div className="auth-box mt" style={{border:"1px solid #B8744D",padding:12}}>
+                  <div style={{fontWeight:700}}>⚠️ 클라우드 기록 충돌</div>
+                  <div className="set-desc mt">폰과 PC가 같은 기록을 각각 수정했습니다. 어느 쪽도 자동으로 삭제하지 않았습니다.</div>
+                  <div className="set-desc">이 기기에서 수정한 항목을 우선하되, 충돌하지 않는 다른 기기 기록은 함께 병합합니다. 실행 전 양쪽 기록을 기기에 백업합니다.</div>
+                  <button className="btn primary mt" style={{width:"100%"}} disabled={syncBusy||autoSyncRef.current.uploading} onClick={resolveCloudConflict}>
+                    {syncBusy?"처리 중…":"충돌 해결 · 이 기기 기록 우선"}
+                  </button>
+                </div>
+              )}
+              <button className="btn ghost sm mt" style={{width:"100%"}} disabled={syncBusy} onClick={downloadCloudConflictBackup}>
+                마지막 충돌 백업 파일 저장 (기록 데이터)
+              </button>
               <div className="set-desc" style={{ marginTop: 8 }}>
                 {authUser ? "기록하면 자동으로 서버에 저장돼요. 다른 기기에서 같은 계정으로 열면 최신 데이터를 자동으로 받아와요. (아래 버튼으로 수동으로도 가능)" : "⚠️ 키 방식은 같은 키를 다른 기기에 입력하면 그 데이터를 받아올 수 있어요. 비밀번호처럼 관리하세요."}
               </div>
@@ -3884,112 +3950,4 @@ function App() {
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App />);
 
-
-
-/* KML shared Supabase workspace, without modifying personal BeetleLog records. */
-(function installKMLHub(){
-  'use strict';
-  const base='https://qybgsztoegkzqsdipili.supabase.co/rest/v1/';
-  let user=null, box=null, adults=[], lines=[], tab='mineAdults';
-  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const isMine=x=>x===user?.id;
-  async function api(path,method='GET',payload=null){
-    const headers=await cloudAuthHeaders('user:'+user.email,false);
-    const res=await fetch(base+path,{method,headers:{...headers,'Content-Type':'application/json',...(method==='POST'?{'Prefer':'return=representation'}:{})},body:payload?JSON.stringify(payload):undefined});
-    const raw=await res.text();let data=null;
-    try{data=raw?JSON.parse(raw):null;}catch(_){}
-    if(!res.ok)throw Error(data?.message||('서버 오류 '+res.status));
-    return data;
-  }
-  const body=()=>box?.querySelector('#kmlhub-body');
-  const show=x=>{if(body())body().innerHTML=x;};
-  const warn=x=>{const el=document.createElement('div');el.className='kmlhub-warn';el.textContent=x;body()?.prepend(el)};
-  const byId=x=>adults.find(a=>a.id===x);
-  function render(){
-    const isAdult=tab.endsWith('Adults'), mine=tab.startsWith('mine'), items=(isAdult?adults:lines).filter(x=>!mine||(isAdult?isMine(x.owner_id):isMine(x.created_by)));
-    show(`<div class="kmlhub-note">KML과 BeetleLog가 동일한 성충·라인 데이터베이스에 연결됐습니다. 기존 개인 사육기록은 별도로 유지됩니다.</div>
-    <div class="kmlhub-tabs">${[['mineAdults','내 성충'],['mineLines','내 라인'],['allAdults','전체 성충'],['allLines','전체 라인']].map(([k,t])=>`<button type="button" class="${tab===k?'sel':''}" data-kmtab="${k}">${t}</button>`).join('')}</div>
-    <div class="kmlhub-tools"><b>${mine?'내 ':'전체 '}${isAdult?'성충':'라인'} ${items.length}건</b><button data-kmaction="refresh">새로고침</button>${mine?`<button data-kmaction="${isAdult?'addAdult':'addLine'}">+ ${isAdult?'성충':'라인'} 등록</button>`:''}</div>
-    ${items.length?items.map(x=>isAdult?`<div class="kmlhub-item"><strong>${esc(x.code)}　<span class="${x.sex==='M'?'male':'female'}">${x.sex==='M'?'♂':'♀'}</span> ${x.size??'—'} mm</strong><div>혈통 ${esc(x.lineage)} · ${esc(x.emerged||'우화일 미등록')}</div></div>`:`<div class="kmlhub-item"><strong>${esc(x.name)}</strong><div>♂ ${esc(byId(x.father_id)?.code||'—')} × ♀ ${esc(byId(x.mother_id)?.code||'—')} · ${esc(x.year||'')}</div></div>`).join(''):'<div class="kmlhub-empty">등록된 기록이 없습니다.</div>'}
-    <p><a href="https://ljy5747.github.io/KML/" target="_blank" rel="noopener noreferrer">KML 웹에서 개체 상세·계통도 확인 ↗</a></p>`);
-  }
-  async function reload(){
-    const [a,l]=await Promise.all([
-      api('kml_adults?select=id,code,lineage,sex,size,owner_id,breeder_id,emerged&order=created_at.desc'),
-      api('kml_lines?select=id,name,year,father_id,mother_id,created_by&order=created_at.desc')
-    ]);
-    adults=a||[];lines=l||[];render();
-  }
-  function form(kind){
-    const adult=kind==='adult';
-    show(`<button data-kmaction="back">← 목록</button><form id="kmlhub-form" data-kind="${kind}" class="kmlhub-form"><h3>${adult?'KML 성충':'KML 라인'} 등록</h3>
-    ${adult?`<label>관리번호 *<input required maxlength="60" name="code" placeholder="예: YG26-001"></label>
-    <label>혈통 *<input required maxlength="80" name="lineage" placeholder="예: YG26"></label>
-    <label>성별<select name="sex"><option value="M">♂ 수컷</option><option value="F">♀ 암컷</option></select></label>
-    <label>체장(mm)<input type="number" name="size" min="0" max="200" step="0.1"></label>
-    <label>우화일<input type="date" name="emerged"></label>`:
-    `<label>라인명 *<input required maxlength="80" name="name" placeholder="예: YG26-A"></label>
-    <label>연도<input type="number" name="year" min="1980" max="2200" value="${new Date().getFullYear()}"></label>
-    <label>부 ♂<select required name="father_id"><option value="">선택</option>${adults.filter(x=>x.sex==='M').map(x=>`<option value="${esc(x.id)}">${esc(x.code)}</option>`).join('')}</select></label>
-    <label>모 ♀<select required name="mother_id"><option value="">선택</option>${adults.filter(x=>x.sex==='F').map(x=>`<option value="${esc(x.id)}">${esc(x.code)}</option>`).join('')}</select></label>`}
-    <button type="submit">KML DB에 저장</button><p id="kmlhub-error" role="alert"></p></form>`);
-  }
-  async function save(form){
-    const f=Object.fromEntries(new FormData(form).entries()), btn=form.querySelector('[type=submit]'), err=form.querySelector('#kmlhub-error');
-    btn.disabled=true;err.textContent='';
-    try {
-      if(form.dataset.kind==='adult'){
-        if(adults.some(x=>x.code.toLowerCase()===String(f.code).trim().toLowerCase()))throw Error('중복 관리번호입니다.');
-        await api('kml_adults','POST',{id:crypto.randomUUID(),code:String(f.code).trim(),lineage:String(f.lineage).trim(),sex:f.sex,size:f.size===''?null:Number(f.size),emerged:f.emerged||null,breeder_id:user.id,owner_id:user.id,created_by:user.id,status:'보유',source:'자체 우화'});
-        tab='mineAdults';
-      }else{
-        if(!f.father_id||!f.mother_id)throw Error('부모 성충을 선택해주세요.');
-        await api('kml_lines','POST',{id:crypto.randomUUID(),name:String(f.name).trim(),year:f.year?Number(f.year):null,father_id:f.father_id,mother_id:f.mother_id,created_by:user.id});
-        tab='mineLines';
-      }
-      await reload();
-      warn('KML DB에 등록했습니다. KML 웹에서도 동일하게 표시됩니다.');
-    }catch(e){err.textContent=e.message||String(e);}
-    finally{btn.disabled=false;}
-  }
-  function close(){box?.remove();box=null;document.body.style.removeProperty('overflow');}
-  async function open(me){
-    if(!me?.id||!me.email)return alert('Google 로그인 후 이용해주세요.');
-    close();user=me;tab='mineAdults';
-    box=document.createElement('div');box.id='kmlhub';
-    box.innerHTML=`<style>
-      #kmlhub{position:fixed;inset:0;z-index:2147483000;background:#161615;color:#25221f;overflow:auto;padding:12px;font-family:system-ui,sans-serif}
-      #kmlhub *{box-sizing:border-box}#kmlhub .wrap{max-width:850px;min-height:80vh;background:#fbfaf7;margin:auto;border-radius:13px;overflow:hidden}
-      #kmlhub header{display:flex;align-items:center;gap:14px;justify-content:space-between;background:#24211e;color:#e9dac2;padding:15px 18px}
-      #kmlhub header strong{font-size:17px}#kmlhub button{font:inherit;cursor:pointer;border-radius:8px;padding:9px 12px;border:1px solid #c7bba9;background:white;color:#302b24;font-size:12px}
-      #kmlhub header button{background:transparent;color:white;border-color:#8c7d68}
-      #kmlhub-body{padding:20px}#kmlhub .kmlhub-warn,#kmlhub .kmlhub-note{padding:13px;border-radius:8px;background:#f0e5d3;margin-bottom:14px;font-size:12px;line-height:1.7}
-      #kmlhub .kmlhub-tabs,#kmlhub .kmlhub-tools{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:13px 0}
-      #kmlhub .kmlhub-tabs .sel{background:#25221e;color:white}#kmlhub .kmlhub-item{padding:15px;margin:8px 0;background:white;border:1px solid #ded6c7;border-radius:8px}
-      #kmlhub .kmlhub-item strong{display:block;margin-bottom:7px}#kmlhub .kmlhub-item div{color:#766e63;font-size:12px}
-      #kmlhub .male{color:#277bd0}#kmlhub .female{color:#d45695}#kmlhub a{color:#89693b}
-      #kmlhub .kmlhub-empty{padding:30px;text-align:center;color:#8a8174}#kmlhub .kmlhub-form{max-width:520px;padding:20px;border:1px solid #ded6c7;border-radius:10px;background:white;margin-top:15px}
-      #kmlhub .kmlhub-form label{display:block;font-size:12px;margin:12px 0;color:#655c50}#kmlhub .kmlhub-form input,#kmlhub .kmlhub-form select{display:block;width:100%;padding:10px;border-radius:7px;border:1px solid #ded6c7;background:white;margin-top:5px}
-      #kmlhub-error{color:#bd3434;font-size:12px}#kmlhub .kmlhub-form [type=submit]{background:#24211e;color:white;width:100%;margin-top:15px}
-      @media(max-width:600px){#kmlhub{padding:0}#kmlhub .wrap{min-height:100vh;border-radius:0}#kmlhub-body{padding:14px}}
-      </style><div class="wrap"><header><strong>국균연구소 KML · 공통 데이터</strong><button data-kmaction="close">닫기</button></header><div id="kmlhub-body">서버 연결 중…</div></div>`;
-    document.body.appendChild(box);document.body.style.overflow='hidden';
-    box.addEventListener('click',async e=>{
-      const b=e.target.closest('[data-kmtab],[data-kmaction]');if(!b)return;
-      if(b.dataset.kmtab){tab=b.dataset.kmtab;render();return;}
-      const a=b.dataset.kmaction;
-      if(a==='close')close();else if(a==='back')render();
-      else if(a==='addAdult')form('adult');else if(a==='addLine')form('line');
-      else if(a==='refresh')try{await reload()}catch(err){warn(err.message||String(err))}
-    });
-    box.addEventListener('submit',async e=>{if(e.target.id!=='kmlhub-form')return;e.preventDefault();await save(e.target)});
-    try{
-      const email=encodeURIComponent(String(me.email).toLowerCase());
-      const allowed=await api(`kml_allowed_emails?select=email&email=eq.${email}&active=eq.true`);
-      if(!allowed?.length){show('<div class="kmlhub-empty">KML 승인 목록에 없는 계정입니다. 관리자에게 승인을 요청하세요.</div>');return;}
-      await reload();
-    }catch(e){show('<div class="kmlhub-empty">서버 연결에 실패했습니다.</div>');warn(e.message||String(e));}
-  }
-  window.KMLHub={open,close};
-})();
 
