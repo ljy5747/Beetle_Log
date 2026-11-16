@@ -274,7 +274,7 @@ function App() {
                   let merged=server;
                   if(!foreign&&((savedBase?.key===myKey&&savedBase.row?.data)||autoSyncRef.current.dirty)){
                     try{merged=mergeCloudData(savedBase?.key===myKey?savedBase.row.data:base,autoSyncRef.current.dirty?liveSyncRef.current.data:base,server);}
-                    catch(error){if(savedBase?.row)await rememberCloudSnapshot(myKey,savedBase.row);autoSyncRef.current.dirty=true;say("⚠️ "+error.message);throw error;}
+                    catch(error){if(savedBase?.row)await rememberCloudSnapshot(myKey,savedBase.row);autoSyncRef.current.dirty=true;if(error?.code==="BEETLE_SYNC_CONFLICT")setCloudConflict({path:error.conflictPath});say(error?.code==="BEETLE_SYNC_CONFLICT"?"⚠️ 동기화 충돌: 설정에서 해결해 주세요.":"⚠️ "+error.message);throw error;}
                   }
                   liveSyncRef.current.data=merged;setData(merged);
                   try { await idbSet(KEY, JSON.stringify(merged)); } catch (e) {}
