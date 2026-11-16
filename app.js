@@ -170,6 +170,7 @@ async function writeMergedCloud(syncKey,local,legacy,options={}) {
   const baseline=cloudSnapshots.get(syncKey);
   for(let attempt=0;attempt<3;attempt++){
     const row=await readCloudRow(syncKey);
+    if(options.expectedRemoteVersion !== undefined && row?.updated_at !== options.expectedRemoteVersion) throw new Error("다른 기기에서 서버 기록을 다시 변경했어요. 덮어쓰지 않았습니다. 다시 충돌 해결을 실행해 주세요.");
     if(row&&!baseline)throw new Error("먼저 클라우드 불러오기를 해주세요. 기기 기록은 유지됩니다.");
     if((!row&&baseline)||(row?.data===null&&baseline?.data))throw new Error("서버 기록이 없어졌어요. 기기 백업을 확인한 뒤 다시 연결해 주세요.");
     const account=row?mergeCloudData(baseline.data,local,row.data,"기록",options.resolveConflicts||"error"):local;
@@ -2874,7 +2875,7 @@ function App() {
       // Mandatory backup: do not proceed if storage is full / private mode blocks IndexedDB.
       const localSlim=snapShrink(local).data,remoteSlim=snapShrink(remote.data).data;
       await idbSet("beetle-sync-conflict-pair",JSON.stringify({key,at:Date.now(),local:localSlim,remote:remoteSlim,path:cloudConflict.path}));
-      const merged=await cloudUpload(key,local,null,{resolveConflicts:"local"});
+      const merged=await cloudUpload(key,local,null,{resolveConflicts:"local",expectedRemoteVersion:remote.updated_at});
       const current=liveSyncRef.current.data;
       const result=as.revision===revision?merged:mergeCloudData(local,current,merged);
       liveSyncRef.current.data=result;setData(result);
