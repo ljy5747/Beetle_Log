@@ -199,6 +199,9 @@
                   </button>
                 </div>
               )}
+              <button className="btn ghost sm mt" style={{width:"100%"}} disabled={syncBusy} onClick={downloadCloudConflictBackup}>
+                마지막 충돌 백업 파일 저장 (기록 데이터)
+              </button>
               <div className="set-desc" style={{ marginTop: 8 }}>
                 {authUser ? "기록하면 자동으로 서버에 저장돼요. 다른 기기에서 같은 계정으로 열면 최신 데이터를 자동으로 받아와요. (아래 버튼으로 수동으로도 가능)" : "⚠️ 키 방식은 같은 키를 다른 기기에 입력하면 그 데이터를 받아올 수 있어요. 비밀번호처럼 관리하세요."}
               </div>
