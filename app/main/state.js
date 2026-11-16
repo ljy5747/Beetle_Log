@@ -342,7 +342,7 @@ function App() {
     let busy=false,stopped=false;
     const pull=async()=>{
       const as=autoSyncRef.current,live=liveSyncRef.current;
-      if(stopped||busy||!as.on||!as.key||as.dirty||as.uploading||live.modal||live.settingsOpen||document.hidden||!live.data)return;
+      if(stopped||busy||!as.on||!as.key||as.loadingAccount||as.dirty||as.uploading||as.importing||live.modal||live.settingsOpen||document.hidden||!live.data)return;
       if(document.activeElement?.matches?.('input,select,textarea,[contenteditable="true"]'))return;
       const revision=as.revision,key=as.key;busy=true;
       try{
