@@ -562,7 +562,7 @@ function App() {
       // Mandatory backup: do not proceed if storage is full / private mode blocks IndexedDB.
       const localSlim=snapShrink(local).data,remoteSlim=snapShrink(remote.data).data;
       await idbSet("beetle-sync-conflict-pair",JSON.stringify({key,at:Date.now(),local:localSlim,remote:remoteSlim,path:cloudConflict.path}));
-      const merged=await cloudUpload(key,local,null,{resolveConflicts:"local"});
+      const merged=await cloudUpload(key,local,null,{resolveConflicts:"local",expectedRemoteVersion:remote.updated_at});
       const current=liveSyncRef.current.data;
       const result=as.revision===revision?merged:mergeCloudData(local,current,merged);
       liveSyncRef.current.data=result;setData(result);
