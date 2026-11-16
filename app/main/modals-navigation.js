@@ -189,6 +189,16 @@
                 <button className="btn" style={{ flex: 1 }} disabled={syncBusy} onClick={doUpload}>{syncBusy ? "처리 중…" : "☁︎ 올리기"}</button>
                 <button className="btn primary" style={{ flex: 1 }} disabled={syncBusy} onClick={doDownload}>{syncBusy ? "처리 중…" : "⤓ 불러오기"}</button>
               </div>
+              {cloudConflict && (
+                <div className="auth-box mt" style={{border:"1px solid #B8744D",padding:12}}>
+                  <div style={{fontWeight:700}}>⚠️ 클라우드 기록 충돌</div>
+                  <div className="set-desc mt">폰과 PC가 같은 기록을 각각 수정했습니다. 어느 쪽도 자동으로 삭제하지 않았습니다.</div>
+                  <div className="set-desc">이 기기에서 수정한 항목을 우선하되, 충돌하지 않는 다른 기기 기록은 함께 병합합니다. 실행 전 양쪽 기록을 기기에 백업합니다.</div>
+                  <button className="btn primary mt" style={{width:"100%"}} disabled={syncBusy||autoSyncRef.current.uploading} onClick={resolveCloudConflict}>
+                    {syncBusy?"처리 중…":"충돌 해결 · 이 기기 기록 우선"}
+                  </button>
+                </div>
+              )}
               <div className="set-desc" style={{ marginTop: 8 }}>
                 {authUser ? "기록하면 자동으로 서버에 저장돼요. 다른 기기에서 같은 계정으로 열면 최신 데이터를 자동으로 받아와요. (아래 버튼으로 수동으로도 가능)" : "⚠️ 키 방식은 같은 키를 다른 기기에 입력하면 그 데이터를 받아올 수 있어요. 비밀번호처럼 관리하세요."}
               </div>
