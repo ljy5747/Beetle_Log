@@ -573,6 +573,13 @@ function App() {
     }catch(e){setCloudConflict({path:e?.conflictPath||cloudConflict.path});say("⚠️ "+(e?.message||"충돌 해결 실패 — 원본은 유지됩니다."));}
     finally{as.importing=false;setSyncBusy(false);if(as.dirty){clearTimeout(as.timer);as.timer=setTimeout(()=>applyCloudUpload(),2000);}}
   };
+  const downloadCloudConflictBackup = async () => {
+    try {
+      const backup=await idbGet("beetle-sync-conflict-pair");
+      if(!backup)return say("이 기기에 저장된 충돌 백업이 아직 없어요.");
+      await deliverFile("BeetleLog_동기화충돌백업_"+today()+".json",backup,"application/json");
+    }catch(e){say("⚠️ 충돌 백업을 내보내지 못했어요.");}
+  };
   const doUpload = async () => {
     const k = syncKey.trim(),as=autoSyncRef.current;
     if (!k) return say("먼저 동기화 키를 입력해주세요");
