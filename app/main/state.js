@@ -548,10 +548,10 @@ function App() {
     const as=autoSyncRef.current;
     const key=as.key||syncKey.trim();
     if (!key||!cloudConflict||syncBusy||as.uploading||as.importing) return;
-    const match=String(cloudConflict.path||"").match(/individuals\\[([^\\]]+)\\]/);
+    const match=String(cloudConflict.path||"").match(/individuals\[([^\]]+)\]/);
     const ind=match&&liveSyncRef.current.data?.individuals?.find(i=>i.id===match[1]);
     const item=ind?.code?ind.code+" 개체":"해당 기록";
-    if (!confirm(item+"의 기기와 서버 기록이 모두 수정됐어요.\\n\\n충돌한 항목만 이 기기의 값을 우선 적용할까요? 다른 항목은 두 기기 기록을 병합합니다.\\n\\n먼저 양쪽 기록을 기기에 백업합니다. 백업이 실패하면 업로드를 중단합니다.")) return;
+    if (!confirm(item+"의 기기와 서버 기록이 모두 수정됐어요.\n\n충돌한 항목만 이 기기의 값을 우선 적용할까요? 다른 항목은 두 기기 기록을 병합합니다.\n\n먼저 양쪽 기록을 기기에 백업합니다. 백업이 실패하면 업로드를 중단합니다.")) return;
     setSyncBusy(true);
     as.importing=true;
     const revision=as.revision;
