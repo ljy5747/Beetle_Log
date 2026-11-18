@@ -211,11 +211,12 @@
                 {authUser ? "기록하면 자동으로 서버에 저장돼요. 다른 기기에서 같은 계정으로 열면 최신 데이터를 자동으로 받아와요. (아래 버튼으로 수동으로도 가능)" : "⚠️ 키 방식은 같은 키를 다른 기기에 입력하면 그 데이터를 받아올 수 있어요. 비밀번호처럼 관리하세요."}
               </div>
 
-              <div className="sect" style={{ marginTop: 24 }}>엑셀로 한 번에 등록</div>
-              <div className="set-desc">양식을 받아 성충·라인·유충을 정리한 뒤 불러오면 한 번에 등록돼요. 같은 항목(종+관리번호, 라인명+종)은 최신 정보로 갱신하고, 새 항목은 추가해요. 유충의 교체 기록은 보존돼요.</div>
-              <button className="btn mt" style={{ width: "100%" }} onClick={async () => { try { await downloadTemplate(); } catch (e) { say("⚠️ 양식 생성 실패 — 새로고침 후 다시 시도"); } }}>① 엑셀 양식 다운로드</button>
-              <button className="btn primary mt" style={{ width: "100%" }} onClick={() => xlsxRef.current?.click()}>② 엑셀 불러오기</button>
+              <div className="sect" style={{ marginTop: 24 }}>라인별 엑셀 ↔ BeetleLog</div>
+              <div className="set-desc">라인당 시트 하나로 내보낸 엑셀을 수정한 뒤 그대로 다시 올릴 수 있어요. 관리번호·기록 ID로 기존 데이터를 찾아 갱신하며 새 개체와 병 기록은 추가돼요. 적용 전 변경 건수를 확인하고 자동 백업합니다.</div>
+              <button className="btn mt" style={{ width: "100%" }} onClick={() => (data.lines.length || data.individuals.length) ? exportXLSX(data) : say("먼저 앱에 사육 라인을 등록해 주세요.")}>① 현재 라인별 엑셀 내려받기</button>
+              <button className="btn primary mt" style={{ width: "100%" }} disabled={syncBusy} onClick={() => xlsxRef.current?.click()}>② 수정한 엑셀 업로드 · 반영</button>
               <input ref={xlsxRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={importXLSX} />
+              <div className="set-desc mt">빈칸은 기존 값을 유지하고, 셀·행 삭제만으로 기록은 지워지지 않아요. 기존 4시트 엑셀 업로드도 계속 지원해요. 시트당 최대 1500개체·60병까지 지원합니다.</div>
 
               <div className="sect" style={{ marginTop: 24 }}>자동 백업 · 되돌리기</div>
               <button className="btn mt" style={{ width: "100%" }} onClick={async () => {
