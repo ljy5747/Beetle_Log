@@ -1743,51 +1743,142 @@ function EclosionForm({ initial, species, onSave, onClose }) {
 }
 
 /* ════════════════════ 엑셀 내보내기 ════════════════════ */
-function exportXLSX(data) {
-  const lineById = Object.fromEntries(data.lines.map((l) => [l.id, l]));
-  const parentById = Object.fromEntries(data.parents.map((p) => [p.id, p]));
-  const sheet1 = data.individuals.map((ind) => {
-    const L = lineById[ind.lineId] || {};
-    const fa = parentById[L.fatherId] || {}, mo = parentById[L.motherId] || {};
-    return {
-      "라인": L.code || "", "관리번호": ind.code, "종": L.species || "", "산지": L.origin || "",
-      "성별": ind.sex, "상태": ind.status,
-      "산란셋팅일": L.setDate || "", "산란해체일": L.breakdownDate || "",
-      "부 관리번호": fa.code || "", "부 총장(mm)": fa.totalLength || "", "부 턱길이(mm)": fa.jawLength || "", "부 흉폭(mm)": fa.thoraxWidth || "",
-      "모 관리번호": mo.code || "", "모 총장(mm)": mo.totalLength || "",
-      "페어링일": L.pairDate || "",
-      "최대 유충무게(g)": maxWeight(ind) ?? "", "교체 횟수": (ind.bottleRecords || []).length,
-      "전용일": ind.pupation?.prepupaDate || "", "용화일": ind.pupation?.pupaDate || "", "번데기 무게(g)": ind.pupation?.pupaWeight || "",
-      "우화일": ind.eclosion?.date || "", "총장(mm)": ind.eclosion?.totalLength || "", "턱 길이(mm)": ind.eclosion?.jawLength || "",
-      "악폭(mm)": ind.eclosion?.jawWidth || "", "악후(mm)": ind.eclosion?.jawThick || "",
-      "두폭(mm)": ind.eclosion?.headWidth || "", "흉폭(mm)": ind.eclosion?.thoraxWidth || "", "배 길이(mm)": ind.eclosion?.abdomenLength || "",
-      "우화부전": ind.eclosion ? (ind.eclosion.defect ? "O" : "X") : "",
-      "환원율(mm/g)": reduction(ind) != null ? Math.round(reduction(ind) * 100) / 100 : "",
-      "로스율(%)": lossRate(ind) != null ? Math.round(lossRate(ind) * 10) / 10 : "",
-      "유충기간(일)": larvaDays(ind) ?? "", "메모": ind.memo || "",
-    };
-  });
-  const sheet2 = [];
-  data.individuals.forEach((ind) => {
-    const L = lineById[ind.lineId] || {};
-    sortedRecs(ind).forEach((r) => sheet2.push({
-      "라인": L.code || "", "관리번호": ind.code, "종": L.species || "", "날짜": r.date, "령": r.instar,
-      "유충무게(g)": r.weight, "두폭(mm)": r.headWidth, "먹이종류": r.feedType, "브랜드": r.feedBrand,
-      "병용량": ccLabel(r.bottleSize), "푸딩컵": r.pudding ? "O" : "", "다음 예정일": r.nextDate, "특이사항": (r.flags || []).join(", "), "메모": r.memo,
-    }));
-  });
-  const sheetP = data.parents.map((p) => ({
-    "관리번호": p.code, "성별": p.sex, "종": p.species, "혈통": p.line, "누대수": p.gen, "산지": p.origin,
-    "총장(mm)": p.totalLength, "턱 길이(mm)": p.jawLength, "악폭(mm)": p.jawWidth || "", "악후(mm)": p.jawThick || "", "두폭(mm)": p.headWidth || "", "흉폭(mm)": p.thoraxWidth,
-    "우화일": p.eclosionDate, "입수처": p.source, "상태": p.status || "생존", "메모": p.memo,
-  }));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet1), "개체정보");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet2), "병갈이기록");
-  if (sheetP.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetP), "성충");
-  const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-  const xmime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  return deliverFile(`사육기록_${today()}.xlsx`, new Blob([out], { type: xmime }), xmime);
+async function exportXLSX(data) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "BeetleLog";
+  wb.created = new Date();
+  const parents = new Map((data.parents || []).map(p => [p.id, p]));
+  const lines = Array.isArray(data.lines) ? data.lines : [];
+  const individuals = Array.isArray(data.individuals) ? data.individuals : [];
+  const usedNames = new Set();
+  const safeName = raw => {
+    const base = (String(raw || "미지정").replace(/[\\/?*\[\]:]/g, "_").trim() || "미지정").slice(0, 31);
+    let name = base, n = 2;
+    while (usedNames.has(name.toLowerCase())) {
+      const suffix = "_" + n++;
+      name = base.slice(0, 31 - suffix.length) + suffix;
+    }
+    usedNames.add(name.toLowerCase());
+    return name;
+  };
+  const text = v => v == null ? "" : String(v);
+  const numeric = v => {
+    if (v == null || v === "") return null;
+    const n = Number(String(v).replace(/(?:mm|g|cc)\s*$/i, "").trim());
+    return Number.isFinite(n) ? n : null;
+  };
+  const parentLabel = p => {
+    if (!p) return "—";
+    const size = numeric(p.totalLength);
+    return [p.code || "", size == null ? "" : size + "mm"].filter(Boolean).join(" · ") || "—";
+  };
+  const palette = { navy:"243B50", pale:"EEF4F6", teal:"3B6B70", white:"FFFFFF", border:"CCD6D9", muted:"586875" };
+  const border = { style:"thin", color:{argb:"FF"+palette.border} };
+  const writeCell = (ws, row, col, value, kind) => {
+    const cell = ws.getCell(row, col);
+    cell.value = value == null ? "" : value;
+    cell.alignment = { horizontal:kind==="weight"?"right":"center", vertical:"middle", wrapText:true, indent:kind==="weight"?1:0 };
+    cell.border = {top:border,bottom:border,left:border,right:border};
+    if (kind==="weight" && typeof value==="number") cell.numFmt = "0.##";
+    return cell;
+  };
+  const lineGroups = lines.map(line => ({line, members:individuals.filter(ind => ind.lineId === line.id)}));
+  // Unknown/missing line references are preserved instead of silently omitted.
+  const assigned = new Set(lines.map(l => l.id));
+  const orphans = individuals.filter(ind => !assigned.has(ind.lineId));
+  if (orphans.length) lineGroups.push({line:{code:"미분류",species:"",origin:"",gen:""},members:orphans});
+  if (!lineGroups.length) lineGroups.push({line:{code:"라인 없음"},members:[]});
+  for (const {line, members} of lineGroups) {
+    const numberOfBottles = Math.max(1, ...members.map(ind => (ind.bottleRecords || []).length));
+    const cols = 4 + numberOfBottles * 4 + 5;
+    const last = cols;
+    const ws = wb.addWorksheet(safeName(line.code), {
+      views:[{state:"frozen",xSplit:4,ySplit:9}],
+      pageSetup:{orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0}
+    });
+    ws.properties.defaultRowHeight = 23;
+    ws.mergeCells(1,1,1,last);
+    const title = ws.getCell(1,1);
+    title.value = text(line.code || "미분류") + "  |  라인별 유충 사육기록";
+    title.font = {name:"맑은 고딕",size:16,bold:true,color:{argb:"FF"+palette.white}};
+    title.fill = {type:"pattern",pattern:"solid",fgColor:{argb:"FF"+palette.navy}};
+    title.alignment = {horizontal:"center",vertical:"middle"};
+    ws.getRow(1).height = 39;
+    ws.mergeCells(3,1,3,last);
+    ws.getCell(3,1).value = "BeetleLog · 라인별 사육 기록";
+    ws.getCell(3,1).font = {name:"맑은 고딕",size:10,color:{argb:"FF"+palette.muted}};
+    ws.getCell(3,1).alignment = {horizontal:"center",vertical:"middle"};
+    ws.getRow(3).height = 25;
+
+    const father = parents.get(line.fatherId), mother = parents.get(line.motherId);
+    const info = [
+      ["라인",line.code || "미분류","종",line.species || "","혈통 / 산지",[line.gen,line.origin].filter(Boolean).join(" · ")],
+      ["부모 수컷",parentLabel(father),"부모 암컷",parentLabel(mother),"유충 수",members.length + "마리"]
+    ];
+    for (let i=0;i<2;i++) {
+      const row=5+i;
+      info[i].forEach((value,j)=>{
+        const cell=writeCell(ws,row,j+1,value);
+        if(j%2===0) {
+          cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+palette.pale}};
+          cell.font={bold:true,color:{argb:"FF"+palette.teal}};
+        }
+      });
+      ws.getRow(row).height=27;
+    }
+    ws.getRow(7).height=12;
+    const mainHeads = ["관리번호","성별","상태","두폭(mm)"];
+    mainHeads.forEach((h,j)=>{ws.mergeCells(8,j+1,9,j+1);writeCell(ws,8,j+1,h);});
+    for(let b=0;b<numberOfBottles;b++){
+      const start=5+b*4;
+      ws.mergeCells(8,start,8,start+3);
+      writeCell(ws,8,start,(b+1)+"병 기록");
+      ["투입일","먹이원","용량(cc)","무게(g)"].forEach((h,j)=>writeCell(ws,9,start+j,h));
+    }
+    const finalStart=5+numberOfBottles*4;
+    ws.mergeCells(8,finalStart,8,last);
+    writeCell(ws,8,finalStart,"최종 / 관리 상태");
+    ["전용일","용화일","우화일","총장(mm)","비고"].forEach((h,j)=>writeCell(ws,9,finalStart+j,h));
+    for(let row=8;row<=9;row++){
+      ws.getRow(row).height=29;
+      for(let col=1;col<=last;col++){
+        const c=ws.getCell(row,col);
+        c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+(row===8?palette.navy:palette.teal)}};
+        c.font={name:"맑은 고딕",bold:true,color:{argb:"FF"+palette.white},size:10};
+        c.alignment={horizontal:"center",vertical:"middle",wrapText:true};
+      }
+    }
+    for(let idx=0;idx<members.length;idx++){
+      const ind=members[idx], recs=sortedRecs(ind), row=10+idx;
+      const latestWithWidth=[...recs].reverse().find(r => numeric(r.headWidth)!=null);
+      const width=numeric(latestWithWidth?.headWidth) ?? numeric(ind.eclosion?.headWidth);
+      const sex=String(ind.sex||"");
+      const shortSex=sex.includes("수")?"♂":sex.includes("암")?"♀":sex||"미구분";
+      const basics=[ind.code||"",shortSex,ind.status||"",width];
+      basics.forEach((v,j)=>writeCell(ws,row,j+1,v));
+      for(let b=0;b<numberOfBottles;b++){
+        const r=recs[b]||{},start=5+b*4;
+        writeCell(ws,row,start,r.date||"");
+        writeCell(ws,row,start+1,r.feedBrand||r.feedType||"");
+        writeCell(ws,row,start+2,numeric(r.bottleSize) ?? ccLabel(r.bottleSize || ""));
+        writeCell(ws,row,start+3,numeric(r.weight), "weight");
+      }
+      const out=[ind.pupation?.prepupaDate||"",ind.pupation?.pupaDate||"",ind.eclosion?.date||"",numeric(ind.eclosion?.totalLength),ind.memo||""];
+      out.forEach((v,j)=>writeCell(ws,row,finalStart+j,v));
+      if(idx%2===1) for(let col=1;col<=last;col++) ws.getCell(row,col).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7FAFB"}};
+      ws.getRow(row).height=27;
+    }
+    const colWidths=[18,9,11,13];
+    for(let b=0;b<numberOfBottles;b++)colWidths.push(15,19,12,12);
+    colWidths.push(15,15,15,13,32);
+    colWidths.forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+    // Column groups have a merged first header row; avoid invalid table structures.
+    ws.printOptions = {horizontalCentered:true};
+    ws.pageSetup.printTitlesRow = "1:9";
+  }
+  const out = await wb.xlsx.writeBuffer();
+  const mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  return deliverFile("BeetleLog_라인별_사육기록_"+today()+".xlsx",new Blob([out],{type:mime}),mime);
 }
 
 /* ════════════════════ 엑셀 가져오기 양식 다운로드 ════════════════════ */
