@@ -129,7 +129,6 @@ async function exportXLSX(data) {
     for(let b=0;b<numberOfBottles;b++)colWidths.push(15,19,12,12);
     colWidths.push(15,15,15,13,32);
     colWidths.forEach((w,i)=>{ws.getColumn(i+1).width=w;});
-    ws.autoFilter = {from:{row:9,column:1},to:{row:Math.max(10,9+members.length),column:last}};
     // Column groups have a merged first header row; avoid invalid table structures.
     ws.printOptions = {horizontalCentered:true};
     ws.pageSetup.printTitlesRow = "1:9";
