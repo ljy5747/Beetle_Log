@@ -519,27 +519,54 @@ function App() {
   };
   const importXLSX = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
+    e.target.value = "";
+    if (syncBusy || autoSyncRef.current.importing || autoSyncRef.current.uploading) {
+      say("⚠️ 다른 동기화가 진행 중이에요. 완료 후 다시 시도해 주세요.");
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) return say("⚠️ 엑셀 파일은 최대 12MB까지 지원해요.");
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      const sync = autoSyncRef.current;
+      if (sync.importing || sync.uploading) return say("⚠️ 동기화 완료 후 다시 불러와 주세요.");
+      sync.importing = true;
+      setSyncBusy(true);
       try {
-        const { next, report } = parseImportXLSX(reader.result, data);
-        const totalNew = report.parentsNew + report.linesNew + report.larvaeNew;
-        const totalUpd = report.parentsUpd + report.linesUpd + report.larvaeUpd;
-        const bottleNew = report.bottleNew || 0;
-        if (totalNew + totalUpd + bottleNew === 0) {
-          say(report.skipped > 0 ? "라인/유충을 못 찾아 건너뛴 항목만 있어요" : "⚠️ 양식에서 데이터를 찾지 못했어요");
+        const current=liveSyncRef.current.data;
+        // The old 4-sheet importer mutates its input. Use a deep copy so canceled/invalid
+        // imports can never change the live React state.
+        const {next,report,format}=parseImportXLSX(reader.result,cloudCopy(current));
+        const created=report.parentsNew+report.linesNew+report.larvaeNew+(report.bottleNew||0);
+        const modified=report.parentsUpd+report.linesUpd+report.larvaeUpd+(report.bottleUpd||0);
+        if(created+modified===0) {
+          say("✓ 반영할 변경사항이 없어요. 이미 최신 기록입니다.");
           return;
         }
-        persist(next);
-        const parts = [];
-        if (totalNew) parts.push(`신규 ${totalNew}`);
-        if (totalUpd) parts.push(`갱신 ${totalUpd}`);
-        if (bottleNew) parts.push(`교체 ${bottleNew}`);
-        say(`✓ ${parts.join(" · ")}${report.skipped ? ` · ${report.skipped} 건너뜀` : ""}`);
+        const text=[created?"신규 "+created+"건":"",modified?"수정 "+modified+"건":""].filter(Boolean).join(" · ");
+        const detail=format==="line"?"라인별 사육표":"기존 엑셀 양식";
+        if(!confirm(detail+"에서 변경사항을 찾았습니다.\n\n"+text+
+          "\n라인 "+report.linesNew+"건 추가 · 유충 "+report.larvaeNew+"건 추가 · 병 기록 "+(report.bottleNew||0)+"건 추가"+
+          "\n\n현재 사육 기록을 백업한 뒤 앱에 반영할까요? 엑셀의 빈칸은 기존 기록을 지우지 않습니다.")) return;
+        // Fail closed if local backup cannot be written. Photo data remains in the live record.
+        const backup={at:Date.now(),source:file.name,data:snapShrink(current).data};
+        await idbSet("beetle-excel-import-backup",JSON.stringify(backup));
+        if(!cloudEqual(current,liveSyncRef.current.data))throw Error("작업 중 기록이 변경됐어요. 다시 업로드해 주세요.");
+        await persist(next);
+        say("✓ 엑셀 반영 완료 · "+text+" · 클라우드 자동 동기화");
         setSettingsOpen(false);
-      } catch (err) { say("⚠️ 엑셀을 읽지 못했어요 — 양식 파일이 맞는지 확인해주세요"); }
+      } catch (err) {
+        say("⚠️ "+(err?.message||"엑셀을 읽지 못했어요. 양식을 확인해 주세요."));
+      } finally {
+        sync.importing=false;
+        setSyncBusy(false);
+        if(sync.on && sync.dirty) {
+          clearTimeout(sync.timer);
+          sync.timer=setTimeout(()=>applyCloudUpload(),2000);
+        }
+      }
     };
-    reader.readAsArrayBuffer(file); e.target.value = "";
+    reader.onerror=()=>say("⚠️ 파일을 읽지 못했어요.");
+    reader.readAsArrayBuffer(file);
   };
   const saveSyncKey = async (k) => { setSyncKey(k); try { await idbSet("beetle-sync-key", k); } catch (e) {} };
   /* Never silently overwrite a concurrent phone/PC edit.
