@@ -312,7 +312,7 @@ function parseLineXLSXWorkbook(workbook, current) {
       if(width) {
         const previouslyMeasured=[...originalRecs].reverse().find(r=>nonblank(r.headWidth));
         // An unedited export must round-trip without moving head width to a newer bottle record.
-        const widthChanged = str(previouslyMeasured?.headWidth)!==str(width);
+        const widthChanged = str(previouslyMeasured?.headWidth ?? ind.eclosion?.headWidth)!==str(width);
         if(!widthChanged) { /* preserve the original measurement position */ }
         else if(lastWithWidth)update(lastWithWidth,"headWidth",width);
         else if(ind.bottleRecords.length) {
