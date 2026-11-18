@@ -66,6 +66,9 @@ async function exportXLSX(data) {
     ws.getCell(3,1).font = {name:"맑은 고딕",size:10,color:{argb:"FF"+palette.muted}};
     ws.getCell(3,1).alignment = {horizontal:"center",vertical:"middle"};
     ws.getRow(3).height = 25;
+    // Hidden IDs enable safe round-trip editing without adding visible worksheets.
+    ws.getCell(2,1).value = "BL_LINE_ID:" + (line.id || "");
+    ws.getRow(2).hidden = true;
 
     const father = parents.get(line.fatherId), mother = parents.get(line.motherId);
     const info = [
@@ -105,6 +108,11 @@ async function exportXLSX(data) {
         c.alignment={horizontal:"center",vertical:"middle",wrapText:true};
       }
     }
+    const identityCol = last + 1, recordsCol = last + 2;
+    ws.getColumn(identityCol).hidden = true;
+    ws.getColumn(recordsCol).hidden = true;
+    ws.getCell(9,identityCol).value = "__BL_INDIVIDUAL_ID";
+    ws.getCell(9,recordsCol).value = "__BL_BOTTLE_IDS";
     for(let idx=0;idx<members.length;idx++){
       const ind=members[idx], recs=sortedRecs(ind), row=10+idx;
       const latestWithWidth=[...recs].reverse().find(r => numeric(r.headWidth)!=null);
@@ -112,6 +120,8 @@ async function exportXLSX(data) {
       const sex=String(ind.sex||"");
       const shortSex=sex.includes("수")?"♂":sex.includes("암")?"♀":sex||"미구분";
       const basics=[ind.code||"",shortSex,ind.status||"",width];
+      ws.getCell(row,identityCol).value = ind.id || "";
+      ws.getCell(row,recordsCol).value = JSON.stringify(recs.map(r=>r.id || ""));
       basics.forEach((v,j)=>writeCell(ws,row,j+1,v));
       for(let b=0;b<numberOfBottles;b++){
         const r=recs[b]||{},start=5+b*4;
