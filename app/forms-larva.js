@@ -337,8 +337,8 @@ function PupationForm({ initial, onSave, onClose }) {
   return (
     <Modal title="용화 기록" onClose={onClose} onSave={() => onSave(f)}>
       <div className="row">
-        <F label="전용일" half><input type="date" className="in" value={f.prepupaDate} onChange={(e) => set("prepupaDate", e.target.value)} /></F>
-        <F label="용화일" half><input type="date" className="in" value={f.pupaDate} onChange={(e) => set("pupaDate", e.target.value)} /></F>
+        <F label="전용일" half><div className="row" style={{gap:6,alignItems:"center"}}><input type="date" className="in" style={{flex:1,minWidth:0}} value={f.prepupaDate || ""} onChange={(e) => set("prepupaDate", e.target.value || "")} /><button type="button" className="btn tiny" onClick={() => set("prepupaDate", "")}>지우기</button></div></F>
+        <F label="용화일" half><div className="row" style={{gap:6,alignItems:"center"}}><input type="date" className="in" style={{flex:1,minWidth:0}} value={f.pupaDate || ""} onChange={(e) => set("pupaDate", e.target.value || "")} /><button type="button" className="btn tiny" onClick={() => set("pupaDate", "")}>지우기</button></div></F>
       </div>
       <F label="번데기 무게 g — 환원율 기준값"><input className="in mono" inputMode="decimal" value={f.pupaWeight} onChange={(e) => set("pupaWeight", e.target.value)} /></F>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="원더링 여부 등" /></F>
@@ -348,7 +348,7 @@ function PupationForm({ initial, onSave, onClose }) {
 
 /* ════════════════════ 우화 폼 ════════════════════ */
 function EclosionForm({ initial, species, onSave, onClose }) {
-  const [f, setF] = useState({ date: today(), totalLength: "", jawLength: "", jawWidth: "", jawThick: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "", ...(initial || {}) });
+  const [f, setF] = useState({ date: "", totalLength: "", jawLength: "", jawWidth: "", jawThick: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "", ...(initial || {}) });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const sp = species || "";
   const isGeuktae = sp.includes("극태");
@@ -357,7 +357,7 @@ function EclosionForm({ initial, species, onSave, onClose }) {
   const [showJaw, setShowJaw] = useState(isGeuktae || !!(initial && (initial.jawWidth || initial.jawThick)));
   return (
     <Modal title="우화 기록" onClose={onClose} onSave={() => onSave(f)}>
-      <F label="우화일"><input type="date" className="in" value={f.date} onChange={(e) => set("date", e.target.value)} /></F>
+      <F label="우화일"><div className="row" style={{gap:6,alignItems:"center"}}><input type="date" className="in" style={{flex:1,minWidth:0}} value={f.date || ""} onChange={(e) => set("date", e.target.value || "")} /><button type="button" className="btn tiny" onClick={() => set("date", "")}>지우기</button></div></F>
       <div className="row">
         <F label="총장(체장) mm" half><input className="in mono" inputMode="decimal" value={f.totalLength} onChange={(e) => set("totalLength", e.target.value)} /></F>
         <F label="턱 길이 mm" half><input className="in mono" inputMode="decimal" value={f.jawLength} onChange={(e) => set("jawLength", e.target.value)} /></F>
