@@ -63,12 +63,12 @@
           } : null} />
       )}
       {modal?.type === "pupation" && (
-        <PupationForm initial={data.individuals.find((i) => i.id === modal.indId)?.pupation} onSave={savePupation} onClose={() => setModal(null)} />
+        <PupationForm initial={data.individuals.find((i) => i.id === modal.indId)?.pupation} onSave={savePupation} onCancelRecord={cancelPupationRecord} onClose={() => setModal(null)} />
       )}
       {modal?.type === "eclosion" && (() => {
         const ind = data.individuals.find((i) => i.id === modal.indId);
         const species = (lineById[ind?.lineId]?.species) || "";
-        return <EclosionForm initial={ind?.eclosion} species={species} onSave={saveEclosion} onClose={() => setModal(null)} />;
+        return <EclosionForm initial={ind?.eclosion} species={species} onSave={saveEclosion} onCancelRecord={cancelEclosionRecord} onClose={() => setModal(null)} />;
       })()}
 
       {settingsOpen && (
