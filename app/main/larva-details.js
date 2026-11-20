@@ -79,8 +79,10 @@
             )}
 
             {cur.eclosion && (
-              <div className="panel">
-                <div className="p-t">우화 · {cur.eclosion.date}{cur.eclosion.defect && <span className="warn"> 우화부전</span>}</div>
+              <div className="panel" role="button" tabIndex={0} aria-label="우화 기록 수정" style={{cursor:"pointer"}}
+                onClick={() => setModal({ type: "eclosion", indId: cur.id })}
+                onKeyDown={e => { if(e.key==="Enter"||e.key===" "){e.preventDefault();setModal({ type: "eclosion", indId: cur.id });} }}>
+                <div className="p-t">우화{cur.eclosion.date ? " " + cur.eclosion.date : ""}{cur.eclosion.defect && <span className="warn"> 우화부전</span>} <span style={{float:"right",fontSize:12,opacity:.7}}>수정 ›</span></div>
                 <div className="meas mono">
                   {[["총장", cur.eclosion.totalLength], ["턱", cur.eclosion.jawLength], ["악폭", cur.eclosion.jawWidth], ["악후", cur.eclosion.jawThick], ["두폭", cur.eclosion.headWidth], ["흉폭", cur.eclosion.thoraxWidth], ["배", cur.eclosion.abdomenLength]]
                     .filter(([, v]) => num(v)).map(([k, v]) => <span key={k}>{k} <b>{v}</b>mm</span>)}
@@ -89,8 +91,10 @@
               </div>
             )}
             {cur.pupation && (
-              <div className="panel">
-                <div className="p-t">용화</div>
+              <div className="panel" role="button" tabIndex={0} aria-label="용화 기록 수정" style={{cursor:"pointer"}}
+                onClick={() => setModal({ type: "pupation", indId: cur.id })}
+                onKeyDown={e => { if(e.key==="Enter"||e.key===" "){e.preventDefault();setModal({ type: "pupation", indId: cur.id });} }}>
+                <div className="p-t">용화 <span style={{float:"right",fontSize:12,opacity:.7}}>수정 ›</span></div>
                 <div className="meas mono">
                   {cur.pupation.prepupaDate && <span>전용 <b>{shortDate(cur.pupation.prepupaDate)}</b></span>}
                   {cur.pupation.pupaDate && <span>용화 <b>{shortDate(cur.pupation.pupaDate)}</b></span>}
