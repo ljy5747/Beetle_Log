@@ -140,7 +140,7 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
 
       <div className="sect">기타</div>
       <div className="row">
-        <F label="우화일" half><input type="date" className="in" value={f.eclosionDate} onChange={(e) => set("eclosionDate", e.target.value)} /></F>
+        <F label="우화일" half><div className="row" style={{gap:6,alignItems:"center"}}><input type="date" className="in" style={{flex:1,minWidth:0}} value={f.eclosionDate || ""} onChange={(e) => set("eclosionDate", e.target.value || "")} /><button type="button" className="btn tiny" onClick={() => set("eclosionDate", "")}>지우기</button></div></F>
         <F label="입수처" half><input className="in" value={f.source} onChange={(e) => set("source", e.target.value)} placeholder="자가 / 샵명" /></F>
       </div>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
@@ -267,9 +267,9 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
         })()}
       </F>
       <div className="sect">날짜</div>
-      <F label="페어링일"><input type="date" className="in" value={f.pairDate} onChange={(e) => set("pairDate", e.target.value)} /></F>
-      <F label="산란 셋팅일"><input type="date" className="in" value={f.setDate} onChange={(e) => set("setDate", e.target.value)} /></F>
-      <F label="산란 해체일"><input type="date" className="in" value={f.breakdownDate} onChange={(e) => set("breakdownDate", e.target.value)} /></F>
+      <F label="페어링일"><div className="row" style={{gap:6,alignItems:"center"}}><input type="date" className="in" style={{flex:1,minWidth:0}} value={f.pairDate || ""} onChange={(e) => set("pairDate", e.target.value || "")} /><button type="button" className="btn tiny" onClick={() => set("pairDate", "")}>지우기</button></div></F>
+      <F label="산란 셋팅일"><div className="row" style={{gap:6,alignItems:"center"}}><input type="date" className="in" style={{flex:1,minWidth:0}} value={f.setDate || ""} onChange={(e) => set("setDate", e.target.value || "")} /><button type="button" className="btn tiny" onClick={() => set("setDate", "")}>지우기</button></div></F>
+      <F label="산란 해체일"><div className="row" style={{gap:6,alignItems:"center"}}><input type="date" className="in" style={{flex:1,minWidth:0}} value={f.breakdownDate || ""} onChange={(e) => set("breakdownDate", e.target.value || "")} /><button type="button" className="btn tiny" onClick={() => set("breakdownDate", "")}>지우기</button></div></F>
       {f.setDate && !f.breakdownDate && (
         <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>
           비워두면 캘린더에 <b className="mono">{addDays(f.setDate, 30)}</b> 해체 예정으로 표시돼요 (셋팅 +1달). 실제 해체일을 넣으면 그 날짜로 바뀝니다.
