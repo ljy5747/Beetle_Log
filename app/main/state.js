@@ -465,6 +465,31 @@ function App() {
     updateInd(modal.indId, { eclosion: f, status: ["유충", "용화"].includes(ind.status) ? "우화" : ind.status });
     setModal(null); say("✓ 우화 기록 저장됨");
   };
+  const cancelEclosionRecord = () => {
+    const indId=modal?.indId;
+    const current=liveSyncRef.current.data;
+    const ind=current?.individuals?.find(i=>i.id===indId);
+    if(!ind?.eclosion) return say("우화 기록이 없어요.");
+    if((current.parents||[]).some(p=>p.id===ind.promotedToParentId||p.bornLarvaId===indId)) {
+      return say("⚠️ 연결된 성충 기록이 있어 우화 취소를 중단했어요. 성충 연결을 먼저 확인해 주세요.");
+    }
+    const keepStatus=["사망","분양"].includes(ind.status);
+    const nextStatus=keepStatus?ind.status:(ind.pupation?"용화":"유충");
+    persist({...current,individuals:current.individuals.map(i=>i.id===indId?{...i,eclosion:null,status:nextStatus}:i)});
+    setModal(null);
+    say("✓ 우화 기록을 취소하고 "+nextStatus+" 상태로 변경했어요.");
+  };
+  const cancelPupationRecord = () => {
+    const indId=modal?.indId;
+    const current=liveSyncRef.current.data;
+    const ind=current?.individuals?.find(i=>i.id===indId);
+    if(!ind?.pupation) return say("용화 기록이 없어요.");
+    if(ind.eclosion) return say("⚠️ 먼저 우화 기록을 취소한 뒤 용화 기록을 취소해 주세요.");
+    const nextStatus=["사망","분양"].includes(ind.status)?ind.status:"유충";
+    persist({...current,individuals:current.individuals.map(i=>i.id===indId?{...i,pupation:null,status:nextStatus}:i)});
+    setModal(null);
+    say("✓ 용화 기록을 취소하고 "+nextStatus+" 상태로 변경했어요.");
+  };
   const promoteToParent = (ind) => {
     const L = lineById[ind.lineId] || {};
     const ec = ind.eclosion || {};
