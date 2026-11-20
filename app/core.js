@@ -325,6 +325,15 @@ const lastHeadWidth = (ind) => { const s = sortedRecs(ind).map((r) => num(r.head
 /* 사망·분양 개체는 통계·그래프에서 제외 */
 const isActive = (ind) => ind.status !== "사망" && ind.status !== "분양";
 const hasFlag = (ind, flag) => (ind.flags || []).includes(flag) || (ind.bottleRecords || []).some((r) => (r.flags || []).includes(flag));
+const GROWTH_CAUSES = { unknown: "원인 미분류", feed: "먹이원", individual: "개체" };
+function growthFlagPatch(ind, cause) {
+  const flags = (ind.flags || []).filter(flag => flag !== "성장불량");
+  if (cause) flags.push("성장불량");
+  return { flags, growthIssueCause: cause || null };
+}
+function growthFlagLabel(ind) {
+  return "성장불량 (" + (GROWTH_CAUSES[ind.growthIssueCause] || GROWTH_CAUSES.unknown) + ")";
+}
 /* 개체에 표시된 특이사항 전체 (개체 표식 + 병갈이 기록) */
 const allFlags = (ind) => {
   const set = [...(ind.flags || [])];

@@ -43,11 +43,19 @@
                     onClick={() => {
                       const now = cur.flags || [];
                       const next = on ? now.filter((x) => x !== fl) : [...now, fl];
-                      updateInd(cur.id, { flags: next });
+                      updateInd(cur.id, fl === "성장불량" ? growthFlagPatch(cur, on ? null : "unknown") : { flags: next });
                       say(on ? `${fl} 해제` : `${fl} 표시됨`);
                     }}>{on ? "✓ " : "+ "}{fl}</button>
                 );
               })}
+              {hasFlag(cur, "성장불량") && (
+                <label>성장불량 원인{" "}
+                  <select className="in" aria-label="성장불량 원인" value={cur.growthIssueCause || "unknown"}
+                    onChange={e => { updateInd(cur.id, growthFlagPatch(cur, e.target.value)); say("성장불량 원인을 저장했어요"); }}>
+                    {Object.entries(GROWTH_CAUSES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+              )}
             </div>
 
             {cur.eclosion && (

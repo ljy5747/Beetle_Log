@@ -1,6 +1,17 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const file=fs.readFileSync(__dirname+'/../app/core.js','utf8'),start=file.indexOf('/* Server snapshots'),end=file.indexOf('/* ════════════════════ 구글 로그인',start);
 const runtime=fs.readFileSync(__dirname+'/../app.js','utf8');for(const path of ['app/core.js','app/main/state.js'])assert.ok(runtime.includes(fs.readFileSync(__dirname+'/../'+path,'utf8').trim()),'Runtime/source mismatch: '+path);
+for(const path of ['app/cards.js','app/main/larva-details.js'])assert.ok(runtime.includes(fs.readFileSync(__dirname+'/../'+path,'utf8').trim()),'Runtime/source mismatch: '+path);
+const flagScope={};vm.runInNewContext(file.slice(file.indexOf('const hasFlag ='),file.indexOf('/* 유충 기간 ='))+';globalThis.flags={growthFlagPatch,growthFlagLabel,hasFlag};',flagScope);
+const old={flags:['원더링','성장불량','전용'],bottleRecords:[]};
+assert.equal(flagScope.flags.growthFlagLabel(old),'성장불량 (원인 미분류)');
+let withCause={...old,...flagScope.flags.growthFlagPatch(old,'individual')};
+assert.equal(flagScope.flags.growthFlagLabel(withCause),'성장불량 (개체)');
+withCause={...withCause,...flagScope.flags.growthFlagPatch(withCause,'feed')};
+assert.equal(flagScope.flags.growthFlagLabel(withCause),'성장불량 (먹이원)');
+const cleared=flagScope.flags.growthFlagPatch(withCause,null);
+assert.deepEqual([...cleared.flags],['원더링','전용']);assert.equal(cleared.growthIssueCause,null);
+assert.equal(flagScope.flags.hasFlag({flags:[],bottleRecords:[{flags:['성장불량']}]},'성장불량'),true);
 const copy=x=>JSON.parse(JSON.stringify(x));let server={data:{individuals:[{id:'v',code:'01',sex:'M',bottleRecords:[{id:'r',weight:'0',photo:'keep'}]}],lines:[],parents:[],feedBrands:[]},updated_at:'1'},casRace=false,writes=0;
 const sb={SUPABASE_URL:'https://example.com',idbSet:async()=>{},isAccountKey:key=>key.startsWith('user:'),cloudFetch:async(key,url,opts)=>{
  if(opts.method==='GET')return{ok:true,json:async()=>server?[copy(server)]:[]};
@@ -23,10 +34,10 @@ vm.runInNewContext(file.slice(start,end)+'\nglobalThis.api={mergeCloudData,cloud
  const local=copy(baseline);local.individuals[0].code='02';casRace=true;
  const merged=await a.cloudUpload('user:test',local);assert.equal(merged.individuals[0].code,'02');assert.equal(merged.individuals[0].bottleRecords[0].weight,'22.5');assert.equal(merged.individuals[0].bottleRecords[0].photo,'keep');assert.equal(merged.individuals[0].remote,'race');
  const other=copy(merged);other.individuals[0].bottleRecords[0].weight='30';server.data.individuals[0].bottleRecords[0].weight='28';server.updated_at='newer';const before=JSON.stringify(server),oldWrites=writes;
- await assert.rejects(a.cloudUpload('user:test',other),/같은 항목/);assert.equal(JSON.stringify(server),before);assert.equal(writes,oldWrites);
+ await assert.rejects(a.cloudUpload('user:test',other),e=>e.code==='BEETLE_SYNC_CONFLICT');assert.equal(JSON.stringify(server),before);assert.equal(writes,oldWrites);
  const b={individuals:[{id:'a',weight:'0'},{id:'b',weight:'20'}],feedBrands:['A']};const l=copy(b),r=copy(b);l.individuals.splice(0,1);r.individuals[1].weight='21';r.feedBrands.push('B');
  const m=a.mergeCloudData(b,l,r);assert.equal(m.individuals.length,1);assert.equal(m.individuals[0].weight,'21');assert.ok(m.feedBrands.includes('B'));
- assert.throws(()=>a.mergeCloudData(b,{...b,individuals:[]},{...b,individuals:[{id:'a',weight:'1'},b.individuals[1]]}),/같은 항목/);
+ assert.throws(()=>a.mergeCloudData(b,{...b,individuals:[]},{...b,individuals:[{id:'a',weight:'1'},b.individuals[1]]}),e=>e.code==='BEETLE_SYNC_CONFLICT');
  const beforeUnknown=JSON.stringify(server);await assert.rejects(a.cloudUpload('new-key',local),/먼저/);assert.equal(JSON.stringify(server),beforeUnknown);
  await a.cloudDownload('user:test');
  const legacy={individuals:[{id:'v',code:'old'},{id:'legacy',lineId:'legacy-line',bottleRecords:[{id:'historic',photo:'legacy-photo'}]}],lines:[{id:'legacy-line',fatherId:'legacy-parent'}],parents:[{id:'legacy-parent'}],customEvents:[{id:'legacy-event'}],feedBrands:['B','B']};

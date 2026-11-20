@@ -325,6 +325,15 @@ const lastHeadWidth = (ind) => { const s = sortedRecs(ind).map((r) => num(r.head
 /* 사망·분양 개체는 통계·그래프에서 제외 */
 const isActive = (ind) => ind.status !== "사망" && ind.status !== "분양";
 const hasFlag = (ind, flag) => (ind.flags || []).includes(flag) || (ind.bottleRecords || []).some((r) => (r.flags || []).includes(flag));
+const GROWTH_CAUSES = { unknown: "원인 미분류", feed: "먹이원", individual: "개체" };
+function growthFlagPatch(ind, cause) {
+  const flags = (ind.flags || []).filter(flag => flag !== "성장불량");
+  if (cause) flags.push("성장불량");
+  return { flags, growthIssueCause: cause || null };
+}
+function growthFlagLabel(ind) {
+  return "성장불량 (" + (GROWTH_CAUSES[ind.growthIssueCause] || GROWTH_CAUSES.unknown) + ")";
+}
 /* 개체에 표시된 특이사항 전체 (개체 표식 + 병갈이 기록) */
 const allFlags = (ind) => {
   const set = [...(ind.flags || [])];
@@ -548,7 +557,7 @@ function LarvaCard({ ind, crownM, crownF, lineCode, onOpen, onBottle }) {
           <span className={"tag mono" + (dead ? " strike" : "")}>{ind.code}</span>
           <span className="chip" style={{ color: STATUS_COLOR[ind.status], borderColor: STATUS_COLOR[ind.status] + "55" }}>{ind.status}</span>
           {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
-          {allFlags(ind).map((fl) => <span key={fl} className="chip flag-mini">{fl}</span>)}
+          {allFlags(ind).map((fl) => <span key={fl} className="chip flag-mini">{fl === "성장불량" ? growthFlagLabel(ind) : fl}</span>)}
         </div>
         <div className="card-sub">
           {lineCode && <><b style={{ color: "var(--dim)", fontWeight: 700 }}>{lineCode}</b> · </>}
@@ -3931,11 +3940,19 @@ function App() {
                     onClick={() => {
                       const now = cur.flags || [];
                       const next = on ? now.filter((x) => x !== fl) : [...now, fl];
-                      updateInd(cur.id, { flags: next });
+                      updateInd(cur.id, fl === "성장불량" ? growthFlagPatch(cur, on ? null : "unknown") : { flags: next });
                       say(on ? `${fl} 해제` : `${fl} 표시됨`);
                     }}>{on ? "✓ " : "+ "}{fl}</button>
                 );
               })}
+              {hasFlag(cur, "성장불량") && (
+                <label>성장불량 원인{" "}
+                  <select className="in" aria-label="성장불량 원인" value={cur.growthIssueCause || "unknown"}
+                    onChange={e => { updateInd(cur.id, growthFlagPatch(cur, e.target.value)); say("성장불량 원인을 저장했어요"); }}>
+                    {Object.entries(GROWTH_CAUSES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+              )}
             </div>
 
             {cur.eclosion && (

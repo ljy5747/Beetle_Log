@@ -13,7 +13,7 @@ function LarvaCard({ ind, crownM, crownF, lineCode, onOpen, onBottle }) {
           <span className={"tag mono" + (dead ? " strike" : "")}>{ind.code}</span>
           <span className="chip" style={{ color: STATUS_COLOR[ind.status], borderColor: STATUS_COLOR[ind.status] + "55" }}>{ind.status}</span>
           {dd != null && <span className={"chip dd" + ddClass(dd)}>{dd <= 0 ? `D+${-dd} 지남` : `D-${dd}`}</span>}
-          {allFlags(ind).map((fl) => <span key={fl} className="chip flag-mini">{fl}</span>)}
+          {allFlags(ind).map((fl) => <span key={fl} className="chip flag-mini">{fl === "성장불량" ? growthFlagLabel(ind) : fl}</span>)}
         </div>
         <div className="card-sub">
           {lineCode && <><b style={{ color: "var(--dim)", fontWeight: 700 }}>{lineCode}</b> · </>}
