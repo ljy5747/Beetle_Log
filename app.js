@@ -1482,6 +1482,12 @@ function LarvaEditForm({ initial, lines, onSave, onClose }) {
         </select>
       </F>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></F>
+      {initial && onCancelRecord && (
+        <div style={{marginTop:20,paddingTop:14,borderTop:"1px dashed var(--line)"}}>
+          <div className="hint">날짜만 지우려면 위의 지우기 버튼을 사용하세요. 기록 취소는 우화일·체장·측정값을 포함한 우화 기록 전체를 삭제하고, 용화 기록이 있으면 용화 단계로 돌아갑니다.</div>
+          <ConfirmBtn className="btn danger sm mt" label="우화 기록 취소 · 이전 단계로 복원" onConfirm={onCancelRecord}/>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -1680,7 +1686,7 @@ function BulkBottleForm({ larvae, brands, onSave, onClose, individuals }) {
 }
 
 /* ════════════════════ 용화 폼 ════════════════════ */
-function PupationForm({ initial, onSave, onClose }) {
+function PupationForm({ initial, onSave, onClose, onCancelRecord }) {
   const [f, setF] = useState({ prepupaDate: "", pupaDate: "", pupaWeight: "", memo: "", ...(initial || {}) });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   return (
@@ -1691,12 +1697,18 @@ function PupationForm({ initial, onSave, onClose }) {
       </div>
       <F label="번데기 무게 g — 환원율 기준값"><input className="in mono" inputMode="decimal" value={f.pupaWeight} onChange={(e) => set("pupaWeight", e.target.value)} /></F>
       <F label="메모"><textarea className="in ta" value={f.memo} onChange={(e) => set("memo", e.target.value)} placeholder="원더링 여부 등" /></F>
+      {initial && onCancelRecord && (
+        <div style={{marginTop:20,paddingTop:14,borderTop:"1px dashed var(--line)"}}>
+          <div className="hint">날짜만 지우려면 위의 지우기 버튼을 사용하세요. 기록 취소는 용화 데이터 전체를 삭제하고 유충 단계로 복원합니다. 우화 기록이 있으면 먼저 우화 기록을 취소해야 합니다.</div>
+          <ConfirmBtn className="btn danger sm mt" label="용화 기록 취소 · 유충으로 복원" onConfirm={onCancelRecord}/>
+        </div>
+      )}
     </Modal>
   );
 }
 
 /* ════════════════════ 우화 폼 ════════════════════ */
-function EclosionForm({ initial, species, onSave, onClose }) {
+function EclosionForm({ initial, species, onSave, onClose, onCancelRecord }) {
   const [f, setF] = useState({ date: "", totalLength: "", jawLength: "", jawWidth: "", jawThick: "", headWidth: "", thoraxWidth: "", abdomenLength: "", defect: false, memo: "", ...(initial || {}) });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const sp = species || "";
@@ -3076,6 +3088,31 @@ function App() {
     updateInd(modal.indId, { eclosion: f, status: ["유충", "용화"].includes(ind.status) ? "우화" : ind.status });
     setModal(null); say("✓ 우화 기록 저장됨");
   };
+  const cancelEclosionRecord = () => {
+    const indId=modal?.indId;
+    const current=liveSyncRef.current.data;
+    const ind=current?.individuals?.find(i=>i.id===indId);
+    if(!ind?.eclosion) return say("우화 기록이 없어요.");
+    if((current.parents||[]).some(p=>p.id===ind.promotedToParentId||p.bornLarvaId===indId)) {
+      return say("⚠️ 연결된 성충 기록이 있어 우화 취소를 중단했어요. 성충 연결을 먼저 확인해 주세요.");
+    }
+    const keepStatus=["사망","분양"].includes(ind.status);
+    const nextStatus=keepStatus?ind.status:(ind.pupation?"용화":"유충");
+    persist({...current,individuals:current.individuals.map(i=>i.id===indId?{...i,eclosion:null,status:nextStatus}:i)});
+    setModal(null);
+    say("✓ 우화 기록을 취소하고 "+nextStatus+" 상태로 변경했어요.");
+  };
+  const cancelPupationRecord = () => {
+    const indId=modal?.indId;
+    const current=liveSyncRef.current.data;
+    const ind=current?.individuals?.find(i=>i.id===indId);
+    if(!ind?.pupation) return say("용화 기록이 없어요.");
+    if(ind.eclosion) return say("⚠️ 먼저 우화 기록을 취소한 뒤 용화 기록을 취소해 주세요.");
+    const nextStatus=["사망","분양"].includes(ind.status)?ind.status:"유충";
+    persist({...current,individuals:current.individuals.map(i=>i.id===indId?{...i,pupation:null,status:nextStatus}:i)});
+    setModal(null);
+    say("✓ 용화 기록을 취소하고 "+nextStatus+" 상태로 변경했어요.");
+  };
   const promoteToParent = (ind) => {
     const L = lineById[ind.lineId] || {};
     const ec = ind.eclosion || {};
@@ -4075,12 +4112,12 @@ function App() {
           } : null} />
       )}
       {modal?.type === "pupation" && (
-        <PupationForm initial={data.individuals.find((i) => i.id === modal.indId)?.pupation} onSave={savePupation} onClose={() => setModal(null)} />
+        <PupationForm initial={data.individuals.find((i) => i.id === modal.indId)?.pupation} onSave={savePupation} onCancelRecord={cancelPupationRecord} onClose={() => setModal(null)} />
       )}
       {modal?.type === "eclosion" && (() => {
         const ind = data.individuals.find((i) => i.id === modal.indId);
         const species = (lineById[ind?.lineId]?.species) || "";
-        return <EclosionForm initial={ind?.eclosion} species={species} onSave={saveEclosion} onClose={() => setModal(null)} />;
+        return <EclosionForm initial={ind?.eclosion} species={species} onSave={saveEclosion} onCancelRecord={cancelEclosionRecord} onClose={() => setModal(null)} />;
       })()}
 
       {settingsOpen && (
