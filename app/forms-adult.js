@@ -204,6 +204,13 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const isEdit = !!initial;
+  // Year is metadata for the breeding line, not a restriction on which adult can be a parent.
+  // Use only current adult records; deleted adults must not be resurrected as choices.
+  const availableSires = parents.filter((p) => (p.sex || "").includes("수"));
+  const availableDams = parents.filter((p) => (p.sex || "").includes("암"));
+  const missingSire = !!f.fatherId && !parents.some((p) => p.id === f.fatherId);
+  const missingDam = !!f.motherId && !parents.some((p) => p.id === f.motherId);
+  const parentOptionLabel = (p) => [p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line, itemYear(p) + "년"].filter(Boolean).join(" · ");
   const pick = (role, pid) => {
     const p = parents.find((x) => x.id === pid);
     setF((prev) => {
@@ -230,7 +237,7 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
       <F label="라인명 *"><input className="in mono" value={f.code} onChange={(e) => set("code", e.target.value)} placeholder="26-A" /></F>
       <F label="연도">
         <SimplePicker options={yearOptions()} value={String(f.year || BASE_YEAR)} onChange={(v) => set("year", v)} placeholder="탭하여 선택" />
-        <div className="hint" style={{ marginTop: 6 }}>선택한 연도의 성충만 아래 종충 목록에 나와요</div>
+        <div className="hint" style={{ marginTop: 6 }}>종충은 등록 연도와 관계없이 현재 보유 목록에 있는 모든 성충 중에서 선택할 수 있어요.</div>
       </F>
       <div className="sect">성충 조합</div>
       {parents.length === 0 && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>성충 탭에서 부모를 먼저 등록하면 여기서 선택할 수 있어요</div>}
@@ -238,16 +245,21 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
         <F label="♂︎ 종충" half>
           <select className="in" value={f.fatherId || ""} onChange={(e) => pick("fatherId", e.target.value)}>
             <option value="">미지정</option>
-            {parents.filter((p) => p.sex.includes("수") && (itemYear(p) === String(f.year || BASE_YEAR) || p.id === f.fatherId)).map((p) => <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line].filter(Boolean).join(" · ")}</option>)}
+            {availableSires.map((p) => <option key={p.id} value={p.id}>{parentOptionLabel(p)}</option>)}
           </select>
         </F>
         <F label="♀︎ 종충" half>
           <select className="in" value={f.motherId || ""} onChange={(e) => pick("motherId", e.target.value)}>
             <option value="">미지정</option>
-            {parents.filter((p) => p.sex.includes("암") && (itemYear(p) === String(f.year || BASE_YEAR) || p.id === f.motherId)).map((p) => <option key={p.id} value={p.id}>{[p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line].filter(Boolean).join(" · ")}</option>)}
+            {availableDams.map((p) => <option key={p.id} value={p.id}>{parentOptionLabel(p)}</option>)}
           </select>
         </F>
       </div>
+      {(missingSire || missingDam) && (
+        <div className="hint" style={{marginTop:8,color:"#B35A41"}}>
+          ⚠️ 기존에 연결한 {missingSire && missingDam ? "부모 성충" : missingSire ? "수컷 종충" : "암컷 종충"}이 현재 성충 목록에 없습니다. 삭제된 성충은 선택 목록에 나오지 않아요. 새 종충을 선택하거나 미지정으로 변경해 주세요.
+        </div>
+      )}
       <div className="row">
         <F label="종" half><SpeciesPicker value={f.species} onChange={(v) => set("species", v)} placeholder="탭하여 선택" /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
