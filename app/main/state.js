@@ -382,8 +382,10 @@ function App() {
 
   /* ── 핸들러 ── */
   const saveParent = (f) => {
-    if (modal.editId) persist({ ...data, parents: data.parents.map((p) => (p.id === modal.editId ? { ...p, ...f } : p)) });
-    else persist({ ...data, parents: [...data.parents, { ...f, id: uid(), year: f.year || parentYear }] });
+    const record = { ...f, year: f.eclosionDate ? itemYear(f) : (f.year || parentYear) };
+    if (modal.editId) persist({ ...data, parents: data.parents.map((p) => (p.id === modal.editId ? { ...p, ...record } : p)) });
+    else persist({ ...data, parents: [...data.parents, { ...record, id: uid() }] });
+    setParentYear(itemYear(record));
     setModal(null); say("✓ 성충 저장됨");
   };
   const saveGrowthRow = (f) => {

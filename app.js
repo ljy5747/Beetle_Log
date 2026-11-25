@@ -419,7 +419,19 @@ function Sortable({ items, editing, onReorder, children }) {
    (기존 데이터를 수정하지 않고 읽을 때만 적용) */
 const BASE_YEAR = 2026;
 const PAST_YEAR = "~2025"; /* 2026 이전 기록을 모아두는 칸 */
-const itemYear = (x) => String((x && x.year) || BASE_YEAR);
+/* Adults are grouped by actual eclosion year when recorded; otherwise use the manually chosen year.
+   Breeding lines have no eclosionDate and keep their own registration year. */
+const itemYear = (x) => {
+  const date = String(x?.eclosionDate || "");
+  const match = date.match(/^(\d{4})-\d{2}-\d{2}$/);
+  if (match) {
+    const year = Number(match[1]);
+    if (year >= 1900 && year < BASE_YEAR) return PAST_YEAR;
+    if (year >= BASE_YEAR && year <= 2200) return String(year);
+  }
+  const year = String((x && x.year) || BASE_YEAR);
+  return /^\d{4}$/.test(year) && Number(year) < BASE_YEAR ? PAST_YEAR : year;
+};
 /* 이동 가능한 연도 목록: ~2025, 2026, …, 올해+1 (해가 바뀌면 자동으로 늘어남) */
 const yearSeq = () => {
   const now = new Date().getFullYear();
@@ -1105,7 +1117,9 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
       norm(p.code) === norm(f.code) &&
       norm(p.species) === norm(f.species));
     if (dup) return alert(`'${f.code.trim()}' 번호는 ${norm(f.species) || "종 미입력"}에 이미 있어요`);
-    onSave({ ...f, code: f.code.trim() });
+    const registrationYear=f.eclosionDate ? itemYear(f) : String(f.year || "");
+    if (!registrationYear || !yearSeq().includes(registrationYear)) return alert("우화일이 없다면 성충의 연도를 지정해 주세요.");
+    onSave({ ...f, year: registrationYear, code: f.code.trim() });
   };
   return (
     <Modal title={isEdit ? "성충 정보 수정" : "성충 등록"} onClose={onClose} onSave={save}>
@@ -1142,8 +1156,13 @@ function ParentForm({ initial, existingCodes, allParents, preset, onSave, onClos
         <F label="혈통 / 계보" half><input className="in" value={f.line} onChange={(e) => set("line", e.target.value)} /></F>
         <F label="산지" half><input className="in" value={f.origin} onChange={(e) => set("origin", e.target.value)} /></F>
       </div>
-      <F label="연도">
-        <SimplePicker options={yearOptions()} value={String(f.year || BASE_YEAR)} onChange={(v) => set("year", v)} placeholder="탭하여 선택" />
+      <F label={f.eclosionDate ? "우화 연도 (자동)" : "성충 연도 (직접 선택)"}>
+        {f.eclosionDate ? (
+          <div className="in" style={{display:"flex",alignItems:"center"}}>{itemYear(f) === PAST_YEAR ? "~2025년" : itemYear(f) + "년"} · 우화일 기준</div>
+        ) : (
+          <SimplePicker options={yearOptions()} value={String(f.year || "")} onChange={(v) => set("year", v)} placeholder="연도 선택" />
+        )}
+        <div className="hint" style={{marginTop:6}}>{f.eclosionDate ? "우화일을 수정하면 연도도 자동으로 변경돼요." : "우화일이 없는 성충은 사용할 연도를 직접 지정해 주세요."}</div>
       </F>
       <F label="누대수">
         <SimplePicker options={GENS} value={f.gen} onChange={(v) => set("gen", v)} placeholder="탭하여 선택 (WD=와일드)" />
@@ -1273,13 +1292,18 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
   });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const isEdit = !!initial;
-  // Year is metadata for the breeding line, not a restriction on which adult can be a parent.
-  // Use only current adult records; deleted adults must not be resurrected as choices.
-  const availableSires = parents.filter((p) => (p.sex || "").includes("수"));
-  const availableDams = parents.filter((p) => (p.sex || "").includes("암"));
+  const currentSire = parents.find(p => p.id === f.fatherId);
+  const currentDam = parents.find(p => p.id === f.motherId);
+  // Independent year selectors: use the linked adults' year when editing a line.
+  const [sireYear, setSireYear] = useState(() => currentSire ? itemYear(currentSire) : String(initial?.year || dy || defaultYear()));
+  const [damYear, setDamYear] = useState(() => currentDam ? itemYear(currentDam) : String(initial?.year || dy || defaultYear()));
+  const years = [...new Set([...yearOptions(), ...parents.map(itemYear), sireYear, damYear])].filter(Boolean);
+  const yearLabel = y => y === PAST_YEAR ? "~2025년" : y === "all" ? "전체 연도" : y + "년";
+  const availableSires = parents.filter(p => (p.sex || "").includes("수") && (sireYear === "all" || itemYear(p) === sireYear));
+  const availableDams = parents.filter(p => (p.sex || "").includes("암") && (damYear === "all" || itemYear(p) === damYear));
   const missingSire = !!f.fatherId && !parents.some((p) => p.id === f.fatherId);
   const missingDam = !!f.motherId && !parents.some((p) => p.id === f.motherId);
-  const parentOptionLabel = (p) => [p.code, p.species, num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null, p.line, itemYear(p) + "년"].filter(Boolean).join(" · ");
+  const parentOptionLabel = p => [p.code,p.species,num(p.totalLength) ? `${n1(num(p.totalLength))}mm` : null,p.line,yearLabel(itemYear(p))].filter(Boolean).join(" · ");
   const pick = (role, pid) => {
     const p = parents.find((x) => x.id === pid);
     setF((prev) => {
@@ -1306,22 +1330,40 @@ function LineForm({ initial, parents, existingCodes, onSave, onClose, onRenumber
       <F label="라인명 *"><input className="in mono" value={f.code} onChange={(e) => set("code", e.target.value)} placeholder="26-A" /></F>
       <F label="연도">
         <SimplePicker options={yearOptions()} value={String(f.year || BASE_YEAR)} onChange={(v) => set("year", v)} placeholder="탭하여 선택" />
-        <div className="hint" style={{ marginTop: 6 }}>종충은 등록 연도와 관계없이 현재 보유 목록에 있는 모든 성충 중에서 선택할 수 있어요.</div>
+        <div className="hint" style={{ marginTop: 6 }}>라인 연도와 종충의 우화 연도는 서로 달라도 괜찮아요.</div>
       </F>
       <div className="sect">성충 조합</div>
       {parents.length === 0 && <div className="hint" style={{ marginTop: -4, marginBottom: 11 }}>성충 탭에서 부모를 먼저 등록하면 여기서 선택할 수 있어요</div>}
       <div className="row">
-        <F label="♂︎ 종충" half>
-          <select className="in" value={f.fatherId || ""} onChange={(e) => pick("fatherId", e.target.value)}>
-            <option value="">미지정</option>
-            {availableSires.map((p) => <option key={p.id} value={p.id}>{parentOptionLabel(p)}</option>)}
+        <F label="♂︎ 수컷 연도" half>
+          <select className="in" value={sireYear} onChange={(e) => setSireYear(e.target.value)}>
+            {years.map(y => <option key={y} value={y}>{yearLabel(y)}</option>)}
+            <option value="all">전체 연도</option>
           </select>
         </F>
-        <F label="♀︎ 종충" half>
-          <select className="in" value={f.motherId || ""} onChange={(e) => pick("motherId", e.target.value)}>
-            <option value="">미지정</option>
-            {availableDams.map((p) => <option key={p.id} value={p.id}>{parentOptionLabel(p)}</option>)}
+        <F label="♀︎ 암컷 연도" half>
+          <select className="in" value={damYear} onChange={(e) => setDamYear(e.target.value)}>
+            {years.map(y => <option key={y} value={y}>{yearLabel(y)}</option>)}
+            <option value="all">전체 연도</option>
           </select>
+        </F>
+      </div>
+      <div className="row">
+        <F label="♂︎ 종충" half>
+          <select className="in" value={currentSire && (sireYear === "all" || itemYear(currentSire) === sireYear) ? f.fatherId : ""} onChange={(e) => pick("fatherId", e.target.value)}>
+            <option value="">미지정</option>
+            {availableSires.map(p => <option key={p.id} value={p.id}>{parentOptionLabel(p)}</option>)}
+          </select>
+          {currentSire && sireYear !== "all" && itemYear(currentSire) !== sireYear && <div className="hint">기존 선택 유지: {currentSire.code} ({yearLabel(itemYear(currentSire))})</div>}
+          {!availableSires.length && <div className="hint">선택한 연도에 수컷 성충이 없어요.</div>}
+        </F>
+        <F label="♀︎ 종충" half>
+          <select className="in" value={currentDam && (damYear === "all" || itemYear(currentDam) === damYear) ? f.motherId : ""} onChange={(e) => pick("motherId", e.target.value)}>
+            <option value="">미지정</option>
+            {availableDams.map(p => <option key={p.id} value={p.id}>{parentOptionLabel(p)}</option>)}
+          </select>
+          {currentDam && damYear !== "all" && itemYear(currentDam) !== damYear && <div className="hint">기존 선택 유지: {currentDam.code} ({yearLabel(itemYear(currentDam))})</div>}
+          {!availableDams.length && <div className="hint">선택한 연도에 암컷 성충이 없어요.</div>}
         </F>
       </div>
       {(missingSire || missingDam) && (
@@ -3027,8 +3069,10 @@ function App() {
 
   /* ── 핸들러 ── */
   const saveParent = (f) => {
-    if (modal.editId) persist({ ...data, parents: data.parents.map((p) => (p.id === modal.editId ? { ...p, ...f } : p)) });
-    else persist({ ...data, parents: [...data.parents, { ...f, id: uid(), year: f.year || parentYear }] });
+    const record = { ...f, year: f.eclosionDate ? itemYear(f) : (f.year || parentYear) };
+    if (modal.editId) persist({ ...data, parents: data.parents.map((p) => (p.id === modal.editId ? { ...p, ...record } : p)) });
+    else persist({ ...data, parents: [...data.parents, { ...record, id: uid() }] });
+    setParentYear(itemYear(record));
     setModal(null); say("✓ 성충 저장됨");
   };
   const saveGrowthRow = (f) => {

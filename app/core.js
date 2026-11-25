@@ -419,7 +419,19 @@ function Sortable({ items, editing, onReorder, children }) {
    (기존 데이터를 수정하지 않고 읽을 때만 적용) */
 const BASE_YEAR = 2026;
 const PAST_YEAR = "~2025"; /* 2026 이전 기록을 모아두는 칸 */
-const itemYear = (x) => String((x && x.year) || BASE_YEAR);
+/* Adults are grouped by actual eclosion year when recorded; otherwise use the manually chosen year.
+   Breeding lines have no eclosionDate and keep their own registration year. */
+const itemYear = (x) => {
+  const date = String(x?.eclosionDate || "");
+  const match = date.match(/^(\d{4})-\d{2}-\d{2}$/);
+  if (match) {
+    const year = Number(match[1]);
+    if (year >= 1900 && year < BASE_YEAR) return PAST_YEAR;
+    if (year >= BASE_YEAR && year <= 2200) return String(year);
+  }
+  const year = String((x && x.year) || BASE_YEAR);
+  return /^\d{4}$/.test(year) && Number(year) < BASE_YEAR ? PAST_YEAR : year;
+};
 /* 이동 가능한 연도 목록: ~2025, 2026, …, 올해+1 (해가 바뀌면 자동으로 늘어남) */
 const yearSeq = () => {
   const now = new Date().getFullYear();
